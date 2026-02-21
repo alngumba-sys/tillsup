@@ -863,24 +863,7 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="assets" className="space-y-8">
-                 {storageError && (
-                  <Alert variant="destructive" className="bg-red-900/20 border-red-500/50 text-red-200">
-                      <div className="flex flex-col gap-2">
-                        <AlertTitle className="text-red-400 font-semibold flex items-center gap-2">
-                           Storage Configuration Missing
-                        </AlertTitle>
-                        <AlertDescription className="text-red-200/80">
-                           Uploads are blocked because your Supabase Storage bucket is missing Row Level Security (RLS) policies. 
-                           <button 
-                             className="text-red-400 font-bold underline ml-2 hover:text-red-300 transition-colors"
-                             onClick={() => setShowRLSDialog(true)}
-                           >
-                             Click here to fix it
-                           </button>
-                        </AlertDescription>
-                      </div>
-                  </Alert>
-                )}
+
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

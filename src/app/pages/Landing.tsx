@@ -181,7 +181,7 @@ export function Landing() {
       icon: Package,
       title: "Inventory Management",
       description: "Real-time stock tracking, low stock alerts, and comprehensive inventory control to keep your business running smoothly.",
-      color: "text-emerald-500"
+      color: "text-[#0479a1]"
     },
     {
       icon: Users,
@@ -366,7 +366,7 @@ export function Landing() {
               </span>
             </h1>
 
-            <p className={`${subTextClass} mb-10 leading-relaxed max-w-2xl mx-auto font-[Antic] text-[20px]`}>
+            <p className={`${subTextClass} mb-10 leading-relaxed max-w-2xl mx-auto font-[Antic] text-[22px]`}>
               Transform your business operations with our comprehensive platform. 
               Manage sales, inventory, staff, and analytics—all in one powerful system designed for modern enterprises.
             </p>
@@ -392,15 +392,15 @@ export function Landing() {
 
             {/* Trust Signals */}
             <div className={`flex flex-wrap gap-6 text-sm font-medium ${subTextClass} mb-12 justify-center`}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-[15px]">
                 <CheckCircle className="w-4 h-4 text-[#0479A1]" />
                 14-day free trial
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-[15px]">
                 <CheckCircle className="w-4 h-4 text-[#0479A1]" />
                 No credit card required
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-[15px]">
                 <CheckCircle className="w-4 h-4 text-[#0479A1]" />
                 Cancel anytime
               </div>
@@ -445,7 +445,7 @@ export function Landing() {
                   { name: "Car Washes", icon: Car },
                   { name: "Service Centers", icon: Wrench }
                 ].map((item, i) => (
-                  <div key={i} className={`flex items-center gap-2 font-medium ${isDark ? "text-slate-400" : "text-slate-600"} text-[#ed363f] font-[Be_Vietnam] text-[16px]`}>
+                  <div key={i} className={`flex items-center gap-2 font-medium ${isDark ? "text-slate-400" : "text-slate-600"} font-[Be_Vietnam] text-[#ed363f] text-[20px]`}>
                     <item.icon className="w-5 h-5 opacity-50" />
                     {item.name}
                   </div>
@@ -477,8 +477,8 @@ export function Landing() {
                     {businessCount.toLocaleString()} businesses
                   </span>
                   <span className="flex h-2 w-2 relative">
-                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0479a1] opacity-75"></span>
+                     <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0479a1]"></span>
                   </span>
                 </div>
               </div>
@@ -572,7 +572,7 @@ export function Landing() {
                       <ul className="space-y-3 mb-8 flex-1">
                         {plan.highlightedFeatures.slice(0, 8).map((feature) => (
                           <li key={feature} className="flex items-start gap-2 text-sm">
-                            <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                            <CheckCircle className="w-4 h-4 text-[#0479a1] shrink-0 mt-0.5" />
                             <span className={subTextClass}>{feature}</span>
                           </li>
                         ))}
