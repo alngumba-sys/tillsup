@@ -1,0 +1,5 @@
+{
+  "name": "create-checkout-session",
+  "version": "1.0.0",
+  "description": "Supabase Edge Function to create a Stripe Checkout Session"
+}

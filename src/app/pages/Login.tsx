@@ -1,0 +1,226 @@
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Alert, AlertDescription } from "../components/ui/alert";
+import { Store, Mail, Lock, AlertCircle } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import logo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.png";
+
+export function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Safe access to AuthContext - handle case where it might not be ready yet
+  let login: any = async () => ({ success: false, error: "Authentication service unavailable" });
+  let isAuthenticated = false;
+  
+  try {
+    const auth = useAuth();
+    if (auth) {
+      login = auth.login;
+      isAuthenticated = auth.isAuthenticated;
+    }
+  } catch (error) {
+    console.warn("AuthContext access failed in Login:", error);
+    // Fallback: If strict auth requirement is needed, we could return null.
+    // But to prevent "stuck" UI in edge cases, we let it render with a dummy login that fails gracefully.
+  }
+
+  const [formData, setFormData] = useState({
+    email: "",
+    password: ""
+  });
+
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/app/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Show success message from registration
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+    }
+  }, [location]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMessage("");
+
+    // Validation
+    if (!formData.email.trim() || !formData.email.includes("@")) {
+      setError("Valid email is required");
+      return;
+    }
+
+    if (!formData.password) {
+      setError("Password is required");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Create a timeout wrapper to prevent indefinite hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Request timed out. Please check your connection.")), 15000)
+      );
+
+      // Attempt login with race against timeout
+      const loginPromise = login(formData.email, formData.password);
+      
+      const result: any = await Promise.race([
+        loginPromise,
+        timeoutPromise
+      ]);
+
+      setLoading(false);
+
+      if (result && result.success) {
+        // Redirect based on mustChangePassword flag
+        if (result.mustChangePassword) {
+          navigate("/change-password");
+        } else {
+          navigate("/app/dashboard");
+        }
+      } else {
+        // ═══════════════════════════════════════════════════════════════════
+        // BRANCH DEACTIVATION - HARD BLOCK (redirect to branch closed page)
+        // ═══════════════════════════════════════════════════════════════════
+        if (result?.branchDeactivated) {
+          navigate("/branch-closed", { replace: true });
+          return;
+        }
+        
+        setError(result?.error || "Login failed. Please try again.");
+        // Clear password on error
+        setFormData(prev => ({ ...prev, password: "" }));
+      }
+    } catch (err: any) {
+      setLoading(false);
+      console.error("Login error:", err);
+      setError(err.message || "An unexpected error occurred during login");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[linear-gradient(135deg,#000000_0%,#14213d_60%,#0479A1_100%)] p-4 text-slate-50">
+      {/* Back to Home Link */}
+      <Button
+        variant="ghost"
+        className="absolute top-4 left-4"
+        onClick={() => navigate("/")}
+      >
+        <Store className="w-4 h-4 mr-2" />
+        Back to Home
+      </Button>
+
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="text-center space-y-4">
+          <div className="flex justify-center">
+            <img src={logo} alt="Tillsup Logo" className="h-11 object-contain" />
+          </div>
+          <div>
+            <CardTitle className="text-3xl font-[Actor] text-[#0479a1]">POS System</CardTitle>
+            <CardDescription className="mt-2">
+              Sign in to access your business dashboard
+            </CardDescription>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Success Message */}
+            {successMessage && (
+              <Alert className="border-green-200 bg-green-50">
+                <AlertDescription className="text-green-800">
+                  {successMessage}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Error Alert */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="w-4 h-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Email */}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="your@email.com"
+                  className="pl-10"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={loading}
+                  autoComplete="email"
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  className="pl-10"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full bg-[#0479A1] hover:bg-[#036080] text-white"
+              size="lg"
+              disabled={loading}
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+
+            {/* Register Link */}
+            <div className="text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Don't have a business account?
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/register")}
+                disabled={loading}
+              >
+                Register Your Business
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
