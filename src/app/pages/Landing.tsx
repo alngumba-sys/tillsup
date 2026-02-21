@@ -96,7 +96,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import logo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.png";
 
 export function Landing() {
   const navigate = useNavigate();
@@ -281,7 +280,12 @@ export function Landing() {
               className="flex items-center gap-3 cursor-pointer select-none" 
               onClick={handleLogoClick}
             >
-              <img src={logo} alt="Tillsup" className="h-8 w-auto object-contain" />
+              <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
+                <Store className="w-5 h-5" strokeWidth={2.5} />
+              </div>
+              <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                Tillsup
+              </span>
             </div>
 
             {/* Actions */}
@@ -631,7 +635,12 @@ export function Landing() {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src={logo} alt="Tillsup" className="h-8 w-auto object-contain" />
+                <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
+                  <Store className="w-5 h-5" strokeWidth={2.5} />
+                </div>
+                <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                  Tillsup
+                </span>
               </div>
               <p className={`text-sm ${subTextClass} max-w-xs ${isDark ? "text-white" : "text-slate-600"}`}>
                 Enterprise-grade point of sale and business management solution for modern retailers.
