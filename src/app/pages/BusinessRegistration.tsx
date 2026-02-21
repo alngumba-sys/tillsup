@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../components/ui/command";
-import { Store, Building2, User, Mail, Lock, ArrowLeft, Check, ChevronsUpDown, Phone } from "lucide-react";
+import { Store, Building2, User, Mail, Lock, ArrowLeft, Check, ChevronsUpDown, Phone, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
 import { COUNTRIES } from "../utils/countries";
@@ -50,6 +50,8 @@ export function BusinessRegistration() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
@@ -332,28 +334,56 @@ export function BusinessRegistration() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="ownerPassword" className="text-xs">Password *</Label>
-                  <Input
-                    id="ownerPassword"
-                    type="password"
-                    placeholder="Min 6 chars"
-                    value={formData.ownerPassword}
-                    onChange={(e) => setFormData({ ...formData, ownerPassword: e.target.value })}
-                    disabled={loading}
-                    className="h-9"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="ownerPassword"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min 6 chars"
+                      value={formData.ownerPassword}
+                      onChange={(e) => setFormData({ ...formData, ownerPassword: e.target.value })}
+                      disabled={loading}
+                      className="h-9 pr-8"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-3.5 h-3.5" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
                   <Label htmlFor="confirmPassword" className="text-xs">Confirm *</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Re-enter"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    disabled={loading}
-                    className="h-9"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Re-enter"
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      disabled={loading}
+                      className="h-9 pr-8"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="w-3.5 h-3.5" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
