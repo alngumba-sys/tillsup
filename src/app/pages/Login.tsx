@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Store, Mail, Lock, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import logo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.png";
 
 export function Login() {
   const navigate = useNavigate();
@@ -127,8 +126,13 @@ export function Login() {
 
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-4">
-          <div className="flex justify-center">
-            <img src={logo} alt="Tillsup Logo" className="h-11 object-contain" />
+          <div className="flex justify-center items-center gap-3">
+            <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
+              <Store className="w-6 h-6" strokeWidth={2.5} />
+            </div>
+            <span className="text-2xl font-bold font-['Outfit'] tracking-tight text-card-foreground">
+              Tillsup
+            </span>
           </div>
           <div>
             <CardTitle className="text-3xl font-[Actor] text-[#0479a1]">POS System</CardTitle>

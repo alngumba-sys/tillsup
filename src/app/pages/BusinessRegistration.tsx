@@ -8,7 +8,6 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../components/ui/command";
 import { Store, Building2, User, Mail, Lock, ArrowLeft, Check, ChevronsUpDown, Phone } from "lucide-react";
-import logo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.png";
 import { useAuth } from "../contexts/AuthContext";
 import { COUNTRIES } from "../utils/countries";
 import { cn } from "../components/ui/utils";
@@ -145,8 +144,13 @@ export function BusinessRegistration() {
 
       <Card className="w-full max-w-lg shadow-lg">
         <CardHeader className="text-center space-y-2 pb-4 pt-6">
-          <div className="flex justify-center">
-            <img src={logo} alt="Tillsup" className="h-10 w-auto object-contain" />
+          <div className="flex justify-center items-center gap-3 mb-4">
+            <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
+              <Store className="w-6 h-6" strokeWidth={2.5} />
+            </div>
+            <span className="text-2xl font-bold font-['Outfit'] tracking-tight text-card-foreground">
+              Tillsup
+            </span>
           </div>
           <div>
             <CardTitle className="text-2xl text-center text-[#0479a1]">Register Your Business</CardTitle>

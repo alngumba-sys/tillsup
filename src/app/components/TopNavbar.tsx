@@ -6,7 +6,6 @@ import { useKPI } from "../contexts/KPIContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrency } from "../hooks/useCurrency";
 import { Store, Users, DollarSign } from "lucide-react";
-import logo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.png";
 
 export function TopNavbar() {
   const { kpiData, kpiUpdated } = useKPI();
@@ -17,7 +16,12 @@ export function TopNavbar() {
     <div className="h-16 border-b border-border flex items-center justify-between px-4 lg:px-6 fixed top-0 left-0 right-0 z-50 bg-[#f3f7ff]">
       {/* Logo and App Name */}
       <div className="flex items-center gap-3">
-        <img src={logo} alt="tillsup" className="h-8 w-auto" />
+        <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
+          <Store className="w-5 h-5" strokeWidth={2.5} />
+        </div>
+        <span className="text-xl font-bold font-['Outfit'] tracking-tight text-slate-900">
+          Tillsup
+        </span>
       </div>
 
       {/* Right Section: KPI Cards + Profile */}
