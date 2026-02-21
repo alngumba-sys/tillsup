@@ -371,23 +371,32 @@ export function Landing() {
               Manage sales, inventory, staff, and analytics—all in one powerful system designed for modern enterprises.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 mb-12 justify-center">
-              <Button
-                size="lg"
-                className="text-lg px-8 py-6 shadow-xl bg-[#ED363F] hover:bg-[#d92b34] border-0 rounded-xl text-[#ffffff]"
-                onClick={() => navigate("/register")}
-              >
-                Start Free Trial
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className={`text-lg px-8 py-6 backdrop-blur-sm rounded-xl ${isDark ? "border-white/20 text-white hover:bg-white/10" : "border-slate-300 text-slate-700"} text-[#0479a1]`}
-                onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
-              >
-                View Pricing
-              </Button>
+            <div className="flex items-center justify-center mb-12">
+              <div className="inline-flex rounded-xl shadow-2xl">
+                <Button
+                  size="lg"
+                  className="text-lg bg-[#ED363F] hover:bg-[#d92b34] border-0 rounded-l-xl rounded-r-none text-white h-auto px-[32px] py-[17px]"
+                  onClick={() => navigate("/register")}
+                >
+                  Start Free Trial
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+                <Button
+                  size="lg"
+                  className="text-lg bg-white hover:bg-slate-50 text-[#0479a1] border-0 rounded-none h-auto px-[32px] py-[17px]"
+                  onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
+                >
+                  View Pricing
+                </Button>
+                <div className="w-px bg-slate-100 h-auto self-stretch" />
+                <Button
+                  size="lg"
+                  className="text-lg bg-white hover:bg-slate-50 text-[#0479a1] border-0 rounded-r-xl rounded-l-none h-auto px-[32px] py-[17px]"
+                  onClick={() => navigate("/login")}
+                >
+                  Sign In
+                </Button>
+              </div>
             </div>
 
             {/* Trust Signals */}

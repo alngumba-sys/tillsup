@@ -143,11 +143,11 @@ export const router = createBrowserRouter([
         element: <SubscriptionBilling />,
       },
       {
-        path: "settings",
+        path: "business-settings",
         element: <BusinessSettings />,
       },
       {
-        path: "branches",
+        path: "branch-management",
         element: <BranchManagement />,
       },
       {

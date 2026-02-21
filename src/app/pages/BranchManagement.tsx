@@ -32,9 +32,18 @@ import { useNavigate } from "react-router";
 
 export function BranchManagement() {
   const { user, business } = useAuth();
-  const { branches, createBranch, updateBranch } = useBranch();
-  const { canCreateBranch, plan, usage, limits } = useSubscription();
+  const branchContext = useBranch();
+  const subscription = useSubscription();
   const navigate = useNavigate();
+  
+  // Destructure with safety checks
+  const branches = branchContext?.branches || [];
+  const createBranch = branchContext?.createBranch || (() => ({ success: false, error: "Service unavailable" }));
+  const updateBranch = branchContext?.updateBranch || (() => ({ success: false, error: "Service unavailable" }));
+  
+  const canCreateBranch = subscription?.canCreateBranch || (() => false);
+  const plan = subscription?.plan || { name: "Unknown", limits: { maxBranches: 1 } };
+  const limits = subscription?.limits || { maxBranches: 1 };
   
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<string | null>(null);

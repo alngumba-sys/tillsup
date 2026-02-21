@@ -1,45 +1,28 @@
-import { createContext, useContext, useState, ReactNode, useMemo } from "react";
+import { createContext, useContext, useState, ReactNode, useMemo, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import { useBranch } from "./BranchContext";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * INVENTORY CONTEXT - ENTERPRISE POS BRANCH-BASED INVENTORY MANAGEMENT
  * ═══════════════════════════════════════════════════════════════════════════
  * 
- * VERSION: 2.0 - Strict Branch Enforcement, Zero Cross-Branch Leakage
+ * VERSION: 3.0 - Supabase Persistence
  * 
  * ARCHITECTURE PRINCIPLES:
  * 
- * 1. NO AUTO-SEEDING
- *    - All inventory must be manually created with explicit branch assignment
- *    - No dummy, placeholder, or seed data is auto-generated
- *    - Empty inventory is the default state for all branches
+ * 1. SUPABASE BACKEND
+ *    - All inventory data is persisted in the 'inventory' table
+ *    - Real-time synchronization (optional, can be added later)
  * 
  * 2. MANDATORY BRANCH ASSIGNMENT
  *    - Every product MUST have a branchId
  *    - Branch selection is REQUIRED when adding products
- *    - NO fallback to "first branch" or "main branch"
  * 
- * 3. DYNAMIC BRANCH FILTERING
- *    - Products are filtered by the active/selected branch
- *    - Business Owner: Can view any branch via selectedBranchId
- *    - Staff/Manager: Auto-locked to their assigned branchId
- *    - NO cross-branch inventory sharing
- * 
- * 4. ZERO-TOLERANCE ISOLATION
+ * 3. ZERO-TOLERANCE ISOLATION
  *    - Each branch's inventory is completely isolated
- *    - Product visibility is strictly enforced by branchId
- *    - Empty branches show empty state (no fallback data)
- * 
- * 5. BACKEND-READY DESIGN
- *    - All products stored with explicit businessId + branchId
- *    - Structure ready for multi-tenant database migration
- *    - Filtering logic mirrors SQL WHERE clause patterns
- * 
- * MIGRATION NOTES:
- * - Version 2.0 automatically clears old seed data on first load
- * - Users must recreate inventory with proper branch assignment
  * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -65,25 +48,22 @@ export interface InventoryItem {
 
 interface InventoryContextType {
   inventory: InventoryItem[];
-  addProduct: (product: Omit<InventoryItem, "id" | "businessId" | "branchId">, branchId?: string) => void;
-  updateProduct: (id: string, product: Partial<InventoryItem>) => void;
-  deleteProduct: (id: string) => void;
-  deductStock: (productId: string, quantity: number) => boolean;
-  deductMultipleStock: (items: { productId: string; quantity: number }[]) => { success: boolean; errors: string[] };
+  addProduct: (product: Omit<InventoryItem, "id" | "businessId" | "branchId">, branchId?: string) => Promise<void>;
+  updateProduct: (id: string, product: Partial<InventoryItem>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  deductStock: (productId: string, quantity: number) => Promise<boolean>;
+  deductMultipleStock: (items: { productId: string; quantity: number }[]) => Promise<{ success: boolean; errors: string[] }>;
   getProductById: (id: string) => InventoryItem | undefined;
   validateStock: (productId: string, quantity: number) => boolean;
   getInventoryForBranch: (branchId: string) => InventoryItem[];
   getLowStockProducts: (branchId?: string) => InventoryItem[];
   isLowStock: (product: InventoryItem) => boolean;
-  increaseStock: (productId: string, branchId: string, quantity: number) => boolean;
-  increaseMultipleStock: (items: { productId: string; sku: string; name: string; quantity: number }[], branchId: string) => { success: boolean; errors: string[]; createdProducts: string[] };
+  increaseStock: (productId: string, branchId: string, quantity: number) => Promise<boolean>;
+  increaseMultipleStock: (items: { productId: string; sku: string; name: string; quantity: number }[], branchId: string) => Promise<{ success: boolean; errors: string[]; createdProducts: string[] }>;
+  refreshInventory: () => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
-
-const STORAGE_KEY = "pos_inventory";
-const STORAGE_VERSION_KEY = "pos_inventory_version";
-const CURRENT_VERSION = "2.0"; // Version 2.0: No auto-seeding, strict branch enforcement
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
@@ -108,59 +88,59 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const selectedBranchId = branch?.selectedBranchId || null;
   const branches = branch?.branches || [];
 
-  // ═══════════════════════════════════════════════════════════════════
-  // STEP 1: REMOVED AUTO-SEEDING - NO MORE DUMMY DATA
-  // ═══════════════════════════════════════════════════════════════════
-  // All inventory must be manually created with explicit branch assignment
-  // No default, placeholder, or seed data will be auto-generated
-  // 
-  // MIGRATION: Clear old seed data from localStorage if version mismatch
-  // ═══════════════════════════════════════════════════════════════════
-  
-  const [allInventory, setAllInventory] = useState<InventoryItem[]>(() => {
-    try {
-      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
-      
-      // If version doesn't match, clear old inventory data
-      if (storedVersion !== CURRENT_VERSION) {
-        console.log("🧹 Clearing old inventory data due to version change");
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
-        return [];
-      }
-      
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error("Failed to load inventory from localStorage:", error);
-    }
-    return [];
-  });
+  const [allInventory, setAllInventory] = useState<InventoryItem[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // REMOVED: Auto-seeding useEffect
-  // Inventory starts EMPTY for all branches
+  // FETCH INVENTORY FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
-  
-  const updateInventory = (newInventory: InventoryItem[]) => {
-    setAllInventory(newInventory);
+  const refreshInventory = async () => {
+    if (!business) return;
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newInventory));
-    } catch (error) {
-      console.error("Failed to save inventory:", error);
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('business_id', business.id);
+
+      if (error) {
+        console.error("Error fetching inventory:", error);
+        toast.error("Failed to load inventory");
+        return;
+      }
+
+      if (data) {
+        const mappedInventory: InventoryItem[] = data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          price: Number(item.retail_price || item.price || 0),
+          stock: Number(item.stock || 0),
+          sku: item.sku || "",
+          supplier: item.supplier || "",
+          businessId: item.business_id,
+          branchId: item.branch_id,
+          lowStockThreshold: Number(item.low_stock_threshold || 10),
+          costPrice: item.cost_price ? Number(item.cost_price) : undefined,
+          retailPrice: item.retail_price ? Number(item.retail_price) : Number(item.price || 0),
+          wholesalePrice: item.wholesale_price ? Number(item.wholesale_price) : undefined,
+        }));
+        setAllInventory(mappedInventory);
+      }
+    } catch (err) {
+      console.error("Unexpected error fetching inventory:", err);
     }
   };
 
+  useEffect(() => {
+    if (business) {
+      refreshInventory();
+    } else {
+      setAllInventory([]);
+    }
+  }, [business]);
+
   const inventory = useMemo(() => {
     if (!business) return [];
-    
-    // ═══════════════════════════════════════════════════════════════════
-    // CRITICAL FIX: Return ALL inventory for the business
-    // Let the consuming component (Inventory page) handle branch filtering
-    // This prevents double-filtering conflicts
-    // ═══════════════════════════════════════════════════════════════════
     return allInventory.filter(item => item.businessId === business.id);
   }, [business, allInventory]);
 
@@ -172,11 +152,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   // ═══════════════════════════════════════════════════════════════════
-  // STEP 2-3: DYNAMIC BRANCH ASSIGNMENT - NO FALLBACKS
+  // SUPABASE ACTIONS
   // ═══════════════════════════════════════════════════════════════════
-  // Branch ID must be explicitly provided OR derived from user's context
-  // CRITICAL: Removed branches[0]?.id fallback to prevent "first branch" bug
-  const addProduct = (
+  
+  const addProduct = async (
     product: Omit<InventoryItem, "id" | "businessId" | "branchId">,
     branchId?: string
   ) => {
@@ -190,50 +169,118 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     
     if (!targetBranchId) {
       if (user?.role === "Business Owner") {
-        // Owner: Use selected branch from context
-        // NO FALLBACK to first branch - must be explicitly selected
         targetBranchId = selectedBranchId || "";
       } else {
-        // Staff/Manager: Use their assigned branch
         targetBranchId = user?.branchId || "";
       }
     }
     
-    // STRICT VALIDATION: Branch ID is mandatory
     if (!targetBranchId) {
       console.error("Cannot add product: Branch assignment is required");
+      toast.error("Branch assignment is required");
       return;
     }
     
-    const newProduct: InventoryItem = {
-      id: `${business.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      ...product,
-      businessId: business.id,
-      branchId: targetBranchId
+    const newItem = {
+      business_id: business.id,
+      branch_id: targetBranchId,
+      name: product.name,
+      category: product.category,
+      price: product.price, // Fallback
+      retail_price: product.retailPrice || product.price,
+      cost_price: product.costPrice,
+      wholesale_price: product.wholesalePrice,
+      stock: product.stock,
+      sku: product.sku,
+      supplier: product.supplier,
+      low_stock_threshold: product.lowStockThreshold || 10
     };
-    updateInventory([...allInventory, newProduct]);
+
+    try {
+      const { data, error } = await supabase
+        .from('inventory')
+        .insert(newItem)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error adding product:", error);
+        toast.error("Failed to add product");
+        return;
+      }
+
+      if (data) {
+        // Optimistically update local state or refresh
+        await refreshInventory();
+      }
+    } catch (err) {
+      console.error("Unexpected error adding product:", err);
+    }
   };
 
-  const updateProduct = (id: string, updates: Partial<InventoryItem>) => {
+  const updateProduct = async (id: string, updates: Partial<InventoryItem>) => {
     if (!business) return;
     
-    updateInventory(
-      allInventory.map((item) =>
-        item.id === id && item.businessId === business.id
-          ? { ...item, ...updates }
-          : item
-      )
-    );
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.stock !== undefined) dbUpdates.stock = updates.stock;
+    if (updates.sku !== undefined) dbUpdates.sku = updates.sku;
+    if (updates.supplier !== undefined) dbUpdates.supplier = updates.supplier;
+    if (updates.branchId !== undefined) dbUpdates.branch_id = updates.branchId;
+    if (updates.lowStockThreshold !== undefined) dbUpdates.low_stock_threshold = updates.lowStockThreshold;
+    
+    // Pricing
+    if (updates.retailPrice !== undefined) {
+        dbUpdates.retail_price = updates.retailPrice;
+        dbUpdates.price = updates.retailPrice; // Keep legacy field in sync
+    } else if (updates.price !== undefined) {
+        dbUpdates.retail_price = updates.price;
+        dbUpdates.price = updates.price;
+    }
+    
+    if (updates.costPrice !== undefined) dbUpdates.cost_price = updates.costPrice;
+    if (updates.wholesalePrice !== undefined) dbUpdates.wholesale_price = updates.wholesalePrice;
+
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .update(dbUpdates)
+        .eq('id', id)
+        .eq('business_id', business.id);
+
+      if (error) {
+        console.error("Error updating product:", error);
+        toast.error("Failed to update product");
+        return;
+      }
+      
+      await refreshInventory();
+    } catch (err) {
+      console.error("Unexpected error updating product:", err);
+    }
   };
 
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
     if (!business) return;
     
-    updateInventory(
-      allInventory.filter((item) => 
-        !(item.id === id && item.businessId === business.id)
-      )
-    );
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .delete()
+        .eq('id', id)
+        .eq('business_id', business.id);
+
+      if (error) {
+        console.error("Error deleting product:", error);
+        toast.error("Failed to delete product");
+        return;
+      }
+
+      await refreshInventory();
+    } catch (err) {
+      console.error("Unexpected error deleting product:", err);
+    }
   };
 
   const getProductById = (id: string): InventoryItem | undefined => {
@@ -246,7 +293,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return product.stock >= quantity;
   };
 
-  const deductStock = (productId: string, quantity: number): boolean => {
+  const deductStock = async (productId: string, quantity: number): Promise<boolean> => {
     const product = getProductById(productId);
     
     if (!product) {
@@ -259,22 +306,38 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    updateInventory(
-      allInventory.map((item) =>
-        item.id === productId
-          ? { ...item, stock: Math.max(0, item.stock - quantity) }
-          : item
-      )
-    );
+    const newStock = Math.max(0, product.stock - quantity);
 
-    return true;
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .update({ stock: newStock })
+        .eq('id', productId)
+        .eq('business_id', business?.id);
+
+      if (error) {
+        console.error("Error deducting stock:", error);
+        return false;
+      }
+
+      // Optimistic update
+      setAllInventory(prev => prev.map(item => 
+        item.id === productId ? { ...item, stock: newStock } : item
+      ));
+      
+      return true;
+    } catch (err) {
+      console.error("Unexpected error deducting stock:", err);
+      return false;
+    }
   };
 
-  const deductMultipleStock = (
+  const deductMultipleStock = async (
     items: { productId: string; quantity: number }[]
-  ): { success: boolean; errors: string[] } => {
+  ): Promise<{ success: boolean; errors: string[] }> => {
     const errors: string[] = [];
 
+    // 1. Validation phase
     for (const item of items) {
       const product = getProductById(item.productId);
       
@@ -294,20 +357,41 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return { success: false, errors };
     }
 
-    updateInventory(
-      allInventory.map((inventoryItem) => {
-        const saleItem = items.find((i) => i.productId === inventoryItem.id);
-        if (saleItem) {
-          return {
-            ...inventoryItem,
-            stock: Math.max(0, inventoryItem.stock - saleItem.quantity)
-          };
-        }
-        return inventoryItem;
-      })
-    );
+    // 2. Execution phase - Process one by one (ideal would be a stored procedure or batch RPC)
+    // For now, we'll do parallel updates for simplicity in this frontend-heavy app
+    const promises = items.map(async (item) => {
+      const product = getProductById(item.productId);
+      if (!product) return;
+      
+      const newStock = Math.max(0, product.stock - item.quantity);
+      
+      const { error } = await supabase
+        .from('inventory')
+        .update({ stock: newStock })
+        .eq('id', item.productId);
+        
+      if (error) throw error;
+      
+      return { productId: item.productId, newStock };
+    });
 
-    return { success: true, errors: [] };
+    try {
+      const results = await Promise.all(promises);
+      
+      // Update local state
+      setAllInventory(prev => prev.map(invItem => {
+        const result = results.find(r => r?.productId === invItem.id);
+        if (result) {
+          return { ...invItem, stock: result.newStock };
+        }
+        return invItem;
+      }));
+
+      return { success: true, errors: [] };
+    } catch (err: any) {
+      console.error("Error in bulk stock deduction:", err);
+      return { success: false, errors: ["Database error during stock update"] };
+    }
   };
 
   const getLowStockProducts = (branchId?: string): InventoryItem[] => {
@@ -328,7 +412,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return product.stock < (product.lowStockThreshold || 10);
   };
 
-  const increaseStock = (productId: string, branchId: string, quantity: number): boolean => {
+  const increaseStock = async (productId: string, branchId: string, quantity: number): Promise<boolean> => {
     const product = getProductById(productId);
     
     if (!product) {
@@ -341,78 +425,99 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    updateInventory(
-      allInventory.map((item) =>
-        item.id === productId
-          ? { ...item, stock: Math.max(0, item.stock + quantity) }
-          : item
-      )
-    );
+    const newStock = product.stock + quantity;
 
-    return true;
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .update({ stock: newStock })
+        .eq('id', productId);
+
+      if (error) {
+        console.error("Error increasing stock:", error);
+        return false;
+      }
+
+      setAllInventory(prev => prev.map(item => 
+        item.id === productId ? { ...item, stock: newStock } : item
+      ));
+
+      return true;
+    } catch (err) {
+      console.error("Unexpected error increasing stock:", err);
+      return false;
+    }
   };
 
-  const increaseMultipleStock = (
+  const increaseMultipleStock = async (
     items: { productId: string; sku: string; name: string; quantity: number }[],
     branchId: string
-  ): { success: boolean; errors: string[]; createdProducts: string[] } => {
+  ): Promise<{ success: boolean; errors: string[]; createdProducts: string[] }> => {
     if (!business) {
       return { success: false, errors: ["No business context"], createdProducts: [] };
     }
 
     const errors: string[] = [];
     const createdProducts: string[] = [];
-    const updatedInventory = [...allInventory];
-
+    
+    // We'll process sequentially to handle create vs update
     for (const item of items) {
-      // Find existing product by productId OR by SKU + branchId
-      let product = updatedInventory.find(p => p.id === item.productId);
-      
-      if (!product) {
-        // Try finding by SKU + branchId
-        product = updatedInventory.find(
-          p => p.sku === item.sku && p.branchId === branchId && p.businessId === business.id
-        );
-      }
-      
-      if (!product) {
-        // Product does not exist - create new inventory record for this branch
-        const newProduct: InventoryItem = {
-          id: `${business.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name: item.name,
-          category: "Uncategorized",
-          price: 0,
-          stock: item.quantity,
-          sku: item.sku,
-          supplier: "Unknown",
-          businessId: business.id,
-          branchId: branchId
-        };
-        updatedInventory.push(newProduct);
-        createdProducts.push(item.sku);
-      } else {
-        // Product exists - verify branch and increase stock
-        if (product.branchId !== branchId) {
-          errors.push(`Product "${product.name}" belongs to different branch`);
-          continue;
+      try {
+        // Find existing product by productId OR by SKU + branchId
+        let product = allInventory.find(p => p.id === item.productId);
+        
+        if (!product) {
+          // Try finding by SKU + branchId
+          product = allInventory.find(
+            p => p.sku === item.sku && p.branchId === branchId && p.businessId === business.id
+          );
         }
         
-        const index = updatedInventory.findIndex(p => p.id === product!.id);
-        if (index !== -1) {
-          updatedInventory[index] = {
-            ...updatedInventory[index],
-            stock: updatedInventory[index].stock + item.quantity
+        if (!product) {
+          // Product does not exist - create new inventory record for this branch
+          const newItem = {
+            business_id: business.id,
+            branch_id: branchId,
+            name: item.name,
+            category: "Uncategorized",
+            price: 0,
+            stock: item.quantity,
+            sku: item.sku,
+            supplier: "Unknown",
+            low_stock_threshold: 10
           };
+          
+          const { data, error } = await supabase.from('inventory').insert(newItem).select('id').single();
+          if (error) {
+            errors.push(`Failed to create product ${item.sku}: ${error.message}`);
+          } else {
+            createdProducts.push(item.sku);
+          }
+        } else {
+          // Product exists - verify branch and increase stock
+          if (product.branchId !== branchId) {
+            errors.push(`Product "${product.name}" belongs to different branch`);
+            continue;
+          }
+          
+          const newStock = product.stock + item.quantity;
+          const { error } = await supabase.from('inventory').update({ stock: newStock }).eq('id', product.id);
+          
+          if (error) {
+            errors.push(`Failed to update stock for ${item.sku}: ${error.message}`);
+          }
         }
+      } catch (err: any) {
+        errors.push(`Error processing ${item.sku}: ${err.message}`);
       }
     }
+
+    await refreshInventory();
 
     if (errors.length > 0) {
       return { success: false, errors, createdProducts };
     }
 
-    // Atomic update - all or nothing
-    updateInventory(updatedInventory);
     return { success: true, errors: [], createdProducts };
   };
 
@@ -429,7 +534,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     getLowStockProducts,
     isLowStock,
     increaseStock,
-    increaseMultipleStock
+    increaseMultipleStock,
+    refreshInventory
   };
 
   return (

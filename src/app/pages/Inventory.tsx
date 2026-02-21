@@ -498,7 +498,7 @@ export function Inventory() {
     return matchesSearch && matchesCategory && matchesBranch && matchesStockStatus;
   });
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     // Validation
     if (!formData.name.trim()) {
       alert("Product name is required");
@@ -532,27 +532,31 @@ export function Inventory() {
       return;
     }
 
-    addProduct({
-      name: formData.name,
-      category: formData.category,
-      price: parseFloat(formData.price),
-      stock: parseInt(formData.stock),
-      sku: formData.sku,
-      supplier: formData.supplier,
-      // ═══════════════════════════════════════════════════════════════════
-      // PRICING EXTENSION: Include new pricing fields
-      // ═══════════════════════════════════════════════════════════════════
-      costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
-      retailPrice: parseFloat(formData.price), // Same as price for backward compatibility
-      wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined
-    }, formData.branchId);
-    
-    setIsAddDialogOpen(false);
-    resetForm();
-    toast.success("Product added successfully!");
+    try {
+      await addProduct({
+        name: formData.name,
+        category: formData.category,
+        price: parseFloat(formData.price),
+        stock: parseInt(formData.stock),
+        sku: formData.sku,
+        supplier: formData.supplier,
+        // ═══════════════════════════════════════════════════════════════════
+        // PRICING EXTENSION: Include new pricing fields
+        // ═══════════════════════════════════════════════════════════════════
+        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
+        retailPrice: parseFloat(formData.price), // Same as price for backward compatibility
+        wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined
+      }, formData.branchId);
+      
+      setIsAddDialogOpen(false);
+      resetForm();
+      toast.success("Product added successfully!");
+    } catch (error) {
+      // Toast already handled in context
+    }
   };
 
-  const handleEditProduct = () => {
+  const handleEditProduct = async () => {
     if (editingItem) {
       // Validation
       if (!formData.name.trim()) {
@@ -587,7 +591,8 @@ export function Inventory() {
         return;
       }
 
-      updateProduct(
+      try {
+        await updateProduct(
         editingItem.id,
         {
           name: formData.name,
@@ -607,14 +612,21 @@ export function Inventory() {
       );
       setEditingItem(null);
       resetForm();
-      toast.success("Product updated successfully!");
+        toast.success("Product updated successfully!");
+      } catch (error) {
+        // Toast handled in context
+      }
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this product?")) {
-      deleteProduct(id);
-      toast.success("Product deleted successfully!");
+      try {
+        await deleteProduct(id);
+        toast.success("Product deleted successfully!");
+      } catch (error) {
+        // Toast handled in context
+      }
     }
   };
 
@@ -651,7 +663,7 @@ export function Inventory() {
     });
   };
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════���═════════════════════════════════
   // STOCK STATUS BADGE - Visual indicator for table display
   // Uses item's lowStockThreshold or defaults to 5
   // ═══════════════════════════════════════════════════════════════════
@@ -696,7 +708,7 @@ export function Inventory() {
         return {
           "SKU/Size": item.sku,
           "Product Name": item.name,
-          "Category": item.category,
+          "Category": categoryList.find(c => c.id === item.category)?.name || item.category,
           "Branch": branch?.name || "Unknown",
           "Cost Price": item.costPrice || "-",
           "Retail Price": item.retailPrice || item.price,
@@ -1386,7 +1398,7 @@ export function Inventory() {
                       
                       {/* Render active categories from Category Management */}
                       {activeCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name}>
+                        <SelectItem key={cat.id} value={cat.id}>
                           {cat.name}
                         </SelectItem>
                       ))}
@@ -1477,7 +1489,9 @@ export function Inventory() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>{item.category}</TableCell>
+                            <TableCell>
+                              {categoryList.find(c => c.id === item.category)?.name || item.category}
+                            </TableCell>
                             {user?.role === "Business Owner" && (
                               <TableCell>
                                 <div className="flex items-center gap-1.5">

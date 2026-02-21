@@ -13,23 +13,8 @@ export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { assets } = useBranding();
+  const { login, isAuthenticated } = useAuth();
   
-  // Safe access to AuthContext - handle case where it might not be ready yet
-  let login: any = async () => ({ success: false, error: "Authentication service unavailable" });
-  let isAuthenticated = false;
-  
-  try {
-    const auth = useAuth();
-    if (auth) {
-      login = auth.login;
-      isAuthenticated = auth.isAuthenticated;
-    }
-  } catch (error) {
-    console.warn("AuthContext access failed in Login:", error);
-    // Fallback: If strict auth requirement is needed, we could return null.
-    // But to prevent "stuck" UI in edge cases, we let it render with a dummy login that fails gracefully.
-  }
-
   const [formData, setFormData] = useState({
     email: "",
     password: ""
@@ -72,12 +57,17 @@ export function Login() {
     setLoading(true);
 
     try {
-      // Create a timeout wrapper to prevent indefinite hanging
+      // Basic safeguard: timeout if login takes > 15 seconds (rare but possible network issue)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Request timed out. Please check your connection.")), 15000)
+        setTimeout(() => reject(new Error("Login timed out. Please check your connection and try again.")), 15000)
       );
 
       // Attempt login with race against timeout
+      // Ensure login is a function before calling
+      if (typeof login !== 'function') {
+         throw new Error("Authentication service is not ready. Please try again.");
+      }
+
       const loginPromise = login(formData.email, formData.password);
       
       const result: any = await Promise.race([
@@ -148,7 +138,7 @@ export function Login() {
             )}
           </div>
           <div>
-            <CardTitle className="text-3xl font-[Actor] text-[#0479a1]">POS System</CardTitle>
+            <CardTitle className="text-3xl font-['Outfit'] text-[#0479a1]">POS System</CardTitle>
             <CardDescription className="mt-2">
               Sign in to access your business dashboard
             </CardDescription>

@@ -5,6 +5,7 @@ import { useKPI } from "../contexts/KPIContext";
 import { useSales } from "../contexts/SalesContext";
 import { useInventory } from "../contexts/InventoryContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useSubscription } from "../hooks/useSubscription";
 import { useBranch } from "../contexts/BranchContext";
 import { useExpense } from "../contexts/ExpenseContext";
 import { Button } from "../components/ui/button";
@@ -40,7 +41,8 @@ export function Dashboard() {
     getTotalCOGS
   } = useSales();
   const { inventory } = useInventory();
-  const { user, business, getStaffMembers } = useAuth();
+  const { user, business } = useAuth();
+  const { usage } = useSubscription();
   const { branches } = useBranch();
   const { expenses } = useExpense();
   const navigate = useNavigate();
@@ -431,7 +433,7 @@ export function Dashboard() {
                 </span>
                 <span className="w-px h-3 bg-border" />
                 <span title="Staff Members">
-                  <span className="font-medium text-foreground">{getStaffMembers ? getStaffMembers().length : 0}</span>/{business.maxStaff} Staff
+                  <span className="font-medium text-foreground">{usage.staff}</span>/{business.maxStaff} Staff
                 </span>
               </div>
 

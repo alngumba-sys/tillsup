@@ -45,6 +45,9 @@ export function BranchGuard({ children, requireBranchAccess = false }: BranchGua
     const validateBranch = async () => {
       if (!user) return;
 
+      // 0️⃣ IMMEDIATE BYPASS FOR BUSINESS OWNER
+      if (user.role === "Business Owner") return;
+
       // ═══════════════════════════════════════════════════════════════════
       // 1️⃣ BRANCH STATUS VALIDATION - ABSOLUTE PRIORITY (HARD BLOCK)
       // ═══════════════════════════════════════════════════════════════════

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranch } from "../contexts/BranchContext";
 import { getPlanDetails, hasFeature, PlanFeatures, SubscriptionPlanDetails } from "../utils/subscription";
@@ -22,6 +23,30 @@ export interface SubscriptionContextType {
 export function useSubscription(): SubscriptionContextType {
   const { user, business, getStaffMembers } = useAuth();
   const { branches } = useBranch();
+  const [staffCount, setStaffCount] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    
+    const fetchStaffCount = async () => {
+      if (business && getStaffMembers) {
+        try {
+          const staff = await getStaffMembers();
+          if (mounted) {
+            setStaffCount(staff.length);
+          }
+        } catch (err) {
+          console.error("Failed to fetch staff count for subscription check", err);
+        }
+      }
+    };
+
+    fetchStaffCount();
+
+    return () => {
+      mounted = false;
+    };
+  }, [business?.id, getStaffMembers]);
 
   // Safe fallback if context is not ready
   const currentPlanName = business?.subscriptionPlan || "Free Trial";
@@ -29,10 +54,13 @@ export function useSubscription(): SubscriptionContextType {
 
   // Calculate usage
   const branchUsage = branches ? branches.length : 0;
-  const staffUsage = getStaffMembers ? getStaffMembers().length : 0;
+  const staffUsage = staffCount;
 
   // Check limits
   const checkLimit = (resource: "branches" | "staff", currentCount: number) => {
+    // Override for Demo User
+    if (user?.email === "demo@test.com") return true;
+
     if (resource === "branches") {
       return currentCount < planDetails.limits.maxBranches;
     }
@@ -43,17 +71,26 @@ export function useSubscription(): SubscriptionContextType {
   };
 
   const canCreateBranch = () => {
+    // Override for Demo User
+    if (user?.email === "demo@test.com") return true;
+
     // Enterprise plan has effective unlimited (999)
     if (planDetails.limits.maxBranches >= 999) return true;
     return branchUsage < planDetails.limits.maxBranches;
   };
 
   const canCreateStaff = () => {
+    // Override for Demo User
+    if (user?.email === "demo@test.com") return true;
+
     if (planDetails.limits.maxStaff >= 999) return true;
     return staffUsage < planDetails.limits.maxStaff;
   };
 
   const checkFeature = (feature: keyof PlanFeatures) => {
+    // Override for Demo User
+    if (user?.email === "demo@test.com") return true;
+
     return hasFeature(currentPlanName, feature);
   };
 
