@@ -9,11 +9,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../components/ui/command";
 import { Store, Building2, User, Mail, Lock, ArrowLeft, Check, ChevronsUpDown, Phone } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
 import { COUNTRIES } from "../utils/countries";
 import { cn } from "../components/ui/utils";
 
 export function BusinessRegistration() {
   const navigate = useNavigate();
+  const { assets } = useBranding();
   
   // Get Auth Context
   const { registerBusiness, isAuthenticated } = useAuth();
@@ -131,26 +133,37 @@ export function BusinessRegistration() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[linear-gradient(135deg,#000000_0%,#14213d_60%,#0479A1_100%)] p-4 text-slate-50">
+    <div 
+      className={`min-h-screen flex items-center justify-center p-4 text-slate-50 relative ${!assets.authBg ? "bg-[linear-gradient(135deg,#000000_0%,#14213d_60%,#0479A1_100%)]" : "bg-cover bg-center"}`}
+      style={assets.authBg ? { backgroundImage: `url(${assets.authBg})` } : {}}
+    >
+      {assets.authBg && <div className="absolute inset-0 bg-black/60 z-0" />}
+      
       {/* Back to Home Link */}
       <Button
         variant="ghost"
-        className="absolute top-4 left-4"
+        className="absolute top-4 left-4 z-10 text-white hover:text-white hover:bg-white/10"
         onClick={() => navigate("/")}
       >
         <Store className="w-4 h-4 mr-2" />
         Back to Home
       </Button>
 
-      <Card className="w-full max-w-lg shadow-lg">
+      <Card className="w-full max-w-lg shadow-lg relative z-10 bg-card">
         <CardHeader className="text-center space-y-2 pb-4 pt-6">
           <div className="flex justify-center items-center gap-3 mb-4">
-            <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
-              <Store className="w-6 h-6" strokeWidth={2.5} />
-            </div>
-            <span className="text-2xl font-bold font-['Outfit'] tracking-tight text-card-foreground">
-              Tillsup
-            </span>
+            {assets.logoMain ? (
+               <img src={assets.logoMain} alt="Tillsup" className="h-12 w-auto object-contain" />
+            ) : (
+              <>
+                <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
+                  <Store className="w-6 h-6" strokeWidth={2.5} />
+                </div>
+                <span className="text-2xl font-bold font-['Outfit'] tracking-tight text-card-foreground">
+                  Tillsup
+                </span>
+              </>
+            )}
           </div>
           <div>
             <CardTitle className="text-2xl text-center text-[#0479a1]">Register Your Business</CardTitle>

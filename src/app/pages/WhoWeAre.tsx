@@ -18,9 +18,11 @@ import {
   X,
   Store
 } from "lucide-react";
+import { useBranding } from "../contexts/BrandingContext";
 
 export function WhoWeAre() {
   const navigate = useNavigate();
+  const { assets } = useBranding();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const isDark = theme === "dark";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -43,12 +45,18 @@ export function WhoWeAre() {
               className="flex items-center gap-3 cursor-pointer select-none" 
               onClick={() => navigate("/")}
             >
-              <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
-                <Store className="w-5 h-5" strokeWidth={2.5} />
-              </div>
-              <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
-                Tillsup
-              </span>
+              {(isDark ? assets.logoDark : assets.logoMain) ? (
+                 <img src={isDark ? (assets.logoDark || assets.logoMain) : assets.logoMain} alt="Tillsup" className="h-10 w-auto object-contain" />
+              ) : (
+                <>
+                  <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
+                    <Store className="w-5 h-5" strokeWidth={2.5} />
+                  </div>
+                  <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                    Tillsup
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Desktop Nav */}
@@ -271,7 +279,13 @@ export function WhoWeAre() {
       <footer className={`py-12 border-t ${isDark ? "border-white/10 bg-slate-950" : "border-slate-200 bg-white"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <div className="flex justify-center items-center gap-2 mb-4 opacity-50">
-                 <img src={logo} alt="Tillsup" className="h-6 w-auto object-contain" />
+                {(isDark ? assets.logoDark : assets.logoMain) ? (
+                   <img src={isDark ? (assets.logoDark || assets.logoMain) : assets.logoMain} alt="Tillsup" className="h-6 w-auto object-contain" />
+                ) : (
+                  <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                    Tillsup
+                  </span>
+                )}
             </div>
             <p className={`text-sm ${subTextClass}`}>
                 &copy; {new Date().getFullYear()} Tillsup Inc. All rights reserved.

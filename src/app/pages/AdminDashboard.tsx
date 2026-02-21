@@ -37,6 +37,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "../components/ui/dialog";
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { COUNTRIES } from "../utils/countries";
 
 interface BusinessData {
@@ -111,8 +113,11 @@ const BRANDING_SLOTS = [
   }
 ];
 
+import { useBranding } from "../contexts/BrandingContext";
+
 export function AdminDashboard() {
   const navigate = useNavigate();
+  const { refreshBranding } = useBranding();
   
   // Dashboard State
   const [loading, setLoading] = useState(true);
@@ -139,6 +144,8 @@ export function AdminDashboard() {
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [slotUploading, setSlotUploading] = useState<string | null>(null);
+  const [showRLSDialog, setShowRLSDialog] = useState(false);
+  const [storageError, setStorageError] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -301,44 +308,87 @@ export function AdminDashboard() {
     else setUploading(true);
     
     const file = e.target.files[0];
-    const fileExt = file.name.split('.').pop();
+    const fileExt = file.name.split('.').pop() || '';
     
-    // If customName is provided (for branding slots), use it. Append extension if needed or rely on provided name
-    // For branding slots, we typically want a fixed name like "platform-logo-main" without extension variability if possible,
-    // OR we store "platform-logo-main.png".
-    // Let's assume we append the original extension to the slot ID, or just use the slot ID if we want to force specific formats.
-    // Better approach: Use the slot ID + extension.
-    
-    let fileName;
-    if (customName) {
-        fileName = `${customName}.${fileExt}`;
-        // Clean up any existing files with this slot name but different extension? 
-        // Supabase doesn't easily support "delete * where name like X".
-        // For simplicity, we just upload. The app will need to know which extension to look for, 
-        // OR we enforce PNG/JPG.
-        // Let's just use the file extension.
-    } else {
-        fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
-    }
-
     try {
-      const { error: uploadError } = await supabase.storage
-        .from('platform-assets')
-        .upload(fileName, file, {
-           cacheControl: '3600',
-           upsert: true // Allow overwriting for branding slots
-        });
+        // --- 1. Ensure Bucket Exists (Attempt Creation) ---
+        // If the bucket doesn't exist, uploads will fail. We try to create it if we get a specific error,
+        // or just proactively check/create if possible. Since we can't always check existence cheaply without erroring,
+        // we'll wrap the logic.
+        
+        // However, a simpler way is to handle the specific error if upload fails, or try a list first.
+        // Let's try to list first. If list fails with "Bucket not found", we create it.
+        const { error: listError } = await supabase.storage.from('platform-assets').list('', { limit: 1 });
+        
+        if (listError && listError.message.includes("Bucket not found")) {
+            // Attempt to create the bucket
+            const { error: createError } = await supabase.storage.createBucket('platform-assets', {
+                public: true,
+                fileSizeLimit: 5242880, // 5MB
+                allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml', 'image/x-icon']
+            });
+            
+            if (createError) {
+                console.error("Failed to create bucket:", createError);
+                toast.error("Error: Bucket 'platform-assets' missing. Please create a Public bucket named 'platform-assets' in your Supabase Dashboard > Storage.");
+                return;
+            }
+            toast.success("Created 'platform-assets' storage bucket.");
+        }
 
-      if (uploadError) throw uploadError;
-      
-      toast.success("Image uploaded successfully");
-      fetchAssets();
+        if (customName) {
+            // 2. Delete existing assets for this slot to avoid conflicts (e.g. logo.png vs logo.jpg)
+            const { data: existingFiles } = await supabase.storage.from('platform-assets').list('', {
+                search: customName
+            });
+            
+            if (existingFiles && existingFiles.length > 0) {
+                const filesToDelete = existingFiles
+                    .filter(f => f.name.startsWith(customName))
+                    .map(f => f.name);
+                
+                if (filesToDelete.length > 0) {
+                    await supabase.storage.from('platform-assets').remove(filesToDelete);
+                }
+            }
+        }
+
+        let fileName;
+        if (customName) {
+            fileName = `${customName}.${fileExt}`;
+        } else {
+            fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+        }
+
+        const { error: uploadError } = await supabase.storage
+            .from('platform-assets')
+            .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: true
+            });
+
+        if (uploadError) throw uploadError;
+        
+        toast.success("Image uploaded successfully");
+        await fetchAssets();
+        await refreshBranding(); // Update app-wide branding
     } catch (error: any) {
-      toast.error("Error uploading image: " + error.message);
+        console.error("Upload error:", error);
+        
+        // specific handling for bucket not found if it slipped through
+        if (error.message && (error.message.includes("Bucket not found") || error.statusCode === "404")) {
+             toast.error("Bucket 'platform-assets' not found. Please create a PUBLIC bucket named 'platform-assets' in your Supabase Storage.");
+        } else if (error.message && error.message.includes("row-level security")) {
+             setStorageError(true);
+             toast.error("Upload failed: Storage policies not configured.");
+             setShowRLSDialog(true);
+        } else {
+             toast.error("Error uploading image: " + error.message);
+        }
     } finally {
-      setUploading(false);
-      setSlotUploading(null);
-      e.target.value = "";
+        setUploading(false);
+        setSlotUploading(null);
+        e.target.value = "";
     }
   };
 
@@ -813,6 +863,25 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="assets" className="space-y-8">
+                 {storageError && (
+                  <Alert variant="destructive" className="bg-red-900/20 border-red-500/50 text-red-200">
+                      <div className="flex flex-col gap-2">
+                        <AlertTitle className="text-red-400 font-semibold flex items-center gap-2">
+                           Storage Configuration Missing
+                        </AlertTitle>
+                        <AlertDescription className="text-red-200/80">
+                           Uploads are blocked because your Supabase Storage bucket is missing Row Level Security (RLS) policies. 
+                           <button 
+                             className="text-red-400 font-bold underline ml-2 hover:text-red-300 transition-colors"
+                             onClick={() => setShowRLSDialog(true)}
+                           >
+                             Click here to fix it
+                           </button>
+                        </AlertDescription>
+                      </div>
+                  </Alert>
+                )}
+
                 {/* Header */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div>
@@ -821,6 +890,13 @@ export function AdminDashboard() {
                   </div>
                   
                   <div className="flex items-center gap-3">
+                     <Button 
+                       variant="outline" 
+                       onClick={() => setShowRLSDialog(true)}
+                       className="bg-indigo-500/10 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300"
+                     >
+                       Config Storage
+                     </Button>
                      <Button 
                        variant="outline" 
                        onClick={fetchAssets}
@@ -903,29 +979,40 @@ export function AdminDashboard() {
                             <h3 className="text-lg font-semibold text-white">General Gallery</h3>
                         </div>
                         
-                         <div className="relative">
-                            <input 
-                                type="file" 
-                                id="general-upload" 
-                                className="hidden" 
-                                accept="image/*"
-                                onChange={(e) => handleUpload(e)}
-                                disabled={uploading}
-                            />
-                            <label htmlFor="general-upload">
-                                <Button 
-                                    variant="secondary" 
-                                    disabled={uploading} 
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 cursor-pointer pointer-events-none h-8 text-xs"
-                                    asChild
-                                >
-                                    <span className="pointer-events-auto flex items-center gap-2">
-                                        {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                                        Upload New File
-                                    </span>
-                                </Button>
-                            </label>
-                         </div>
+                        <div className="flex items-center gap-2">
+                            <div className="relative">
+                                <input 
+                                    type="file" 
+                                    id="general-upload" 
+                                    className="hidden" 
+                                    accept="image/*"
+                                    onChange={(e) => handleUpload(e)}
+                                    disabled={uploading}
+                                />
+                                <label htmlFor="general-upload">
+                                    <Button 
+                                        variant="secondary" 
+                                        disabled={uploading} 
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 cursor-pointer pointer-events-none h-8 text-xs"
+                                        asChild
+                                    >
+                                        <span className="pointer-events-auto flex items-center gap-2">
+                                            {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                                            Upload New File
+                                        </span>
+                                    </Button>
+                                </label>
+                            </div>
+                            <Button
+                                variant="outline"
+                                className="h-8 text-xs bg-slate-800 text-slate-300 border-white/10 hover:bg-white/10"
+                                onClick={() => setShowRLSDialog(true)}
+                            >
+                                <span className="flex items-center gap-2">
+                                    Config Storage
+                                </span>
+                            </Button>
+                        </div>
                     </div>
                 
                     {loadingAssets ? (
@@ -1001,6 +1088,110 @@ export function AdminDashboard() {
                 </div>
             </TabsContent>
         </Tabs>
+
+        <Dialog open={showRLSDialog} onOpenChange={setShowRLSDialog}>
+          <DialogContent className="sm:max-w-2xl bg-slate-900 text-white border-white/10">
+            <DialogHeader>
+              <DialogTitle>Storage Setup Required</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Your Supabase Storage bucket exists, but it's missing access policies (RLS). 
+                Run this SQL script in your Supabase Dashboard &gt; SQL Editor to fix it.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="bg-slate-950 p-4 rounded-md border border-white/10 overflow-x-auto my-4 max-h-[300px]">
+              <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">
+{`-- 1. Create the bucket (Public)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('platform-assets', 'platform-assets', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Uploads" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Update" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Delete" ON storage.objects;
+DROP POLICY IF EXISTS "Public Uploads" ON storage.objects;
+DROP POLICY IF EXISTS "Public Update" ON storage.objects;
+DROP POLICY IF EXISTS "Public Delete" ON storage.objects;
+
+-- 3. Allow PUBLIC read access
+CREATE POLICY "Public Access"
+ON storage.objects FOR SELECT
+USING ( bucket_id = 'platform-assets' );
+
+-- 4. Allow PUBLIC uploads (Simplifies permissions for this dashboard)
+CREATE POLICY "Public Uploads"
+ON storage.objects FOR INSERT
+WITH CHECK ( bucket_id = 'platform-assets' );
+
+-- 5. Allow PUBLIC update/delete
+CREATE POLICY "Public Update"
+ON storage.objects FOR UPDATE
+USING ( bucket_id = 'platform-assets' );
+
+CREATE POLICY "Public Delete"
+ON storage.objects FOR DELETE
+USING ( bucket_id = 'platform-assets' );`}
+              </pre>
+            </div>
+
+            <DialogFooter className="sm:justify-between flex-col sm:flex-row gap-4">
+              <div className="text-xs text-slate-500 self-center">
+                Copy this and run it in the Supabase SQL Editor.
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(`-- 1. Create the bucket (Public)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('platform-assets', 'platform-assets', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Uploads" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Update" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Delete" ON storage.objects;
+DROP POLICY IF EXISTS "Public Uploads" ON storage.objects;
+DROP POLICY IF EXISTS "Public Update" ON storage.objects;
+DROP POLICY IF EXISTS "Public Delete" ON storage.objects;
+
+-- 3. Allow PUBLIC read access
+CREATE POLICY "Public Access"
+ON storage.objects FOR SELECT
+USING ( bucket_id = 'platform-assets' );
+
+-- 4. Allow PUBLIC uploads (Simplifies permissions for this dashboard)
+CREATE POLICY "Public Uploads"
+ON storage.objects FOR INSERT
+WITH CHECK ( bucket_id = 'platform-assets' );
+
+-- 5. Allow PUBLIC update/delete
+CREATE POLICY "Public Update"
+ON storage.objects FOR UPDATE
+USING ( bucket_id = 'platform-assets' );
+
+CREATE POLICY "Public Delete"
+ON storage.objects FOR DELETE
+USING ( bucket_id = 'platform-assets' );`);
+                    toast.success("SQL copied to clipboard");
+                  }}
+                  className="border-white/10 text-slate-300 hover:text-white"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy SQL
+                </Button>
+                <DialogClose asChild>
+                  <Button variant="default" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    Close
+                  </Button>
+                </DialogClose>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

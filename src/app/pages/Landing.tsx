@@ -96,10 +96,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
 
 export function Landing() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const { assets } = useBranding();
   
   // Real-time Statistics
   const [businessCount, setBusinessCount] = useState(2431);
@@ -280,12 +282,18 @@ export function Landing() {
               className="flex items-center gap-3 cursor-pointer select-none" 
               onClick={handleLogoClick}
             >
-              <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
-                <Store className="w-5 h-5" strokeWidth={2.5} />
-              </div>
-              <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
-                Tillsup
-              </span>
+              {(isDark ? assets.logoDark : assets.logoMain) ? (
+                 <img src={isDark ? (assets.logoDark || assets.logoMain) : assets.logoMain} alt="Tillsup" className="h-10 w-auto object-contain" />
+              ) : (
+                <>
+                  <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
+                    <Store className="w-5 h-5" strokeWidth={2.5} />
+                  </div>
+                  <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                    Tillsup
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Actions */}
@@ -312,33 +320,29 @@ export function Landing() {
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[90vh] flex items-center">
         {/* Hero Icons Background - Left */}
-        <div className="absolute top-0 left-0 w-[55%] h-full overflow-hidden pointer-events-none select-none z-0 hidden lg:block">
+        <div className="absolute top-0 left-0 w-[55%] h-full overflow-hidden pointer-events-none select-none z-0 hidden lg:block" style={{ maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)' }}>
           <div className="absolute top-[-10%] -left-[15%] w-[130%] h-[130%] opacity-20 -rotate-12">
-            <div className="grid grid-cols-8 gap-8 p-8">
+            <div className="grid grid-cols-8 gap-12 p-8">
               {heroIcons.map((Icon, i) => (
-                <div key={i} className="flex items-center justify-center transform hover:scale-110 transition-transform duration-500">
-                  <Icon className={`w-5 h-5 ${isDark ? "text-white" : "text-slate-900"}`} strokeWidth={1.5} />
+                <div key={`left-${i}`} className="flex items-center justify-center transform hover:scale-110 transition-transform duration-500">
+                  <Icon className={`w-6 h-6 ${isDark ? "text-white" : "text-slate-900"}`} strokeWidth={1.5} />
                 </div>
               ))}
             </div>
           </div>
-          {/* Gradient Overlay to fade them out - Removed left gradient as requested */}
-          <div className={`absolute inset-0 bg-gradient-to-b ${isDark ? "from-transparent via-transparent to-transparent" : "from-transparent via-transparent to-transparent"}`} />
         </div>
 
         {/* Hero Icons Background - Right */}
-        <div className="absolute top-0 right-0 w-[55%] h-full overflow-hidden pointer-events-none select-none z-0 hidden lg:block">
+        <div className="absolute top-0 right-0 w-[55%] h-full overflow-hidden pointer-events-none select-none z-0 hidden lg:block" style={{ maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)' }}>
           <div className="absolute top-[-10%] -right-[15%] w-[130%] h-[130%] opacity-20 rotate-12">
-            <div className="grid grid-cols-8 gap-8 p-8">
+            <div className="grid grid-cols-8 gap-12 p-8">
               {heroIcons.map((Icon, i) => (
-                <div key={i} className="flex items-center justify-center transform hover:scale-110 transition-transform duration-500">
-                  <Icon className={`w-5 h-5 ${isDark ? "text-white" : "text-slate-900"}`} strokeWidth={1.5} />
+                <div key={`right-${i}`} className="flex items-center justify-center transform hover:scale-110 transition-transform duration-500">
+                  <Icon className={`w-6 h-6 ${isDark ? "text-white" : "text-slate-900"}`} strokeWidth={1.5} />
                 </div>
               ))}
             </div>
           </div>
-          {/* Gradient Overlay to fade them out - Removed left gradient as requested */}
-          <div className={`absolute inset-0 bg-gradient-to-b ${isDark ? "from-transparent via-transparent to-transparent" : "from-transparent via-transparent to-transparent"}`} />
         </div>
 
 
@@ -635,12 +639,18 @@ export function Landing() {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
-                  <Store className="w-5 h-5" strokeWidth={2.5} />
-                </div>
-                <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
-                  Tillsup
-                </span>
+                {(isDark ? assets.logoDark : assets.logoMain) ? (
+                   <img src={isDark ? (assets.logoDark || assets.logoMain) : assets.logoMain} alt="Tillsup" className="h-10 w-auto object-contain" />
+                ) : (
+                  <>
+                    <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
+                      <Store className="w-5 h-5" strokeWidth={2.5} />
+                    </div>
+                    <span className={`text-xl font-bold font-['Outfit'] tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                      Tillsup
+                    </span>
+                  </>
+                )}
               </div>
               <p className={`text-sm ${subTextClass} max-w-xs ${isDark ? "text-white" : "text-slate-600"}`}>
                 Enterprise-grade point of sale and business management solution for modern retailers.

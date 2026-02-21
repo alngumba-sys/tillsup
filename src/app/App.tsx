@@ -18,11 +18,14 @@ import { SupplierInvoiceProvider } from "./contexts/SupplierInvoiceContext";
 import { SupplierManagementProvider } from "./contexts/SupplierManagementContext";
 import { SupplierRequestProvider } from "./contexts/SupplierRequestContext";
 
+import { BrandingProvider } from "./contexts/BrandingContext";
+
 // Main App Component - Entry point for the POS System
 export default function App() {
   return (
-    <AuthProvider>
-      <BranchProvider>
+    <BrandingProvider>
+      <AuthProvider>
+        <BranchProvider>
         <RoleProvider>
           <CategoryProvider>
             <SupplierProvider>
@@ -56,5 +59,6 @@ export default function App() {
         </RoleProvider>
       </BranchProvider>
     </AuthProvider>
+    </BrandingProvider>
   );
 }
