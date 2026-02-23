@@ -40,7 +40,10 @@ export function BranchManagementTab() {
   
   const [formData, setFormData] = useState({
     name: "",
-    location: ""
+    location: "",
+    latitude: "",
+    longitude: "",
+    geofenceRadius: "100"
   });
 
   // ═══════════════════════════════════════════════════════════════════
@@ -73,7 +76,10 @@ export function BranchManagementTab() {
     
     const result = await updateBranch(editingBranch, {
       name: formData.name,
-      location: formData.location
+      location: formData.location,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+      geofenceRadius: formData.geofenceRadius
     });
     
     if (result.success) {
@@ -129,7 +135,7 @@ export function BranchManagementTab() {
   };
 
   const resetForm = () => {
-    setFormData({ name: "", location: "" });
+    setFormData({ name: "", location: "", latitude: "", longitude: "", geofenceRadius: "100" });
   };
 
   const openAddDialog = () => {
@@ -143,7 +149,10 @@ export function BranchManagementTab() {
     if (branch) {
       setFormData({
         name: branch.name,
-        location: branch.location
+        location: branch.location,
+        latitude: branch.latitude?.toString() || "",
+        longitude: branch.longitude?.toString() || "",
+        geofenceRadius: branch.geofenceRadius?.toString() || "100"
       });
       setEditingBranch(branchId);
       setIsAddDialogOpen(true);
@@ -208,30 +217,29 @@ export function BranchManagementTab() {
   const downloadImportTemplate = () => {
     const templateData = [
       {
-        "Branch Name": "",
-        "Location": "",
+        "Branch Name": "Main Branch",
+        "Location": "123 Main Street, City",
+        "Status": "Active"
+      },
+      {
+        "Branch Name": "Downtown Branch",
+        "Location": "456 Downtown Ave, City",
         "Status": "Active"
       }
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
 
-    // Add instructions
-    const instructions = [
-      "INSTRUCTIONS:",
-      "1. Fill in all rows with branch data",
-      "2. Required field: Branch Name",
-      "3. Optional fields: Location, Status",
-      "4. Status can be 'Active' or 'Inactive' (defaults to Active if not specified)",
-      "5. If a branch with the same name exists, it will be updated",
-      "6. Delete this row and the example row before importing",
-      ""
+    // Auto-size columns
+    const colWidths = [
+      { wch: 25 }, // Branch Name
+      { wch: 30 }, // Location
+      { wch: 15 }  // Status
     ];
-
-    XLSX.utils.sheet_add_aoa(worksheet, instructions.map(i => [i]), { origin: "A1" });
+    worksheet["!cols"] = colWidths;
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Branches Template");
 
     const excelBuffer = XLSX.write(workbook, {
       bookType: "xlsx",
@@ -458,13 +466,13 @@ export function BranchManagementTab() {
                 <Alert>
                   <FileSpreadsheet className="h-4 w-4" />
                   <AlertTitle>Need a template?</AlertTitle>
-                  <AlertDescription>
-                    Download our Excel template with instructions
+                  <AlertDescription className="space-y-2">
+                    <p>Download our Excel template to get started</p>
+                    <Button variant="outline" size="sm" className="gap-2" onClick={downloadImportTemplate}>
+                      <Download className="w-3.5 h-3.5" />
+                      Download Template
+                    </Button>
                   </AlertDescription>
-                  <Button variant="outline" size="sm" className="mt-2 gap-2" onClick={downloadImportTemplate}>
-                    <Download className="w-3.5 h-3.5" />
-                    Download Template
-                  </Button>
                 </Alert>
 
                 {/* File Upload */}
@@ -637,6 +645,7 @@ export function BranchManagementTab() {
                 <TableRow>
                   <TableHead>Branch Name</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead>Coordinates</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -656,6 +665,17 @@ export function BranchManagementTab() {
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         {branch.location}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {branch.latitude && branch.longitude ? (
+                        <div className="text-xs space-y-0.5">
+                          <div className="text-muted-foreground">Lat: {branch.latitude.toFixed(6)}</div>
+                          <div className="text-muted-foreground">Lng: {branch.longitude.toFixed(6)}</div>
+                          <div className="text-muted-foreground">Radius: {branch.geofenceRadius || 100}m</div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Not set</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -774,6 +794,51 @@ export function BranchManagementTab() {
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
               />
+            </div>
+
+            <div className="space-y-3 border-t pt-3">
+              <Label className="text-base font-semibold">Geolocation (For Attendance Tracking)</Label>
+              <p className="text-xs text-muted-foreground">Set coordinates to enable location-based staff attendance tracking</p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="latitude">Latitude</Label>
+                  <Input
+                    id="latitude"
+                    type="number"
+                    step="any"
+                    placeholder="-1.286389"
+                    value={formData.latitude}
+                    onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="longitude">Longitude</Label>
+                  <Input
+                    id="longitude"
+                    type="number"
+                    step="any"
+                    placeholder="36.817223"
+                    value={formData.longitude}
+                    onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="geofence-radius">Geofence Radius (meters)</Label>
+                <Input
+                  id="geofence-radius"
+                  type="number"
+                  min="10"
+                  step="10"
+                  placeholder="100"
+                  value={formData.geofenceRadius}
+                  onChange={(e) => setFormData({ ...formData, geofenceRadius: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">Staff must be within this distance to clock in/out</p>
+              </div>
             </div>
           </div>
 

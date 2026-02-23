@@ -51,7 +51,7 @@ interface SalesContextType {
   getTotalCustomersToday: (businessId?: string, staffId?: string, branchId?: string) => number;
   getSalesByProduct: (businessId?: string, staffId?: string) => Map<string, { name: string; quantity: number; revenue: number }>;
   getSalesByDate: (startDate: Date, endDate: Date, businessId?: string, staffId?: string) => Sale[];
-  getDailySales: (days: number, businessId?: string, staffId?: string) => Array<{ date: string; sales: number; revenue: number; customers: number }>;
+  getDailySales: (days: number, businessId?: string, staffId?: string, branchId?: string) => Array<{ date: string; dateObj: Date; sales: number; revenue: number; customers: number }>;
   getBestSellingProducts: (limit?: number, businessId?: string, staffId?: string) => Array<{ productId: string; name: string; quantity: number; revenue: number }>;
   
   // Analytics
@@ -188,7 +188,7 @@ export function SalesProvider({ children }: { children: ReactNode }) {
     }
   }, [business?.id]);
 
-  // ───────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────
   // RECORD NEW SALE
   // ───────────────────────────────────────────────────────────────
   const recordSale = async (saleData: Omit<Sale, "id" | "timestamp">): Promise<{ success: boolean; error?: string; saleId?: string }> => {
@@ -333,10 +333,11 @@ export function SalesProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const getDailySales = (days: number, businessId?: string, staffId?: string) => {
+  const getDailySales = (days: number, businessId?: string, staffId?: string, branchId?: string) => {
     const result = [];
     const today = new Date();
-    const filteredSales = filterSales(businessId, staffId);
+    const filteredSales = filterSales(businessId, staffId, branchId);
+    
     for (let i = days - 1; i >= 0; i--) {
       const targetDate = new Date(today);
       targetDate.setDate(today.getDate() - i);
@@ -346,13 +347,16 @@ export function SalesProvider({ children }: { children: ReactNode }) {
         saleDate.setHours(0, 0, 0, 0);
         return saleDate.getTime() === targetDate.getTime();
       });
+      
       result.push({
         date: targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        dateObj: new Date(targetDate), // Keep the actual Date object for proper weekday extraction
         sales: daySales.length,
         revenue: daySales.reduce((sum, sale) => sum + sale.total, 0),
         customers: daySales.reduce((sum, sale) => sum + sale.customerCount, 0),
       });
     }
+    
     return result;
   };
 
@@ -367,7 +371,7 @@ export function SalesProvider({ children }: { children: ReactNode }) {
   const getSalesByBranch = (businessId: string) => {
     const branchMap = new Map<string, { branchId: string; salesCount: number; revenue: number; customers: number; productsSold: number }>();
     filterSales(businessId).forEach((sale) => {
-      // ═══════════════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════════════
       // FIX: Guard against undefined/null branchId
       // ═══════════════════════════════════════════════════════════════════
       // Skip sales that somehow have no branchId (legacy data or error)

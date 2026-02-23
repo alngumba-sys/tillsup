@@ -8,7 +8,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Avatar, AvatarFallback } from "../ui/avatar";
-import { Search, UserPlus, Edit, Trash2, Copy, CheckCircle2, Building2, KeyRound, AlertCircle, Shield, DollarSign, Mail } from "lucide-react";
+import { Search, UserPlus, Edit, Trash2, Copy, CheckCircle2, Building2, KeyRound, AlertCircle, Shield, DollarSign, Mail, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { useAuth, UserRole, User, SalaryType, PayFrequency, StaffSalary } from "../../contexts/AuthContext";
 import { useBranch } from "../../contexts/BranchContext";
 import { useRole } from "../../contexts/RoleContext";
@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { SchemaError } from "../../components/inventory/SchemaError";
 import { Separator } from "../ui/separator";
 import { useNavigate } from "react-router";
+import * as XLSX from "xlsx";
 
 export function StaffManagementTab() {
   const { user, business, getStaffMembers, createStaff, updateStaff, deleteStaff, resetStaffPassword, resendStaffInvite } = useAuth();
@@ -76,6 +77,19 @@ export function StaffManagementTab() {
   // ═══════════════════════════════════════════════════════════════════
   const [resetPasswordConfirmation, setResetPasswordConfirmation] = useState<{ isOpen: boolean; staffId: string; staffName: string } | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<{ isOpen: boolean; staffId: string; staffName: string; temporaryPassword: string } | null>(null);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // EXCEL IMPORT STATE
+  // ═══════════════════════════════════════════════════════════════════
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
+  const [importValidation, setImportValidation] = useState<{
+    errors: string[];
+    warnings: string[];
+    success: string[];
+    totalRows: number;
+  } | null>(null);
 
   const [createMode, setCreateMode] = useState<'invite' | 'password'>('invite');
   const [noEmail, setNoEmail] = useState(false);
@@ -462,6 +476,271 @@ export function StaffManagementTab() {
     setIsAddDialogOpen(true);
   };
 
+  // ═══════════════════════════════════════════════════════════════════
+  // EXCEL IMPORT FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════
+  const downloadStaffImportTemplate = () => {
+    const templateData = [
+      {
+        "First Name": "John",
+        "Last Name": "Doe",
+        "Email": "john.doe@example.com",
+        "Role": "Cashier",
+        "Branch": "Main Branch",
+        "Salary Type": "monthly",
+        "Base Salary": "50000"
+      },
+      {
+        "First Name": "Jane",
+        "Last Name": "Smith",
+        "Email": "jane.smith@example.com",
+        "Role": "Manager",
+        "Branch": "Downtown Branch",
+        "Salary Type": "hourly",
+        "Base Salary": "500"
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+
+    // Auto-size columns
+    const colWidths = [
+      { wch: 15 }, // First Name
+      { wch: 15 }, // Last Name
+      { wch: 30 }, // Email
+      { wch: 15 }, // Role
+      { wch: 25 }, // Branch
+      { wch: 15 }, // Salary Type
+      { wch: 15 }  // Base Salary
+    ];
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Staff Template");
+
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array"
+    });
+
+    const blob = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "staff_import_template.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast.success("Template downloaded successfully");
+  };
+
+  const handleStaffImportFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setImportFile(file);
+      setImportValidation(null);
+    }
+  };
+
+  const validateAndImportStaff = async () => {
+    if (!importFile) {
+      toast.error("Please select a file to import");
+      return;
+    }
+
+    setIsProcessingImport(true);
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const success: string[] = [];
+
+    try {
+      const data = await importFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+      // Find header row
+      let headerRowIndex = -1;
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (row && row.length > 0 && row.includes("First Name")) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        errors.push("Could not find header row. Please use the template format.");
+        setImportValidation({ errors, warnings, success, totalRows: 0 });
+        setIsProcessingImport(false);
+        return;
+      }
+
+      const headers = jsonData[headerRowIndex];
+      const dataRows = jsonData.slice(headerRowIndex + 1).filter(row =>
+        row && row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== "")
+      );
+
+      if (dataRows.length === 0) {
+        errors.push("No data rows found in file");
+        setImportValidation({ errors, warnings, success, totalRows: 0 });
+        setIsProcessingImport(false);
+        return;
+      }
+
+      // Create header map
+      const headerMap: Record<string, number> = {};
+      headers.forEach((header: string, index: number) => {
+        if (header) headerMap[header.trim()] = index;
+      });
+
+      // Validate required headers
+      const requiredHeaders = ["First Name", "Last Name", "Email"];
+      for (const reqHeader of requiredHeaders) {
+        if (!(reqHeader in headerMap)) {
+          errors.push(`Missing required column: ${reqHeader}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        setImportValidation({ errors, warnings, success, totalRows: 0 });
+        setIsProcessingImport(false);
+        return;
+      }
+
+      // Process each row
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const rowNum = headerRowIndex + i + 2;
+
+        try {
+          const firstName = row[headerMap["First Name"]]?.toString().trim() || "";
+          const lastName = row[headerMap["Last Name"]]?.toString().trim() || "";
+          const email = row[headerMap["Email"]]?.toString().trim().toLowerCase() || "";
+          const role = row[headerMap["Role"]]?.toString().trim() || "Cashier";
+          const branchName = row[headerMap["Branch"]]?.toString().trim() || "";
+          const salaryType = row[headerMap["Salary Type"]]?.toString().trim().toLowerCase() || "";
+          const baseSalary = row[headerMap["Base Salary"]]?.toString().trim() || "";
+
+          // Validation
+          if (!firstName || !lastName) {
+            errors.push(`Row ${rowNum}: First name and last name are required`);
+            continue;
+          }
+
+          if (!email) {
+            errors.push(`Row ${rowNum}: Email is required`);
+            continue;
+          }
+
+          // Validate email format
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            errors.push(`Row ${rowNum}: Invalid email format`);
+            continue;
+          }
+
+          // Check for existing staff with same email
+          const existingStaff = staffMembers.find(s => s.email.toLowerCase() === email);
+          if (existingStaff) {
+            warnings.push(`Row ${rowNum}: Staff with email "${email}" already exists, skipped`);
+            continue;
+          }
+
+          // Find branch ID
+          let branchId = "";
+          if (branchName) {
+            const branch = branches.find(b => b.name.toLowerCase() === branchName.toLowerCase() && b.status === "active");
+            if (branch) {
+              branchId = branch.id;
+            } else {
+              warnings.push(`Row ${rowNum}: Branch "${branchName}" not found, using default`);
+            }
+          }
+
+          // If no branch found, use user's branch or first available branch
+          if (!branchId) {
+            if (user?.branchId) {
+              branchId = user.branchId;
+            } else if (branches.length > 0) {
+              const activeBranches = branches.filter(b => b.status === "active");
+              if (activeBranches.length > 0) {
+                branchId = activeBranches[0].id;
+              }
+            }
+          }
+
+          // Validate role
+          const validRoles: UserRole[] = ["Cashier", "Manager", "Business Owner"];
+          const staffRole = validRoles.includes(role as UserRole) ? (role as UserRole) : "Cashier";
+          if (role && !validRoles.includes(role as UserRole)) {
+            warnings.push(`Row ${rowNum}: Invalid role "${role}", defaulting to Cashier`);
+          }
+
+          // Create staff
+          const staffData: any = {
+            email,
+            firstName,
+            lastName,
+            role: staffRole,
+            branchId: branchId || business?.id
+          };
+
+          // Add salary if provided
+          if (salaryType && baseSalary) {
+            const validSalaryTypes: SalaryType[] = ["monthly", "hourly", "daily", "weekly"];
+            if (validSalaryTypes.includes(salaryType as SalaryType)) {
+              staffData.salary = {
+                salaryType: salaryType as SalaryType,
+                baseSalary: parseFloat(baseSalary),
+                payFrequency: (salaryType === "monthly" ? "monthly" : "weekly") as PayFrequency,
+                effectiveFrom: new Date().toISOString().split('T')[0]
+              };
+            }
+          }
+
+          const result = await createStaff(staffData);
+
+          if (result.success) {
+            success.push(`Row ${rowNum}: Created staff "${firstName} ${lastName}"`);
+          } else {
+            errors.push(`Row ${rowNum}: ${result.error || "Failed to create staff"}`);
+          }
+        } catch (error) {
+          console.error(`Error processing row ${rowNum}:`, error);
+          errors.push(`Row ${rowNum}: Failed to process row`);
+        }
+      }
+
+      // Refresh staff list
+      const members = await getStaffMembers();
+      setStaffMembers(members);
+
+      setImportValidation({ errors, warnings, success, totalRows: dataRows.length });
+
+      if (errors.length === 0 && (success.length > 0 || warnings.length > 0)) {
+        toast.success(`Successfully processed ${success.length} staff members`);
+        setTimeout(() => {
+          setIsImportDialogOpen(false);
+          setImportFile(null);
+          setImportValidation(null);
+        }, 3000);
+      } else if (errors.length > 0) {
+        toast.error(`Import completed with ${errors.length} errors`);
+      }
+    } catch (error) {
+      console.error("Import error:", error);
+      errors.push("Failed to read Excel file. Please ensure it's a valid .xlsx file");
+      setImportValidation({ errors, warnings, success, totalRows: 0 });
+    }
+
+    setIsProcessingImport(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with Add Button */}
@@ -469,16 +748,178 @@ export function StaffManagementTab() {
         <div>
           <p className="text-muted-foreground">Manage your team members and their roles ({staffMembers.length}/{limits.maxStaff === 999 ? "Unlimited" : limits.maxStaff})</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={(open) => { 
-          if (!open) closeAddDialog();
-          else handleOpenAddDialog();
-        }}>
-          <DialogTrigger asChild>
-            <Button onClick={handleOpenAddDialog}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Add Staff Member
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          {/* Import Excel Button */}
+          <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
+            setIsImportDialogOpen(open);
+            if (!open) {
+              setImportFile(null);
+              setImportValidation(null);
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Upload className="w-4 h-4" />
+                Import Excel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Import Staff from Excel</DialogTitle>
+                <DialogDescription>
+                  Upload an Excel file to bulk import staff members
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Need a template section */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <div className="flex items-start gap-3">
+                  <FileSpreadsheet className="w-5 h-5 text-slate-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 mb-1">Need a template?</h3>
+                    <p className="text-sm text-slate-600 mb-3">Download our Excel template to get started</p>
+                    <Button variant="outline" size="sm" onClick={downloadStaffImportTemplate} className="gap-2">
+                      <Download className="w-4 h-4" />
+                      Download Template
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Excel File */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Upload Excel File (.xlsx)</Label>
+                <Input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleStaffImportFileUpload}
+                  className="cursor-pointer"
+                />
+                {importFile && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {importFile.name}
+                  </p>
+                )}
+              </div>
+
+              {/* Import Guidelines */}
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-amber-900 mb-2">Import Guidelines:</h3>
+                    <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                      <li>Required columns: First Name, Last Name, Email</li>
+                      <li>Optional columns: Role, Branch, Salary Type, Base Salary</li>
+                      <li>Valid roles: Cashier, Manager, Business Owner</li>
+                      <li>Existing staff (by email) will be skipped</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Validation Results */}
+              {importValidation && (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {importValidation.success.length > 0 && (
+                    <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-green-900 text-sm mb-1">
+                            Success ({importValidation.success.length})
+                          </h4>
+                          <div className="text-xs text-green-800 space-y-0.5">
+                            {importValidation.success.map((msg, i) => (
+                              <div key={i}>{msg}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importValidation.warnings.length > 0 && (
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-amber-900 text-sm mb-1">
+                            Warnings ({importValidation.warnings.length})
+                          </h4>
+                          <div className="text-xs text-amber-800 space-y-0.5">
+                            {importValidation.warnings.map((msg, i) => (
+                              <div key={i}>{msg}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importValidation.errors.length > 0 && (
+                    <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                      <div className="flex items-start gap-2">
+                        <XCircle className="w-4 h-4 text-red-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-red-900 text-sm mb-1">
+                            Errors ({importValidation.errors.length})
+                          </h4>
+                          <div className="text-xs text-red-800 space-y-0.5">
+                            {importValidation.errors.map((msg, i) => (
+                              <div key={i}>{msg}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsImportDialogOpen(false);
+                    setImportFile(null);
+                    setImportValidation(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={validateAndImportStaff}
+                  disabled={!importFile || isProcessingImport}
+                  className="gap-2"
+                >
+                  {isProcessingImport ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Import Staff
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Staff Button */}
+          <Dialog open={isAddDialogOpen} onOpenChange={(open) => { 
+            if (!open) closeAddDialog();
+            else handleOpenAddDialog();
+          }}>
+            <DialogTrigger asChild>
+              <Button onClick={handleOpenAddDialog}>
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add Staff Member
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>
@@ -867,6 +1308,7 @@ export function StaffManagementTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards */}

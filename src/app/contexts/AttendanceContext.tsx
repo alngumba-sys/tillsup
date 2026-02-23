@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { useBranch } from "./BranchContext";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 
@@ -97,6 +98,52 @@ const AttendanceContext = createContext<AttendanceContextType | undefined>(undef
 const STANDARD_WORK_DAY_HOURS = 8;
 const OVERTIME_THRESHOLD = STANDARD_WORK_DAY_HOURS;
 
+// Geolocation settings
+const DEFAULT_GEOFENCE_RADIUS = 100; // meters
+const GEOLOCATION_TIMEOUT = 10000; // 10 seconds
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ * Returns distance in meters
+ */
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
+
+/**
+ * Get user's current geolocation
+ */
+async function getCurrentPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported by your browser"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: GEOLOCATION_TIMEOUT,
+      maximumAge: 0
+    });
+  });
+}
+
 export function AttendanceProvider({ children }: { children: ReactNode }) {
   // Safe context access
   let authContext;
@@ -109,7 +156,17 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const business = authContext?.business;
   const user = authContext?.user;
 
-  // ═══════════════════════════════════════════════════════════════════
+  // Safe context access
+  let branchContext;
+  try {
+    branchContext = useBranch();
+  } catch (e) {
+    console.warn("AttendanceProvider: BranchContext not available", e);
+  }
+  
+  const getBranchById = branchContext?.getBranchById;
+
+  // ══════════��════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════════════
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -243,7 +300,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 
   // ═══════════════════════════════════════════════════════════════════
   // HOURS CALCULATION
-  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════���═══════════════════════════════════════
   const calculateHoursWorked = (checkIn: string, checkOut: string): { regular: number; overtime: number } => {
     if (!checkIn || !checkOut) return { regular: 0, overtime: 0 };
 
@@ -291,6 +348,66 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Already clocked in" };
     }
 
+    // Get staff's assigned branch
+    const staffBranchId = user.branchId;
+    if (!staffBranchId) {
+      return { success: false, error: "No branch assigned to your account" };
+    }
+
+    // Get branch details for geolocation validation
+    const staffBranch = getBranchById ? getBranchById(staffBranchId) : null;
+    
+    // If branch has geolocation coordinates, validate staff location
+    if (staffBranch?.latitude && staffBranch?.longitude) {
+      try {
+        const position = await getCurrentPosition();
+        const staffLat = position.coords.latitude;
+        const staffLon = position.coords.longitude;
+        
+        const distance = calculateDistance(
+          staffLat,
+          staffLon,
+          staffBranch.latitude,
+          staffBranch.longitude
+        );
+
+        const allowedRadius = staffBranch.geofenceRadius || DEFAULT_GEOFENCE_RADIUS;
+        
+        if (distance > allowedRadius) {
+          const distanceInMeters = Math.round(distance);
+          return {
+            success: false,
+            error: `You must be at ${staffBranch.name} to clock in. You are ${distanceInMeters}m away (allowed: ${allowedRadius}m)`
+          };
+        }
+      } catch (geoError: any) {
+        console.error("Geolocation error:", geoError);
+        
+        // Handle specific geolocation errors
+        if (geoError.code === 1) {
+          return {
+            success: false,
+            error: "Location permission denied. Please enable location services to clock in."
+          };
+        } else if (geoError.code === 2) {
+          return {
+            success: false,
+            error: "Unable to get your location. Please check your device settings."
+          };
+        } else if (geoError.code === 3) {
+          return {
+            success: false,
+            error: "Location request timed out. Please try again."
+          };
+        } else {
+          return {
+            success: false,
+            error: "Cannot verify your location. Please enable location services."
+          };
+        }
+      }
+    }
+
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const currentDate = now.toISOString().split('T')[0];
@@ -319,7 +436,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       const sessionData = {
         staff_id: user.id,
         business_id: business.id,
-        branch_id: user.branchId || business.id, // Fallback to business ID if no branch
+        branch_id: staffBranchId,
         clock_in_time: now.toISOString(),
         status,
         date: currentDate
@@ -338,7 +455,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         id: data.id,
         staffId: user.id,
         businessId: business.id,
-        branchId: user.branchId || business.id,
+        branchId: staffBranchId,
         clockInTime: now,
         status,
         date: currentDate

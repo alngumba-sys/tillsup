@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 
 /**
- * ════════════════���══════════════════════════════════════════════════════════
+ * ══════════════════════════════════════════════════════════════════════════
  * INVENTORY CONTEXT - ENTERPRISE POS BRANCH-BASED INVENTORY MANAGEMENT
  * ═══════════════════════════════════════════════════════════════════════════
  * 
@@ -69,7 +69,7 @@ export const InventoryContext = createContext<InventoryContextType | undefined>(
 export function InventoryProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // SAFE CONTEXT ACCESS - Hooks must be called unconditionally
-  // ═══════════════════════════════════════��═══════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   let auth;
   try {
     auth = useAuth();
@@ -232,6 +232,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const updateProduct = async (id: string, updates: Partial<InventoryItem>) => {
     if (!business) return;
     
+    console.log('🔵 updateProduct called with:', { id, updates });
+    
     const dbUpdates: any = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
@@ -254,22 +256,32 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (updates.costPrice !== undefined) dbUpdates.cost_price = updates.costPrice;
     if (updates.wholesalePrice !== undefined) dbUpdates.wholesale_price = updates.wholesalePrice;
 
+    console.log('📤 Sending to Supabase:', { dbUpdates, id, business_id: business.id });
+
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('inventory')
         .update(dbUpdates)
         .eq('id', id)
-        .eq('business_id', business.id);
+        .eq('business_id', business.id)
+        .select();
+
+      console.log('📥 Supabase response received');
+      console.log('📥 Error:', error);
+      console.log('📥 Data:', data);
 
       if (error) {
-        console.error("Error updating product:", error);
-        toast.error("Failed to update product");
+        console.error("❌ Error updating product:", error);
+        console.error("Error details:", { code: error.code, message: error.message, details: error.details, hint: error.hint });
+        toast.error("Failed to update product: " + error.message);
         return;
       }
       
+      console.log('✅ Product updated successfully');
       await refreshInventory();
     } catch (err) {
-      console.error("Unexpected error updating product:", err);
+      console.error("❌ Unexpected error updating product:", err);
+      toast.error("Unexpected error: " + (err as Error).message);
     }
   };
 

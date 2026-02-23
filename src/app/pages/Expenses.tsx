@@ -73,6 +73,9 @@ export function Expenses() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const [filterBranchId, setFilterBranchId] = useState<string>(
     user?.role === "Business Owner" ? "ALL_BRANCHES" : user?.branchId || ""
@@ -316,13 +319,78 @@ export function Expenses() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {EXPENSE_CATEGORIES.map((category) => (
+                        {EXPENSE_CATEGORIES.concat(customCategories).map((category) => (
                           <SelectItem key={category} value={category}>
                             {category}
                           </SelectItem>
                         ))}
+                        <div className="border-t mt-1 pt-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="w-full justify-start text-xs"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setIsAddingCategory(true);
+                            }}
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Add Custom Category
+                          </Button>
+                        </div>
                       </SelectContent>
                     </Select>
+                    {isAddingCategory && (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Enter category name"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && newCategoryName.trim()) {
+                              e.preventDefault();
+                              if (!EXPENSE_CATEGORIES.concat(customCategories).includes(newCategoryName.trim())) {
+                                setCustomCategories([...customCategories, newCategoryName.trim()]);
+                                setFormData({ ...formData, category: newCategoryName.trim() });
+                                setNewCategoryName("");
+                                setIsAddingCategory(false);
+                                toast.success("Custom category added");
+                              } else {
+                                toast.error("Category already exists");
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (newCategoryName.trim()) {
+                              if (!EXPENSE_CATEGORIES.concat(customCategories).includes(newCategoryName.trim())) {
+                                setCustomCategories([...customCategories, newCategoryName.trim()]);
+                                setFormData({ ...formData, category: newCategoryName.trim() });
+                                setNewCategoryName("");
+                                setIsAddingCategory(false);
+                                toast.success("Custom category added");
+                              } else {
+                                toast.error("Category already exists");
+                              }
+                            }
+                          }}
+                        >
+                          Add
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsAddingCategory(false);
+                            setNewCategoryName("");
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid gap-2">

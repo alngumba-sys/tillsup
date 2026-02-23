@@ -15,6 +15,10 @@ export interface Branch {
   businessId: string;
   status: "active" | "inactive";
   createdAt: Date;
+  // Geolocation for attendance validation
+  latitude?: number;
+  longitude?: number;
+  geofenceRadius?: number; // In meters (default: 100m)
 }
 
 interface BranchContextType {
@@ -123,7 +127,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('branches')
-        .select('id, business_id, name, location, status, created_at')
+        .select('id, business_id, name, location, status, created_at, latitude, longitude, geofence_radius')
         .eq('business_id', business.id)
         .order('created_at', { ascending: true });
 
@@ -140,7 +144,10 @@ export function BranchProvider({ children }: { children: ReactNode }) {
           location: item.location || "Not specified",
           businessId: item.business_id,
           status: item.status || "active",
-          createdAt: new Date(item.created_at)
+          createdAt: new Date(item.created_at),
+          latitude: item.latitude,
+          longitude: item.longitude,
+          geofenceRadius: item.geofence_radius
         }));
         setAllBranches(mappedBranches);
         
@@ -258,6 +265,9 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       if (updates.name) dbUpdates.name = updates.name;
       if (updates.location) dbUpdates.location = updates.location;
       if (updates.status) dbUpdates.status = updates.status;
+      if (updates.latitude) dbUpdates.latitude = updates.latitude;
+      if (updates.longitude) dbUpdates.longitude = updates.longitude;
+      if (updates.geofenceRadius) dbUpdates.geofence_radius = updates.geofenceRadius;
 
       const { error } = await supabase
         .from('branches')

@@ -60,7 +60,7 @@ export function BranchManagement() {
     location: ""
   });
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════���═══════════════════════════
   // IMPORT/EXPORT STATE
   // ═══════════════════════════════════════════════════════════════════
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -179,7 +179,7 @@ export function BranchManagement() {
 
   // ═══════════════════════════════════════════════════════════════════
   // EXPORT TO EXCEL FUNCTION
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   const exportBranchesToExcel = () => {
     try {
       const dataToExport = branches.map(branch => ({
@@ -235,30 +235,29 @@ export function BranchManagement() {
   const downloadImportTemplate = () => {
     const templateData = [
       {
-        "Branch Name": "",
-        "Location": "",
+        "Branch Name": "Main Branch",
+        "Location": "123 Main Street, City",
+        "Status": "Active"
+      },
+      {
+        "Branch Name": "Downtown Branch",
+        "Location": "456 Downtown Ave, City",
         "Status": "Active"
       }
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
 
-    // Add instructions
-    const instructions = [
-      "INSTRUCTIONS:",
-      "1. Fill in all rows with branch data",
-      "2. Required field: Branch Name",
-      "3. Optional fields: Location, Status",
-      "4. Status can be 'Active' or 'Inactive' (defaults to Active if not specified)",
-      "5. If a branch with the same name exists, it will be updated",
-      "6. Delete this row and the example row before importing",
-      ""
+    // Auto-size columns
+    const colWidths = [
+      { wch: 25 }, // Branch Name
+      { wch: 30 }, // Location
+      { wch: 15 }  // Status
     ];
-
-    XLSX.utils.sheet_add_aoa(worksheet, instructions.map(i => [i]), { origin: "A1" });
+    worksheet["!cols"] = colWidths;
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Branches Template");
 
     const excelBuffer = XLSX.write(workbook, {
       bookType: "xlsx",
@@ -428,7 +427,7 @@ export function BranchManagement() {
     setIsProcessingImport(false);
   };
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════���═══════════════
   // RESET IMPORT DIALOG
   // ═══════════════════════════════════════════════════════════════════
   const resetImportDialog = () => {
@@ -522,13 +521,13 @@ export function BranchManagement() {
                 <Alert>
                   <FileSpreadsheet className="h-4 w-4" />
                   <AlertTitle>Need a template?</AlertTitle>
-                  <AlertDescription>
-                    Download our Excel template with instructions
+                  <AlertDescription className="space-y-2">
+                    <p>Download our Excel template to get started</p>
+                    <Button variant="outline" size="sm" className="gap-2" onClick={downloadImportTemplate}>
+                      <Download className="w-3.5 h-3.5" />
+                      Download Template
+                    </Button>
                   </AlertDescription>
-                  <Button variant="outline" size="sm" className="mt-2 gap-2" onClick={downloadImportTemplate}>
-                    <Download className="w-3.5 h-3.5" />
-                    Download Template
-                  </Button>
                 </Alert>
 
                 {/* File Upload */}

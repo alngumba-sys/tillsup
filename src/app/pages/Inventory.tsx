@@ -47,7 +47,8 @@ import {
   XCircle,
   ScanBarcode,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Info
 } from "lucide-react";
 import { useInventory, InventoryItem } from "../contexts/InventoryContext";
 import { useCategory } from "../contexts/CategoryContext";
@@ -80,6 +81,7 @@ interface ProductFormProps {
     costPrice?: string;
     retailPrice?: string;
     wholesalePrice?: string;
+    lowStockThreshold?: string; // Reorder level
   };
   onFormChange: (data: any) => void;
   suppliers: { id: string; name: string }[];
@@ -101,6 +103,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
 
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -130,23 +133,40 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `${fileName}`;
       
-      const { error: uploadError } = await supabase.storage
+      console.log('Uploading file to Inventoryimages bucket:', filePath);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('Inventoryimages')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
         
       if (uploadError) {
-        if (uploadError.message.includes("violates row-level security")) {
+        console.error('Upload error:', uploadError);
+        if (uploadError.message.includes("violates row-level security") || uploadError.message.includes("new row violates")) {
           toast.error("Upload Permission Error", {
-            description: "Please run 'supabase_storage_policy.sql' in your Supabase Dashboard."
+            description: "Storage bucket not configured. Please contact administrator."
+          });
+        } else if (uploadError.message.includes("Bucket not found")) {
+          toast.error("Storage Not Configured", {
+            description: "The Inventoryimages bucket doesn't exist. Please run the storage setup SQL."
+          });
+        } else {
+          toast.error("Upload failed", {
+            description: uploadError.message
           });
         }
         throw uploadError;
       }
       
+      console.log('Upload successful:', uploadData);
+      
       const { data: { publicUrl } } = supabase.storage
         .from('Inventoryimages')
         .getPublicUrl(filePath);
         
+      console.log('Public URL:', publicUrl);
       onFormChange({ ...formData, image: publicUrl });
       toast.success("Image uploaded successfully");
       
@@ -157,6 +177,8 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       });
     } finally {
       setIsUploading(false);
+      // Reset file input
+      e.target.value = '';
     }
   };
 
@@ -268,6 +290,15 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Uploading image...
               </div>
+            )}
+            {formData.image && !isUploading && (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <CheckCircle className="w-3 h-3" />
+                Image uploaded successfully
+              </div>
+            )}
+            {!formData.image && !isUploading && (
+              <p className="text-xs text-muted-foreground">No image uploaded yet</p>
             )}
           </div>
         </div>
@@ -386,6 +417,23 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
           />
         </div>
       </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="lowStockThreshold">
+            Reorder Level <span className="text-xs text-muted-foreground">(Optional)</span>
+          </Label>
+          <Input
+            id="lowStockThreshold"
+            type="number"
+            value={formData.lowStockThreshold || "10"}
+            onChange={(e) => onFormChange({ ...formData, lowStockThreshold: e.target.value })}
+            placeholder="10"
+          />
+          <p className="text-xs text-muted-foreground">Alert when stock falls below this level</p>
+        </div>
+        <div className="grid gap-2"></div>
+      </div>
       
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
@@ -498,6 +546,130 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
         )}
       </div>
       </div>
+      
+      {/* Debug Panel */}
+      <div className="mt-6 pt-4 border-t">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowDebugPanel(!showDebugPanel)}
+          className="text-xs"
+        >
+          {showDebugPanel ? "Hide" : "Show"} Debug Info
+        </Button>
+        
+        {showDebugPanel && (
+          <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-sm">Diagnostic Panel</h4>
+              <Badge variant={isUploading ? "destructive" : "default"} className="text-xs">
+                {isUploading ? "Uploading..." : "Ready"}
+              </Badge>
+            </div>
+            
+            <div className="space-y-2 text-xs font-mono">
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Mode:</span>
+                <span className="font-medium">{isEditMode ? "Edit" : "Add"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Product Name:</span>
+                <span className="font-medium">{formData.name || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Category:</span>
+                <span className="font-medium">{formData.category || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Price:</span>
+                <span className="font-medium">{formData.price || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Stock:</span>
+                <span className="font-medium">{formData.stock || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Branch ID:</span>
+                <span className="font-medium">{formData.branchId || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">SKU:</span>
+                <span className="font-medium">{formData.sku || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Supplier:</span>
+                <span className="font-medium">{formData.supplier || "(empty)"}</span>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
+                <span className="text-muted-foreground font-semibold">Image URL:</span>
+                <div className="space-y-1">
+                  {formData.image ? (
+                    <>
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Uploaded
+                      </Badge>
+                      <p className="break-all text-[10px] text-slate-600">{formData.image}</p>
+                      <img src={formData.image} alt="Preview" className="w-16 h-16 object-cover rounded border mt-2" />
+                    </>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      No Image
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <span className="text-muted-foreground font-semibold">Upload Status:</span>
+                <span className="font-medium">{isUploading ? "🔄 Uploading..." : "✅ Idle"}</span>
+              </div>
+            </div>
+            
+            <Alert className="bg-blue-50 border-blue-200">
+              <Info className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-xs text-blue-900">
+                <strong>Debug Tips:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>Check browser console (F12) for detailed logs</li>
+                  <li>Image URL should appear after upload completes</li>
+                  <li>All fields should populate when editing</li>
+                  <li>Click "Save Changes" and watch console for errors</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+            
+            <div className="pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => {
+                  console.log('=== FULL FORM DATA DEBUG ===');
+                  console.log('formData:', formData);
+                  console.log('isEditMode:', isEditMode);
+                  console.log('isUploading:', isUploading);
+                  console.log('===========================');
+                  toast.success("Check console for full debug output");
+                }}
+              >
+                Log Full State to Console
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -523,6 +695,19 @@ export function Inventory() {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; id: string; name: string } | null>(null);
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // EXCEL IMPORT STATE
+  // ═══════════════════════════════════════════════════════════════════
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
+  const [importValidation, setImportValidation] = useState<{
+    errors: string[];
+    warnings: string[];
+    success: string[];
+    totalRows: number;
+  } | null>(null);
   
   // Branch Filter
   const getInitialFilterBranchId = (): string => {
@@ -558,6 +743,7 @@ export function Inventory() {
     costPrice: string;
     retailPrice: string;
     wholesalePrice: string;
+    lowStockThreshold: string;
   }>({
     name: "",
     category: getDefaultCategoryId(),
@@ -569,7 +755,8 @@ export function Inventory() {
     // Pricing extension fields
     costPrice: "",
     retailPrice: "",
-    wholesalePrice: ""
+    wholesalePrice: "",
+    lowStockThreshold: "10"
   });
 
   useEffect(() => {
@@ -647,7 +834,8 @@ export function Inventory() {
         image: formData.image,
         costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
         retailPrice: parseFloat(formData.price),
-        wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined
+        wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined,
+        lowStockThreshold: parseInt(formData.lowStockThreshold)
       }, formData.branchId);
       
       setIsAddDialogOpen(false);
@@ -659,60 +847,83 @@ export function Inventory() {
   };
 
   const handleEditProduct = async () => {
-    if (editingItem) {
-      if (!formData.name.trim()) {
-        alert("Product name is required");
-        return;
-      }
-      if (!formData.price || parseFloat(formData.price) <= 0) {
-        alert("Valid price is required");
-        return;
-      }
-      if (!formData.stock || parseInt(formData.stock) < 0) {
-        alert("Valid stock quantity is required");
-        return;
-      }
-      if (!formData.branchId) {
-        alert("Branch selection is required");
-        return;
-      }
+    console.log('🟢 handleEditProduct called');
+    console.log('📝 editingItem:', editingItem);
+    console.log('📋 formData:', formData);
+    
+    if (!editingItem) {
+      console.log('❌ No editing item');
+      toast.error("No product selected for editing");
+      return;
+    }
+    
+    if (!formData.name.trim()) {
+      console.log('❌ Name validation failed');
+      toast.error("Product name is required");
+      return;
+    }
+    if (!formData.price || parseFloat(formData.price) <= 0) {
+      console.log('❌ Price validation failed:', formData.price);
+      toast.error("Valid price is required");
+      return;
+    }
+    if (!formData.stock || parseInt(formData.stock) < 0) {
+      console.log('❌ Stock validation failed:', formData.stock);
+      toast.error("Valid stock quantity is required");
+      return;
+    }
+    if (!formData.branchId) {
+      console.log('❌ BranchId validation failed:', formData.branchId);
+      toast.error("Branch selection is required");
+      return;
+    }
 
-      const selectedCategory = categoryList.find(cat => cat.id === formData.category);
-      if (!selectedCategory) {
-        toast.error("Category is required");
-        return;
-      }
-      if (selectedCategory.status === "disabled") {
-        toast.error("Invalid Category", {
-          description: "This category is deactivated and cannot be used. Please select an active category."
-        });
-        return;
-      }
+    const selectedCategory = categoryList.find(cat => cat.id === formData.category);
+    if (!selectedCategory) {
+      console.log('❌ Category not found:', formData.category);
+      toast.error("Category is required");
+      return;
+    }
+    if (selectedCategory.status === "disabled") {
+      console.log('❌ Category disabled:', selectedCategory);
+      toast.error("Invalid Category", {
+        description: "This category is deactivated and cannot be used. Please select an active category."
+      });
+      return;
+    }
 
-      try {
-        await updateProduct(
-        editingItem.id,
-        {
-          name: formData.name,
-          category: formData.category,
-          price: parseFloat(formData.price),
-          stock: parseInt(formData.stock),
-          sku: formData.sku,
-          supplier: formData.supplier,
-          branchId: formData.branchId,
-          image: formData.image,
-          costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
-          retailPrice: parseFloat(formData.price),
-          wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined
-        }
-      );
+    console.log('✅ All validations passed, preparing update...');
+    
+    try {
+      const updates = {
+        name: formData.name,
+        category: formData.category,
+        price: parseFloat(formData.price),
+        stock: parseInt(formData.stock),
+        sku: formData.sku,
+        supplier: formData.supplier,
+        branchId: formData.branchId,
+        image: formData.image,
+        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
+        retailPrice: parseFloat(formData.price),
+        wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined,
+        lowStockThreshold: formData.lowStockThreshold ? parseInt(formData.lowStockThreshold) : undefined
+      };
+      
+      console.log('📤 Updating product with:', updates);
+      
+      await updateProduct(editingItem.id, updates);
+      
+      console.log('✅ Product updated successfully');
       setEditingItem(null);
       resetForm();
       setIsEditDialogOpen(false);
-        toast.success("Product updated successfully!");
-      } catch (error) {
-        // Toast handled in context
-      }
+      toast.success("Product updated successfully!");
+    } catch (error: any) {
+      console.error('Error updating product:', error);
+      toast.error("Failed to update product", {
+        description: error.message || "An error occurred"
+      });
     }
   };
 
@@ -745,7 +956,8 @@ export function Inventory() {
       image: item.image,
       costPrice: item.costPrice?.toString() || "",
       retailPrice: item.retailPrice?.toString() || "",
-      wholesalePrice: item.wholesalePrice?.toString() || ""
+      wholesalePrice: item.wholesalePrice?.toString() || "",
+      lowStockThreshold: item.lowStockThreshold?.toString() || "10"
     });
     setIsEditDialogOpen(true);
   };
@@ -762,11 +974,251 @@ export function Inventory() {
       image: undefined,
       costPrice: "",
       retailPrice: "",
-      wholesalePrice: ""
+      wholesalePrice: "",
+      lowStockThreshold: "10"
     });
     setEditingItem(null);
     setIsAddDialogOpen(false);
     setIsEditDialogOpen(false);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // EXCEL IMPORT FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════
+  const downloadInventoryImportTemplate = () => {
+    const templateData = [
+      {
+        "Product Name": "Sample Product 1",
+        "Category": "Electronics",
+        "SKU": "PROD-001",
+        "Stock Quantity": "100",
+        "Cost Price": "50",
+        "Retail Price": "75",
+        "Wholesale Price": "65",
+        "Supplier": "Supplier Co",
+        "Branch": "Main Branch",
+        "Low Stock Threshold": "10"
+      },
+      {
+        "Product Name": "Sample Product 2",
+        "Category": "Groceries",
+        "SKU": "PROD-002",
+        "Stock Quantity": "50",
+        "Cost Price": "20",
+        "Retail Price": "30",
+        "Wholesale Price": "25",
+        "Supplier": "Fresh Foods Ltd",
+        "Branch": "Downtown Branch",
+        "Low Stock Threshold": "5"
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+
+    const colWidths = [
+      { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+      { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 20 },
+      { wch: 20 }, { wch: 18 }
+    ];
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory Template");
+
+    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "inventory_import_template.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast.success("Template downloaded successfully");
+  };
+
+  const handleInventoryImportFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setImportFile(file);
+      setImportValidation(null);
+    }
+  };
+
+  const validateAndImportInventory = async () => {
+    if (!importFile) {
+      toast.error("Please select a file to import");
+      return;
+    }
+
+    setIsProcessingImport(true);
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const success: string[] = [];
+
+    try {
+      const data = await importFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+      let headerRowIndex = -1;
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (row && row.length > 0 && row.includes("Product Name")) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        errors.push("Could not find header row. Please use the template format.");
+        setImportValidation({ errors, warnings, success, totalRows: 0 });
+        setIsProcessingImport(false);
+        return;
+      }
+
+      const headers = jsonData[headerRowIndex];
+      const dataRows = jsonData.slice(headerRowIndex + 1).filter(row =>
+        row && row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== "")
+      );
+
+      if (dataRows.length === 0) {
+        errors.push("No data rows found in file");
+        setImportValidation({ errors, warnings, success, totalRows: 0 });
+        setIsProcessingImport(false);
+        return;
+      }
+
+      const headerMap: Record<string, number> = {};
+      headers.forEach((header: string, index: number) => {
+        if (header) headerMap[header.trim()] = index;
+      });
+
+      if (!("Product Name" in headerMap)) {
+        errors.push("Missing required column: Product Name");
+        setImportValidation({ errors, warnings, success, totalRows: 0 });
+        setIsProcessingImport(false);
+        return;
+      }
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const rowNum = headerRowIndex + i + 2;
+
+        try {
+          const productName = row[headerMap["Product Name"]]?.toString().trim() || "";
+          const category = row[headerMap["Category"]]?.toString().trim() || "";
+          const sku = row[headerMap["SKU"]]?.toString().trim() || "";
+          const stockQuantity = row[headerMap["Stock Quantity"]]?.toString().trim() || "0";
+          const costPrice = row[headerMap["Cost Price"]]?.toString().trim() || "";
+          const retailPrice = row[headerMap["Retail Price"]]?.toString().trim() || "";
+          const wholesalePrice = row[headerMap["Wholesale Price"]]?.toString().trim() || "";
+          const supplierName = row[headerMap["Supplier"]]?.toString().trim() || "";
+          const branchName = row[headerMap["Branch"]]?.toString().trim() || "";
+          const lowStockThreshold = row[headerMap["Low Stock Threshold"]]?.toString().trim() || "10";
+
+          if (!productName) {
+            errors.push(`Row ${rowNum}: Product name is required`);
+            continue;
+          }
+
+          let categoryId = "";
+          if (category) {
+            const foundCategory = activeCategories.find(c => c.name.toLowerCase() === category.toLowerCase());
+            if (foundCategory) {
+              categoryId = foundCategory.id;
+            } else {
+              warnings.push(`Row ${rowNum}: Category "${category}" not found`);
+            }
+          }
+
+          let supplierId = "";
+          if (supplierName) {
+            const foundSupplier = suppliers.find(s => s.name.toLowerCase() === supplierName.toLowerCase());
+            if (foundSupplier) {
+              supplierId = foundSupplier.id;
+            } else {
+              warnings.push(`Row ${rowNum}: Supplier "${supplierName}" not found`);
+            }
+          }
+
+          let branchId = "";
+          if (branchName) {
+            const foundBranch = branches.find(b => b.name.toLowerCase() === branchName.toLowerCase() && b.status === "active");
+            if (foundBranch) {
+              branchId = foundBranch.id;
+            } else {
+              warnings.push(`Row ${rowNum}: Branch "${branchName}" not found, using default`);
+            }
+          }
+
+          if (!branchId) {
+            branchId = getDefaultBranchId();
+          }
+
+          if (!branchId) {
+            errors.push(`Row ${rowNum}: No valid branch available`);
+            continue;
+          }
+
+          if (sku) {
+            const existingProduct = inventory.find(
+              p => p.sku.toLowerCase() === sku.toLowerCase() && p.branchId === branchId
+            );
+            if (existingProduct) {
+              warnings.push(`Row ${rowNum}: Product with SKU "${sku}" already exists, skipped`);
+              continue;
+            }
+          }
+
+          const price = retailPrice || costPrice || "0";
+
+          const productData = {
+            name: productName,
+            category: categoryId || getDefaultCategoryId(),
+            price: parseFloat(price) || 0,
+            stock: parseInt(stockQuantity) || 0,
+            sku: sku || `AUTO-${Date.now()}-${i}`,
+            supplier: supplierId,
+            branchId,
+            costPrice: costPrice ? parseFloat(costPrice) : undefined,
+            retailPrice: retailPrice ? parseFloat(retailPrice) : undefined,
+            wholesalePrice: wholesalePrice ? parseFloat(wholesalePrice) : undefined,
+            lowStockThreshold: parseInt(lowStockThreshold) || 10
+          };
+
+          await addProduct(productData);
+          success.push(`Row ${rowNum}: Created product "${productName}"`);
+        } catch (error) {
+          console.error(`Error processing row ${rowNum}:`, error);
+          errors.push(`Row ${rowNum}: Failed to process row`);
+        }
+      }
+
+      setImportValidation({ errors, warnings, success, totalRows: dataRows.length });
+
+      if (errors.length === 0 && (success.length > 0 || warnings.length > 0)) {
+        toast.success(`Successfully processed ${success.length} products`);
+        setTimeout(() => {
+          setIsImportDialogOpen(false);
+          setImportFile(null);
+          setImportValidation(null);
+        }, 3000);
+      } else if (errors.length > 0) {
+        toast.error(`Import completed with ${errors.length} errors`);
+      }
+    } catch (error) {
+      console.error("Import error:", error);
+      errors.push("Failed to read Excel file. Please ensure it's a valid .xlsx file");
+      setImportValidation({ errors, warnings, success, totalRows: 0 });
+    }
+
+    setIsProcessingImport(false);
   };
 
   return (
@@ -779,9 +1231,170 @@ export function Inventory() {
             Manage your products, stock levels, and prices.
           </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-          if (open) {
-            resetForm();
+        <div className="flex gap-2">
+          {/* Import Excel Dialog */}
+          <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
+            setIsImportDialogOpen(open);
+            if (!open) {
+              setImportFile(null);
+              setImportValidation(null);
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Upload className="w-4 h-4" />
+                Import Excel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Import Inventory from Excel</DialogTitle>
+                <DialogDescription>
+                  Upload an Excel file to bulk import products
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Need a template section */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <div className="flex items-start gap-3">
+                  <FileSpreadsheet className="w-5 h-5 text-slate-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 mb-1">Need a template?</h3>
+                    <p className="text-sm text-slate-600 mb-3">Download our Excel template to get started</p>
+                    <Button variant="outline" size="sm" onClick={downloadInventoryImportTemplate} className="gap-2">
+                      <Download className="w-4 h-4" />
+                      Download Template
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Excel File */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Upload Excel File (.xlsx)</Label>
+                <Input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleInventoryImportFileUpload}
+                  className="cursor-pointer"
+                />
+                {importFile && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {importFile.name}
+                  </p>
+                )}
+              </div>
+
+              {/* Import Guidelines */}
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-amber-900 mb-2">Import Guidelines:</h3>
+                    <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                      <li>Required column: Product Name</li>
+                      <li>Optional columns: Category, SKU, Stock Quantity, Cost Price, Retail Price, Wholesale Price, Supplier, Branch, Low Stock Threshold</li>
+                      <li>Products with duplicate SKUs in the same branch will be skipped</li>
+                      <li>Category and Supplier names must match existing records</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Validation Results */}
+              {importValidation && (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {importValidation.success.length > 0 && (
+                    <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-green-900 text-sm mb-1">
+                            Success ({importValidation.success.length})
+                          </h4>
+                          <div className="text-xs text-green-800 space-y-0.5">
+                            {importValidation.success.map((msg, i) => (
+                              <div key={i}>{msg}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importValidation.warnings.length > 0 && (
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-amber-900 text-sm mb-1">
+                            Warnings ({importValidation.warnings.length})
+                          </h4>
+                          <div className="text-xs text-amber-800 space-y-0.5">
+                            {importValidation.warnings.map((msg, i) => (
+                              <div key={i}>{msg}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importValidation.errors.length > 0 && (
+                    <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                      <div className="flex items-start gap-2">
+                        <XCircle className="w-4 h-4 text-red-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-red-900 text-sm mb-1">
+                            Errors ({importValidation.errors.length})
+                          </h4>
+                          <div className="text-xs text-red-800 space-y-0.5">
+                            {importValidation.errors.map((msg, i) => (
+                              <div key={i}>{msg}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsImportDialogOpen(false);
+                    setImportFile(null);
+                    setImportValidation(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={validateAndImportInventory}
+                  disabled={!importFile || isProcessingImport}
+                  className="gap-2"
+                >
+                  {isProcessingImport ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Import Products
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Product Dialog */}
+          <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+            if (open) {
             setIsAddDialogOpen(true);
           } else {
             setIsAddDialogOpen(false);
@@ -815,6 +1428,7 @@ export function Inventory() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards (Simplified) */}
@@ -1011,8 +1625,32 @@ export function Inventory() {
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Product</DialogTitle>
-            <DialogDescription>Update product details.</DialogDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <DialogTitle>Edit Product</DialogTitle>
+                <DialogDescription>Update product details.</DialogDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  console.log('=== EDIT PRODUCT DEBUG INFO ===');
+                  console.log('Editing Item:', editingItem);
+                  console.log('Form Data:', formData);
+                  console.log('Image URL:', formData.image);
+                  console.log('Has Image:', !!formData.image);
+                  console.log('===============================');
+                  toast.success("Debug info logged to console (F12)", {
+                    description: "Check browser console for details"
+                  });
+                }}
+                className="shrink-0"
+              >
+                <Info className="w-4 h-4 mr-2" />
+                Debug
+              </Button>
+            </div>
           </DialogHeader>
           <ProductForm 
             formData={formData} 
@@ -1024,9 +1662,43 @@ export function Inventory() {
             allCategories={categoryList}
             isEditMode={true}
           />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleEditProduct}>Save Changes</Button>
+          <DialogFooter className="flex-col gap-3">
+            {/* Debug Status Bar */}
+            <div className="flex items-center justify-between gap-4 p-3 bg-slate-50 rounded-lg border text-xs">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Product:</span>
+                  {editingItem && (
+                    <span className="font-medium">{editingItem.name}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Image:</span>
+                  {formData.image ? (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Uploaded
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      No Image
+                    </Badge>
+                  )}
+                </div>
+                {formData.image && (
+                  <img src={formData.image} alt="Preview" className="w-8 h-8 object-cover rounded border" />
+                )}
+              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex justify-between gap-2">
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleEditProduct}>
+                Save Changes
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

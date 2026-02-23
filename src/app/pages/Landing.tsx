@@ -103,6 +103,16 @@ export function Landing() {
   const { isAuthenticated } = useAuth();
   const { assets } = useBranding();
   
+  console.log('🏠 Landing page loaded, isAuthenticated:', isAuthenticated);
+  
+  // Redirect authenticated users to the app
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('🔀 Redirecting to dashboard...');
+      navigate("/app/dashboard");
+    }
+  }, [isAuthenticated, navigate]);
+  
   // Real-time Statistics
   const [businessCount, setBusinessCount] = useState(2431);
   const [currentSignup, setCurrentSignup] = useState(0);

@@ -31,7 +31,10 @@ import { useSubscription } from "../hooks/useSubscription";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../../lib/supabase";
+import { useSales } from "../contexts/SalesContext";
+import { useInventory } from "../contexts/InventoryContext";
+import { useMemo } from "react";
+import { useCurrency } from "../hooks/useCurrency";
 
 interface Insight {
   id: number;
@@ -51,8 +54,11 @@ interface ChartData {
 
 export function AIInsights() {
   const { hasFeature } = useSubscription();
-  const { business } = useAuth();
+  const { business, user } = useAuth();
+  const { sales } = useSales();
+  const { inventory } = useInventory();
   const navigate = useNavigate();
+  const { currencySymbol } = useCurrency();
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   
   const [loading, setLoading] = useState(true);
@@ -66,51 +72,63 @@ export function AIInsights() {
     recommendationCount: 0
   });
 
+  // ═══════════════════════════════════════════════════════════════════
+  // RBAC: Filter data based on role
+  // ═══════════════════════════════════════════════════════════════════
+  const { filteredSales, filteredInventory } = useMemo(() => {
+    if (!user || !business) return { filteredSales: [], filteredInventory: [] };
+    
+    const businessId = business.id;
+    let staffId: string | undefined = undefined;
+    let branchId: string | undefined = undefined;
+
+    // Staff and Cashiers see only their own sales
+    if (user.role === "Cashier" || user.role === "Staff") {
+      staffId = user.id;
+      branchId = user.branchId || undefined;
+    }
+    // Managers see only their branch sales
+    else if (user.role === "Manager") {
+      branchId = user.branchId || undefined;
+    }
+    
+    // Filter sales
+    const filteredSales = sales.filter(sale => {
+      if (sale.businessId !== businessId) return false;
+      if (staffId && sale.staffId !== staffId) return false;
+      if (branchId && sale.branchId !== branchId) return false;
+      return true;
+    });
+
+    // Filter inventory
+    const filteredInventory = inventory.filter(item => {
+      if (item.businessId !== businessId) return false;
+      if (branchId && item.branchId !== branchId) return false;
+      return true;
+    });
+
+    return { filteredSales, filteredInventory };
+  }, [sales, inventory, user, business]);
+
   useEffect(() => {
-    if (business) {
+    if (business && filteredSales.length >= 0) {
       fetchData();
     }
-  }, [business]);
+  }, [business, filteredSales, filteredInventory]);
 
-  const fetchData = async () => {
+  const fetchData = () => {
     setLoading(true);
     try {
       const today = new Date();
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(today.getDate() - 30);
-      
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(today.getDate() - 7);
 
-      // 1. Fetch Sales Data
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('total, created_at')
-        .eq('business_id', business?.id)
-        .gte('created_at', thirtyDaysAgo.toISOString());
-
-      if (salesError) throw salesError;
-
-      // 2. Fetch Inventory Data
-      const { data: inventoryData, error: invError } = await supabase
-        .from('inventory')
-        .select('*')
-        .eq('business_id', business?.id);
-
-      if (invError) throw invError;
-
-      // 3. Fetch Customers Data (Count only for now as we might not track last_visit perfectly)
-      const { count: customerCount, error: custError } = await supabase
-        .from('customers')
-        .select('*', { count: 'exact', head: true })
-        .eq('business_id', business?.id);
-
-      if (custError) throw custError;
+      const fourteenDaysAgo = new Date();
+      fourteenDaysAgo.setDate(today.getDate() - 14);
 
       // --- PROCESS DATA ---
 
       // A. Revenue & Chart Data
-      const sales = salesData || [];
       const dailySales: Record<string, number> = {};
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -123,19 +141,20 @@ export function AIInsights() {
       }
 
       let totalRevenueLast7Days = 0;
-      let totalRevenuePrev7Days = 0; // For comparison (simplified)
+      let totalRevenuePrev7Days = 0;
 
-      sales.forEach(sale => {
-        const dateStr = new Date(sale.created_at).toISOString().split('T')[0];
-        const amount = Number(sale.total);
+      filteredSales.forEach(sale => {
+        const saleDate = new Date(sale.timestamp);
+        const dateStr = saleDate.toISOString().split('T')[0];
+        const amount = sale.total;
         
-        if (new Date(sale.created_at) >= sevenDaysAgo) {
+        if (saleDate >= sevenDaysAgo) {
             if (dailySales[dateStr] !== undefined) {
                 dailySales[dateStr] += amount;
             }
             totalRevenueLast7Days += amount;
-        } else {
-            totalRevenuePrev7Days += amount; // Very rough "previous period" check
+        } else if (saleDate >= fourteenDaysAgo && saleDate < sevenDaysAgo) {
+            totalRevenuePrev7Days += amount;
         }
       });
 
@@ -150,15 +169,14 @@ export function AIInsights() {
       });
       
       // Extend chart into future (Prediction)
-      const lastActualDay = new Date();
+      const avgDaily = totalRevenueLast7Days / 7;
       for (let i = 1; i <= 3; i++) {
           const futureDate = new Date();
-          futureDate.setDate(lastActualDay.getDate() + i);
-          const avgDaily = totalRevenueLast7Days / 7;
+          futureDate.setDate(today.getDate() + i);
           chart.push({
               name: days[futureDate.getDay()] + "*", // * for predicted
               actual: 0,
-              predicted: avgDaily * (1 + (Math.random() * 0.2)) // Random fluctuation
+              predicted: Math.max(0, avgDaily * (1 + (Math.random() * 0.3 - 0.1))) // Random fluctuation ±10%
           });
       }
 
@@ -168,37 +186,46 @@ export function AIInsights() {
       const avgDailyRevenue = totalRevenueLast7Days / 7;
       const predictedRevenue = Math.round(avgDailyRevenue * 7 * 1.15); // +15% growth prediction
       
-      // Calculate growth (mocked logic if no prev data)
+      // Calculate growth
       const growth = totalRevenuePrev7Days > 0 
         ? Math.round(((totalRevenueLast7Days - totalRevenuePrev7Days) / totalRevenuePrev7Days) * 100)
-        : 15; // Default optimistic start
+        : totalRevenueLast7Days > 0 ? 15 : 0;
 
       // Efficiency Score
-      const totalItems = inventoryData?.length || 0;
-      const lowStockItems = inventoryData?.filter((i: any) => i.stock < (i.low_stock_threshold || 10)).length || 0;
+      const totalItems = filteredInventory.length || 0;
+      const lowStockItems = filteredInventory.filter(i => 
+        i.stock > 0 && i.stock < (i.lowStockThreshold || 10)
+      ).length || 0;
+      const outOfStockItems = filteredInventory.filter(i => i.stock === 0).length || 0;
+      
       const efficiencyScore = totalItems > 0 
-        ? Math.max(0, Math.round(100 - (lowStockItems / totalItems * 50))) 
+        ? Math.max(0, Math.round(100 - ((lowStockItems + outOfStockItems * 2) / totalItems * 40))) 
         : 100;
 
-      // At Risk Customers (Mocked based on count)
-      const atRisk = Math.round((customerCount || 0) * 0.12); // ~12% churn rate assumption
+      // At Risk Customers (estimate based on unique customer transactions)
+      const uniqueCustomers = new Set(
+        filteredSales
+          .filter(s => s.customerName && s.customerName !== 'Walk-in')
+          .map(s => s.customerName)
+      ).size;
+      const atRisk = Math.max(0, Math.round(uniqueCustomers * 0.12)); // ~12% churn rate
 
       // C. Insights Generation
       const generatedInsights: Insight[] = [];
       
       // 1. Inventory Insight
-      if (lowStockItems > 0) {
-        const topLowItem = inventoryData?.find((i: any) => i.stock < (i.low_stock_threshold || 10));
+      if (lowStockItems > 0 || outOfStockItems > 0) {
+        const topLowItem = filteredInventory.find(i => i.stock < (i.lowStockThreshold || 10));
         generatedInsights.push({
             id: 1,
             title: "Inventory Alert",
-            description: `${lowStockItems} items are running low on stock${topLowItem ? `, including '${topLowItem.name}'` : ''}. Restock soon to prevent lost sales.`,
+            description: `${lowStockItems + outOfStockItems} items need attention${topLowItem ? `, including '${topLowItem.name}'` : ''}. ${outOfStockItems > 0 ? `${outOfStockItems} items are out of stock. ` : ''}Restock soon to prevent lost sales.`,
             type: "action",
-            impact: "High",
+            impact: outOfStockItems > 0 ? "High" : "Medium",
             icon: ShoppingBag,
             action: "/app/inventory"
         });
-      } else {
+      } else if (totalItems > 0) {
         generatedInsights.push({
             id: 1,
             title: "Inventory Healthy",
@@ -215,21 +242,21 @@ export function AIInsights() {
           generatedInsights.push({
               id: 2,
               title: "Sales Trending Up",
-              description: `Revenue is up ${growth}% compared to previous period. Consider increasing stock for top sellers.`,
+              description: `Revenue is up ${growth}% compared to previous week. Consider increasing stock for top sellers to meet demand.`,
               type: "info",
               impact: "Medium",
               icon: TrendingUp,
               action: "/app/reports"
           });
-      } else if (growth < 0) {
+      } else if (growth < -5) {
            generatedInsights.push({
               id: 2,
               title: "Sales Dip Detected",
-              description: `Revenue is down ${Math.abs(growth)}%. Consider running a promotion to boost foot traffic.`,
+              description: `Revenue is down ${Math.abs(growth)}% compared to last week. Review pricing strategy or consider running a promotion.`,
               type: "warning",
               impact: "High",
               icon: AlertTriangle,
-              action: "/app/marketing" // Assuming marketing exists, or back to dashboard
+              action: "/app/reports"
           });
       }
 
@@ -238,12 +265,25 @@ export function AIInsights() {
           generatedInsights.push({
               id: 3,
               title: "Customer Retention",
-              description: `Approximately ${atRisk} customers haven't visited recently. Reach out to re-engage them.`,
+              description: `Approximately ${atRisk} customers may be at risk of churn. Consider re-engagement campaigns or loyalty programs.`,
               type: "action",
               impact: "Medium",
               icon: Users,
-              action: "/app/customers"
+              action: "/app/pos"
           });
+      }
+
+      // 4. Performance insight
+      if (filteredSales.length > 0 && efficiencyScore >= 85) {
+        generatedInsights.push({
+          id: 4,
+          title: "Strong Performance",
+          description: `You're operating at ${efficiencyScore}% efficiency. Keep up the great work maintaining inventory levels!`,
+          type: "info",
+          impact: "Low",
+          icon: CheckCircle2,
+          action: "/app/dashboard"
+        });
       }
 
       setInsights(generatedInsights);
@@ -258,8 +298,8 @@ export function AIInsights() {
       setLastUpdated(new Date());
 
     } catch (error) {
-      console.error("Error fetching AI insights:", error);
-      toast.error("Failed to load AI insights");
+      console.error("Error generating AI insights:", error);
+      toast.error("Failed to generate AI insights");
     } finally {
       setLoading(false);
     }
@@ -321,7 +361,7 @@ export function AIInsights() {
             ) : (
                 <>
                     <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-400">
-                        ${metrics.predictedRevenue.toLocaleString()}
+                        {currencySymbol}{metrics.predictedRevenue.toLocaleString()}
                     </div>
                     <p className="text-xs font-medium text-indigo-600 dark:text-indigo-300 flex items-center mt-2 bg-indigo-100 dark:bg-indigo-900/50 w-fit px-2 py-1 rounded-full">
                     <TrendingUp className="w-3 h-3 mr-1" />
@@ -427,7 +467,7 @@ export function AIInsights() {
                     axisLine={false} 
                     tickLine={false} 
                     tick={{ fill: '#64748b', fontSize: 12 }} 
-                    tickFormatter={(value) => `$${value}`}
+                    tickFormatter={(value) => `${currencySymbol}${value}`}
                   />
                   <Tooltip 
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}

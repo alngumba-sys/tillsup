@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
 import { 
   BarChart, 
   Bar, 
@@ -17,7 +19,7 @@ import {
   Legend,
   ResponsiveContainer 
 } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, ShoppingBag, Users, Package, AlertTriangle, Info } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ShoppingBag, Users, Package, AlertTriangle, Info, Search, ArrowUpDown, Download } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { useSales } from "../contexts/SalesContext";
 import { useInventory } from "../contexts/InventoryContext";
@@ -26,6 +28,9 @@ import { useCategory } from "../contexts/CategoryContext";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { formatCurrency } from "../utils/currency";
+import { ScrollArea } from "../components/ui/scroll-area";
+import * as XLSX from "xlsx";
+import { toast } from "sonner";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
 
@@ -49,141 +54,252 @@ export function Reports() {
   const currencyCode = business?.currency || "KES";
 
   // ═══════════════════════════════════════════════════════════════════
+  // STATE - Time Filter, Transaction Search & Sort
+  // ═══════════════════════════════════════════════════════════════════
+  const [timeFilter, setTimeFilter] = useState<string>("all-time");
+  const [transactionSearch, setTransactionSearch] = useState("");
+  const [transactionSort, setTransactionSort] = useState<"date-desc" | "date-asc" | "amount-desc" | "amount-asc">("date-desc");
+
+  // ══════════════════════════════════════════════════════════════════
   // RBAC: Determine filtering based on role
   // ═══════════════════════════════════════════════════════════════════
-  const { businessId, staffId } = useMemo(() => {
-    if (!user || !business) return { businessId: undefined, staffId: undefined };
+  const { businessId, staffId, branchId } = useMemo(() => {
+    if (!user || !business) return { businessId: undefined, staffId: undefined, branchId: undefined };
     
     let businessId = business.id;
     let staffId: string | undefined = undefined;
+    let branchId: string | undefined = undefined;
 
     // Staff and Cashiers see only their own sales
     if (user.role === "Cashier" || user.role === "Staff") {
       staffId = user.id;
+      branchId = user.branchId || undefined;
     }
-    // Business Owner, Manager, and Accountant see all business sales
+    // Managers see only their branch sales
+    else if (user.role === "Manager") {
+      branchId = user.branchId || undefined;
+    }
+    // Business Owner and Accountant see all business sales
     
-    return { businessId, staffId };
+    return { businessId, staffId, branchId };
   }, [user, business]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // REAL-TIME ANALYTICS - Computed from Actual Data (with RBAC filtering)
-  // ═════════════════════════════════════════���═════════════════════════
-  const analytics = useMemo(() => {
-    // KPIs
-    const totalRevenue = getTotalRevenue(businessId, staffId);
-    const todayRevenue = getTotalRevenueToday(businessId, staffId);
-    const todayCustomers = getTotalCustomersToday(businessId, staffId);
+  // TIME FILTER HELPER - Filter sales by time period
+  // ═══════════════════════════════════════════════════════════════════
+  const filterSalesByTime = (salesList: typeof sales) => {
+    const now = new Date();
     
-    // Profit Metrics
-    const totalCOGS = getTotalCOGS(businessId, staffId);
-    const totalGrossProfit = getTotalGrossProfit(businessId, staffId);
-    const grossProfitMargin = getGrossProfitMargin(businessId, staffId);
-    
-    // Filter sales based on business and staff
-    const filteredSales = sales.filter(sale => {
-      if (businessId && sale.businessId !== businessId) return false;
-      if (staffId && sale.staffId !== staffId) return false;
-      return true;
-    });
-    
-    const totalOrders = filteredSales.length;
-    const todayOrders = filteredSales.filter(sale => {
+    return salesList.filter(sale => {
       const saleDate = new Date(sale.timestamp);
-      const today = new Date();
-      return saleDate.toDateString() === today.toDateString();
-    }).length;
-    
-    // Average order value
-    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-    // Daily sales data (last 7 days)
-    const dailySalesData = getDailySales(7, businessId, staffId);
-
-    // Best selling products
-    const bestSellers = getBestSellingProducts(5, businessId, staffId);
-
-    // Calculate sold quantities by product
-    const soldByProduct = getSalesByProduct(businessId, staffId);
-    
-    // Inventory with sold quantities
-    const inventoryWithSold = inventory.map(item => {
-      const soldData = soldByProduct.get(item.id);
-      const categoryObj = categories.find(c => c.id === item.category);
-      const categoryName = categoryObj ? categoryObj.name : (item.category || "Uncategorized");
-
-      return {
-        ...item,
-        categoryName,
-        soldQuantity: soldData?.quantity || 0,
-        soldRevenue: soldData?.revenue || 0
-      };
-    });
-
-    // Low stock items (stock < 10)
-    const lowStockItems = inventoryWithSold.filter(item => item.stock < 10 && item.stock > 0);
-
-    // Out of stock items
-    const outOfStockItems = inventoryWithSold.filter(item => item.stock === 0);
-
-    // Category data
-    const categoryMap = new Map<string, { sales: number; revenue: number; value: number }>();
-    
-    inventoryWithSold.forEach(item => {
-      const catName = item.categoryName;
-      const existing = categoryMap.get(catName);
-      if (existing) {
-        existing.sales += item.soldRevenue;
-        existing.value += item.soldQuantity;
-      } else {
-        categoryMap.set(catName, {
-          sales: item.soldRevenue,
-          value: item.soldQuantity,
-          revenue: item.soldRevenue
-        });
+      
+      switch (timeFilter) {
+        case "today":
+          return saleDate.toDateString() === now.toDateString();
+        
+        case "this-week":
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+          weekStart.setHours(0, 0, 0, 0);
+          return saleDate >= weekStart;
+        
+        case "this-month":
+          return (
+            saleDate.getMonth() === now.getMonth() &&
+            saleDate.getFullYear() === now.getFullYear()
+          );
+        
+        case "all-time":
+        default:
+          return true;
       }
     });
+  };
 
-    const categoryData = Array.from(categoryMap.entries()).map(([name, data]) => ({
-      name,
-      ...data
+  // ═══════════════════════════════════════════════════════════════════
+  // EXPORT TRANSACTIONS TO EXCEL
+  // ═══════════════════════════════════════════════════════════════════
+  const exportTransactions = () => {
+    const dataToExport = analytics.filteredSales.map(sale => ({
+      "Order ID": sale.readableId ? `#${sale.readableId.toString().padStart(5, '0')}` : sale.id.substring(0, 8),
+      "Date": new Date(sale.timestamp).toLocaleDateString(),
+      "Time": new Date(sale.timestamp).toLocaleTimeString(),
+      "Customer Name": sale.customerName || "Walk-in",
+      "Sold By": sale.staffName,
+      "Staff Role": sale.staffRole,
+      "Products": sale.items.map(item => `${item.productName} (x${item.quantity})`).join(", "),
+      "Total": sale.total,
+      "Payment Method": sale.paymentMethod || "Cash",
+      "Status": "Completed"
     }));
 
-    // Calculate trends (compare today vs yesterday if data exists)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayRevenue = filteredSales
-      .filter(sale => new Date(sale.timestamp).toDateString() === yesterday.toDateString())
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions");
+
+    // Generate filename with date
+    const fileName = `Transactions_${timeFilter}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    
+    toast.success(`Exported ${dataToExport.length} transactions to ${fileName}`);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // REAL-TIME ANALYTICS - Computed from Actual Data (with RBAC filtering)
+  // ═══════════════════════════════════════════════════════════════════
+  const analytics = useMemo(() => {
+    // Filter sales based on business, staff, and branch
+    let filteredSales = sales.filter(sale => {
+      if (businessId && sale.businessId !== businessId) return false;
+      if (staffId && sale.staffId !== staffId) return false;
+      if (branchId && sale.branchId !== branchId) return false;
+      return true;
+    });
+
+    // Apply time filter
+    filteredSales = filterSalesByTime(filteredSales);
+
+    // Calculate metrics from filtered sales
+    const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
+    const totalCOGS = filteredSales.reduce((sum, sale) => {
+      return sum + sale.items.reduce((itemSum, item) => {
+        return itemSum + ((item.costPrice || 0) * item.quantity);
+      }, 0);
+    }, 0);
+    const totalGrossProfit = totalRevenue - totalCOGS;
+    const grossProfitMargin = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
+    
+    const today = new Date().toDateString();
+    const todayRevenue = filteredSales
+      .filter(sale => new Date(sale.timestamp).toDateString() === today)
       .reduce((sum, sale) => sum + sale.total, 0);
     
+    const todayCustomers = filteredSales
+      .filter(sale => new Date(sale.timestamp).toDateString() === today)
+      .length;
+
+    // Calculate total orders and today's orders
+    const totalOrders = filteredSales.length;
+    const todayOrders = filteredSales.filter(sale => 
+      new Date(sale.timestamp).toDateString() === today
+    ).length;
+
+    // Calculate average order value
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    // Calculate revenue trend (today vs yesterday)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+    const yesterdayRevenue = filteredSales
+      .filter(sale => new Date(sale.timestamp).toDateString() === yesterdayStr)
+      .reduce((sum, sale) => sum + sale.total, 0);
     const revenueTrend = yesterdayRevenue > 0 
       ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 
       : 0;
+
+    // Get daily sales data (calculate from filtered sales)
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - i));
+      return date;
+    });
+
+    const dailySalesData = last7Days.map(date => {
+      const dateStr = date.toDateString();
+      const daySales = filteredSales.filter(
+        sale => new Date(sale.timestamp).toDateString() === dateStr
+      );
+      return {
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        revenue: daySales.reduce((sum, sale) => sum + sale.total, 0),
+        sales: daySales.length,
+        customers: daySales.length
+      };
+    });
+
+    // Get sales by product for best sellers and category analysis
+    const productSalesMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+    filteredSales.forEach(sale => {
+      sale.items.forEach(item => {
+        const existing = productSalesMap.get(item.productId) || { 
+          name: item.productName, 
+          quantity: 0, 
+          revenue: 0 
+        };
+        productSalesMap.set(item.productId, {
+          name: item.productName,
+          quantity: existing.quantity + item.quantity,
+          revenue: existing.revenue + item.subtotal
+        });
+      });
+    });
+
+    const bestSellers = Array.from(productSalesMap.entries())
+      .map(([productId, data]) => ({ productId, ...data }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    // Category data aggregation
+    const categoryMap = new Map<string, { sales: number; count: number; name: string }>();
+    productSalesMap.forEach((productData, productId) => {
+      const item = inventory.find(i => i.id === productId);
+      if (item) {
+        const categoryName = item.categoryName || 'Uncategorized';
+        const existing = categoryMap.get(categoryName) || { sales: 0, count: 0, name: categoryName };
+        categoryMap.set(categoryName, {
+          sales: existing.sales + productData.revenue,
+          count: existing.count + productData.quantity,
+          name: categoryName
+        });
+      }
+    });
+    const categoryData = Array.from(categoryMap.values()).map(cat => ({
+      name: cat.name,
+      value: cat.count,
+      sales: cat.sales
+    }));
+
+    // Low stock and out of stock items
+    const lowStockItems = inventory.filter(item => 
+      item.stock > 0 && item.stock < (item.lowStockThreshold || 10)
+    );
+    const outOfStockItems = inventory.filter(item => item.stock === 0);
+
+    // Inventory with sold quantities
+    const inventoryWithSold = inventory.map(item => {
+      const productSales = productSalesMap.get(item.id);
+      return {
+        ...item,
+        soldQuantity: productSales?.quantity || 0,
+        soldRevenue: productSales?.revenue || 0
+      };
+    });
 
     return {
       totalRevenue,
       todayRevenue,
       todayCustomers,
-      totalOrders,
-      todayOrders,
-      avgOrderValue,
-      dailySalesData,
-      bestSellers,
-      inventoryWithSold,
-      lowStockItems,
-      outOfStockItems,
-      categoryData,
-      revenueTrend,
       totalCOGS,
       totalGrossProfit,
       grossProfitMargin,
-      filteredSales // ═══════ ADD FILTERED SALES TO ANALYTICS ═══════
+      totalOrders,
+      todayOrders,
+      avgOrderValue,
+      revenueTrend,
+      dailySalesData,
+      bestSellers,
+      categoryData,
+      filteredSales,
+      lowStockItems,
+      outOfStockItems,
+      inventoryWithSold
     };
-  }, [sales, inventory, categories, businessId, staffId, getTotalRevenue, getTotalRevenueToday, getTotalCustomersToday, getDailySales, getBestSellingProducts, getSalesByProduct, getTotalCOGS, getTotalGrossProfit, getGrossProfitMargin]);
+  }, [sales, inventory, categories, businessId, staffId, branchId, timeFilter]);
 
   // ═══════════════════════════════════════════════════════════════════
   // EMPTY STATE - Show when no sales data exists
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   if (sales.filter(s => {
     if (businessId && s.businessId !== businessId) return false;
     if (staffId && s.staffId !== staffId) return false;
@@ -219,7 +335,7 @@ export function Reports() {
             {staffId ? "Track your sales performance" : "Track your business performance"}
           </p>
         </div>
-        <Select defaultValue="all-time">
+        <Select value={timeFilter} onValueChange={setTimeFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue />
           </SelectTrigger>
@@ -438,13 +554,45 @@ export function Reports() {
         <TabsContent value="transactions" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Transaction Details</CardTitle>
-              <CardDescription>View detailed transaction records with customer information</CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle>Transaction Details</CardTitle>
+                  <CardDescription>View detailed transaction records with customer information</CardDescription>
+                </div>
+                <Button onClick={exportTransactions} size="sm">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+              </div>
+              
+              {/* Search and Sort Controls */}
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search by order ID, customer name, or staff..." 
+                    value={transactionSearch}
+                    onChange={(e) => setTransactionSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={transactionSort} onValueChange={(val) => setTransactionSort(val as typeof transactionSort)}>
+                  <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date-desc">Latest First</SelectItem>
+                    <SelectItem value="date-asc">Oldest First</SelectItem>
+                    <SelectItem value="amount-desc">Highest Amount</SelectItem>
+                    <SelectItem value="amount-asc">Lowest Amount</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-lg overflow-x-auto">
+              <ScrollArea className="h-[600px] border rounded-lg">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead>Order ID</TableHead>
                       <TableHead>Date & Time</TableHead>
@@ -457,7 +605,34 @@ export function Reports() {
                   </TableHeader>
                   <TableBody>
                     {analytics.filteredSales
-                      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                      .filter(sale => {
+                        if (!transactionSearch) return true;
+                        const searchLower = transactionSearch.toLowerCase();
+                        const orderId = sale.readableId 
+                          ? `#${sale.readableId.toString().padStart(5, '0')}` 
+                          : sale.id.substring(0, 8);
+                        const customerName = (sale.customerName || 'walk-in').toLowerCase();
+                        const staffName = (sale.staffName || '').toLowerCase();
+                        
+                        return (
+                          orderId.toLowerCase().includes(searchLower) ||
+                          customerName.includes(searchLower) ||
+                          staffName.includes(searchLower)
+                        );
+                      })
+                      .sort((a, b) => {
+                        switch (transactionSort) {
+                          case "date-asc":
+                            return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+                          case "amount-desc":
+                            return b.total - a.total;
+                          case "amount-asc":
+                            return a.total - b.total;
+                          case "date-desc":
+                          default:
+                            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+                        }
+                      })
                       .map((sale) => (
                       <TableRow key={sale.id}>
                         <TableCell className="font-mono text-xs">
@@ -472,22 +647,13 @@ export function Reports() {
                           </div>
                         </TableCell>
                         <TableCell className="font-medium">
-                          {/* ═══════════════════════════════════════════════════════════════════
-                              CUSTOMER NAME DISPLAY - Show name if provided, otherwise "Walk-in"
-                              ═══════════════════════════════════════════════════════════════════ */}
                           {sale.customerName || <span className="text-muted-foreground">Walk-in</span>}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {/* ═══════════════════════════════════════════════════════════════════
-                              SOLD BY (CASHIER/STAFF) - Display who processed the sale
-                              ═══════════════════════════════════════════════════════════════════ */}
                           <div>{sale.staffName}</div>
                           <div className="text-xs text-muted-foreground">{sale.staffRole}</div>
                         </TableCell>
                         <TableCell className="text-sm max-w-xs">
-                          {/* ═══════════════════════════════════════════════════════════════════
-                              PRODUCTS PURCHASED - Show product names with quantities
-                              ═══════════════════════════════════════════════════════════════════ */}
                           <div className="space-y-1">
                             {sale.items.map((item, idx) => (
                               <div key={idx} className="text-xs">
@@ -507,10 +673,24 @@ export function Reports() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-              {analytics.filteredSales.length === 0 && (
-                <p className="text-center text-muted-foreground py-8">No transactions found</p>
-              )}
+                {analytics.filteredSales.filter(sale => {
+                  if (!transactionSearch) return true;
+                  const searchLower = transactionSearch.toLowerCase();
+                  const orderId = sale.readableId 
+                    ? `#${sale.readableId.toString().padStart(5, '0')}` 
+                    : sale.id.substring(0, 8);
+                  const customerName = (sale.customerName || 'walk-in').toLowerCase();
+                  const staffName = (sale.staffName || '').toLowerCase();
+                  
+                  return (
+                    orderId.toLowerCase().includes(searchLower) ||
+                    customerName.includes(searchLower) ||
+                    staffName.includes(searchLower)
+                  );
+                }).length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">No transactions found</p>
+                )}
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>

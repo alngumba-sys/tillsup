@@ -106,7 +106,7 @@ export function Dashboard() {
       return total + sale.items.reduce((sum, item) => sum + item.quantity, 0);
     }, 0);
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════���════════════════════════════
     // EXPENSE & PROFIT CALCULATIONS (Business Owner & Manager only)
     // ═══════════════════════════════════════════════════════════════════
     let todayExpenses = 0;
@@ -160,7 +160,7 @@ export function Dashboard() {
   // ═══════════════════════════════════════════════════════════════════
   // UNIVERSAL BASELINE & DATE LOGIC - Prevent fake growth percentages
   // Applies to ALL roles: Business Owner, Manager, Accountant, Staff, Cashier
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   const baselineMetrics = useMemo(() => {
     // Get sales filtered by current user's role and access level
     let filteredSales = sales.filter(sale => {
@@ -275,7 +275,7 @@ export function Dashboard() {
 
   // ═══════════════════════════════════════════════════════════════════
   // ROLE-BASED RECENT TRANSACTIONS
-  // ══════════════════════════════════════════════════════════��════════
+  // ══════════════════════════════════════════════════════════════════
   const recentTransactions = useMemo(() => {
     // Filter sales by role
     let filteredSales = sales.filter(sale => {
@@ -318,12 +318,20 @@ export function Dashboard() {
   // ROLE-BASED SALES CHART DATA
   // ═══════════════════════════════════════════════════════════════════
   const weekSalesData = useMemo(() => {
-    const dailySales = getDailySales(7, businessId, staffId);
-    return dailySales.map(day => ({
-      name: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
-      sales: day.revenue
-    }));
-  }, [getDailySales, businessId, staffId]);
+    const dailySales = getDailySales(7, businessId, staffId, branchId);
+    // Filter out days with zero sales and map to chart format
+    const chartData = dailySales
+      .filter(day => day.revenue > 0) // Only include days with actual sales
+      .map(day => ({
+        name: day.dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
+        date: day.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        sales: day.revenue
+      }));
+    
+    console.log('📈 Chart Data:', chartData);
+    
+    return chartData;
+  }, [getDailySales, businessId, staffId, branchId]);
 
   // Helper function to calculate time ago
   function getTimeAgo(date: Date): string {
@@ -481,7 +489,7 @@ export function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
           
@@ -498,7 +506,7 @@ export function Dashboard() {
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">{kpi.title}</p>
-                    <p className="text-3xl font-semibold">{kpi.value}</p>
+                    <p className="font-semibold text-[24px]">{kpi.value}</p>
                     {/* Only show change text if it exists (not null) */}
                     {kpi.change && (
                       <p className={`text-xs ${showNeutralStyle ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
@@ -514,48 +522,48 @@ export function Dashboard() {
             </Card>
           );
         })}
+
+        {/* Expense & Profit KPI Cards - Business Owner & Manager Only */}
+        {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
+          <>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Today's Expenses</p>
+                    <p className="font-semibold text-red-600 text-[24px]">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
+                    <p className="text-xs text-muted-foreground">Total expenses recorded</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-lg bg-red-50 flex items-center justify-center">
+                    <Receipt className="w-6 h-6 text-red-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Net Profit Today</p>
+                    <p className={`font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'} text-[24px]`}>
+                      {formatCurrency(roleBasedKPIs.todayNetProfit)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Revenue - COGS - Expenses</p>
+                  </div>
+                  <div className={`w-12 h-12 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center`}>
+                    {roleBasedKPIs.todayNetProfit >= 0 ? (
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    ) : (
+                      <TrendingDown className="w-6 h-6 text-red-600" />
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
-
-      {/* Expense & Profit KPI Cards - Business Owner & Manager Only */}
-      {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Today's Expenses</p>
-                  <p className="text-3xl font-semibold text-red-600">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
-                  <p className="text-xs text-muted-foreground">Total expenses recorded</p>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-red-50 flex items-center justify-center">
-                  <Receipt className="w-6 h-6 text-red-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Net Profit Today</p>
-                  <p className={`text-3xl font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(roleBasedKPIs.todayNetProfit)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Revenue - COGS - Expenses</p>
-                </div>
-                <div className={`w-12 h-12 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center`}>
-                  {roleBasedKPIs.todayNetProfit >= 0 ? (
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  ) : (
-                    <TrendingDown className="w-6 h-6 text-red-600" />
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -570,15 +578,28 @@ export function Dashboard() {
               <ResponsiveContainer width="100%" height={300} minHeight={300}>
                 <LineChart data={weekSalesData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" />
+                  <XAxis 
+                    dataKey="name" 
+                    className="text-xs"
+                    label={{ value: 'Day of Week', position: 'insideBottom', offset: -5, style: { fontSize: 12 } }}
+                  />
                   <YAxis className="text-xs" />
-                  <Tooltip />
+                  <Tooltip 
+                    formatter={(value: number) => [formatCurrency(value), 'Sales']}
+                    labelFormatter={(label, payload) => {
+                      if (payload && payload.length > 0) {
+                        return `${payload[0].payload.name} (${payload[0].payload.date})`;
+                      }
+                      return label;
+                    }}
+                  />
                   <Line 
-                    type="monotone" 
+                    type="natural" 
                     dataKey="sales" 
                     stroke="hsl(var(--primary))" 
-                    strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))" }}
+                    strokeWidth={3}
+                    dot={{ fill: "hsl(var(--primary))", r: 5, strokeWidth: 2, stroke: "#fff" }}
+                    activeDot={{ r: 7 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -597,15 +618,28 @@ export function Dashboard() {
               <ResponsiveContainer width="100%" height={300} minHeight={300}>
                 <LineChart data={weekSalesData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" />
+                  <XAxis 
+                    dataKey="name" 
+                    className="text-xs"
+                    label={{ value: 'Day of Week', position: 'insideBottom', offset: -5, style: { fontSize: 12 } }}
+                  />
                   <YAxis className="text-xs" />
-                  <Tooltip />
+                  <Tooltip 
+                    formatter={(value: number) => [formatCurrency(value), 'Sales']}
+                    labelFormatter={(label, payload) => {
+                      if (payload && payload.length > 0) {
+                        return `${payload[0].payload.name} (${payload[0].payload.date})`;
+                      }
+                      return label;
+                    }}
+                  />
                   <Line 
-                    type="monotone" 
+                    type="natural" 
                     dataKey="sales" 
                     stroke="hsl(var(--primary))" 
-                    strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))" }}
+                    strokeWidth={3}
+                    dot={{ fill: "hsl(var(--primary))", r: 5, strokeWidth: 2, stroke: "#fff" }}
+                    activeDot={{ r: 7 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -630,7 +664,7 @@ export function Dashboard() {
                 <div className="flex-1">
                   <p className="font-medium">{transaction.customer}</p>
                   <p className="text-sm text-muted-foreground">{transaction.displayId} • {transaction.time}</p>
-                  {/* ════════════���════════════════════��═════════════════════════════════
+                  {/* ═══════════════════════════════════════════════════════════════════
                       SOLD BY (STAFF/CASHIER) - Display who processed the transaction
                       ═══════════════════════════════════════════════════════════════════ */}
                   <p className="text-xs text-muted-foreground mt-0.5">Sold by: {transaction.staffName}</p>
