@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router";
-import { AuthGuard } from "./components/AuthGuard";
+import { AuthGuard } from "./components/AuthGuardComponent";
 import { BranchGuard } from "./components/BranchGuard";
 import { Layout } from "./components/Layout";
 import { ErrorBoundary } from "./components/ErrorBoundary";
