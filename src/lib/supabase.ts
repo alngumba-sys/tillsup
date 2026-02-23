@@ -24,6 +24,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storageKey: 'sb-tillsup-auth-token', // Unique key for main app session
     lock: debugLock
   }
 });

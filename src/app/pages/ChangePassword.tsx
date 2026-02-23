@@ -5,7 +5,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Lock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Lock, AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 export function ChangePassword() {
@@ -19,8 +19,10 @@ export function ChangePassword() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -37,16 +39,24 @@ export function ChangePassword() {
 
     setLoading(true);
 
-    // Change password
-    const result = changePassword(formData.newPassword);
+    try {
+      // Change password
+      console.log("Attempting to change password...");
+      const result = await changePassword(formData.newPassword);
+      console.log("Password change result:", result);
 
-    setLoading(false);
-
-    if (result.success) {
-      // Navigate to dashboard after successful password change
-      navigate("/app/dashboard");
-    } else {
-      setError(result.error || "Failed to change password");
+      if (result.success) {
+        // Navigate to dashboard after successful password change
+        navigate("/app/dashboard");
+      } else {
+        console.error("Password change failed:", result.error);
+        setError(result.error || "Failed to change password");
+      }
+    } catch (err) {
+      console.error("Password change error:", err);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -96,14 +106,22 @@ export function ChangePassword() {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="newPassword"
-                  type="password"
+                  type={showNewPassword ? "text" : "password"}
                   placeholder="Minimum 6 characters"
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   value={formData.newPassword}
                   onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
                   disabled={loading}
                   autoComplete="new-password"
                 />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  tabIndex={-1}
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -114,14 +132,22 @@ export function ChangePassword() {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="confirmPassword"
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   placeholder="Re-enter your new password"
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   disabled={loading}
                   autoComplete="new-password"
                 />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 

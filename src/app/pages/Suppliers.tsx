@@ -84,12 +84,20 @@ export function Suppliers() {
 
   const handleAddSupplier = async () => {
     if (!formData.name.trim()) {
+      toast.error("Supplier name is required");
       return;
     }
 
-    await addSupplier(formData);
-    setFormData(emptyForm);
-    setIsAddDialogOpen(false);
+    try {
+      console.log("Adding supplier with data:", formData);
+      await addSupplier(formData);
+      setFormData(emptyForm);
+      setIsAddDialogOpen(false);
+      // Success toast is shown in context
+    } catch (error) {
+      console.error("Error in handleAddSupplier:", error);
+      // Error toast already handled in context
+    }
   };
 
   const handleEditClick = (supplierId: string) => {
@@ -252,7 +260,7 @@ export function Suppliers() {
 
   // ═══════════════════════════════════════════════════════════════════
   // HANDLE FILE UPLOAD
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════���════════════════════════
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {

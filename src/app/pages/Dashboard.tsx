@@ -106,7 +106,7 @@ export function Dashboard() {
       return total + sale.items.reduce((sum, item) => sum + item.quantity, 0);
     }, 0);
 
-    // ══════════════════════════════════════���════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // EXPENSE & PROFIT CALCULATIONS (Business Owner & Manager only)
     // ═══════════════════════════════════════════════════════════════════
     let todayExpenses = 0;
@@ -468,16 +468,6 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Role-Based Info Banner for Cashiers */}
-      {(user?.role === "Cashier" || user?.role === "Staff") && (
-        <Alert className="border-blue-200 bg-blue-50">
-          <Info className="w-4 h-4 text-blue-600" />
-          <AlertDescription className="text-blue-800">
-            You're viewing <strong>your personal performance</strong>. All metrics shown reflect only the sales and transactions you've completed.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Role-Based Info Banner for Managers */}
       {user?.role === "Manager" && user.branchId && (
         <Alert className="border-purple-200 bg-purple-50">
@@ -489,11 +479,11 @@ export function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
           
-          // ═══════════════════════════════════════════════════════════════════
+          // ════════════════════════════════���══════════════════════════════════
           // BASELINE VISUAL RULES - Apply neutral styling when no baseline
           // ═══════════════════════════════════════════════════════════════════
           const showNeutralStyle = baselineMetrics && !baselineMetrics.hasBaseline;
@@ -502,20 +492,20 @@ export function Dashboard() {
           
           return (
             <Card key={kpi.title}>
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">{kpi.title}</p>
-                    <p className="font-semibold text-[24px]">{kpi.value}</p>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground leading-tight truncate">{kpi.title}</p>
+                    <p className="font-semibold text-lg leading-tight break-words">{kpi.value}</p>
                     {/* Only show change text if it exists (not null) */}
                     {kpi.change && (
-                      <p className={`text-xs ${showNeutralStyle ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
+                      <p className={`text-[10px] leading-tight ${showNeutralStyle ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
                         {kpi.change}
                       </p>
                     )}
                   </div>
-                  <div className={`w-12 h-12 rounded-lg ${displayBgColor} flex items-center justify-center`}>
-                    <Icon className={`w-6 h-6 ${displayColor}`} />
+                  <div className={`w-10 h-10 rounded-lg ${displayBgColor} flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-5 h-5 ${displayColor}`} />
                   </div>
                 </div>
               </CardContent>
@@ -527,35 +517,35 @@ export function Dashboard() {
         {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
           <>
             <Card>
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Today's Expenses</p>
-                    <p className="font-semibold text-red-600 text-[24px]">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
-                    <p className="text-xs text-muted-foreground">Total expenses recorded</p>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground leading-tight truncate">Today's Expenses</p>
+                    <p className="font-semibold text-red-600 text-lg leading-tight break-words">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight">Total expenses recorded</p>
                   </div>
-                  <div className="w-12 h-12 rounded-lg bg-red-50 flex items-center justify-center">
-                    <Receipt className="w-6 h-6 text-red-600" />
+                  <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                    <Receipt className="w-5 h-5 text-red-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Net Profit Today</p>
-                    <p className={`font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'} text-[24px]`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground leading-tight truncate">Net Profit Today</p>
+                    <p className={`font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'} text-lg leading-tight break-words`}>
                       {formatCurrency(roleBasedKPIs.todayNetProfit)}
                     </p>
-                    <p className="text-xs text-muted-foreground">Revenue - COGS - Expenses</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight">Revenue - COGS - Expenses</p>
                   </div>
-                  <div className={`w-12 h-12 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center`}>
+                  <div className={`w-10 h-10 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center flex-shrink-0`}>
                     {roleBasedKPIs.todayNetProfit >= 0 ? (
-                      <TrendingUp className="w-6 h-6 text-green-600" />
+                      <TrendingUp className="w-5 h-5 text-green-600" />
                     ) : (
-                      <TrendingDown className="w-6 h-6 text-red-600" />
+                      <TrendingDown className="w-5 h-5 text-red-600" />
                     )}
                   </div>
                 </div>

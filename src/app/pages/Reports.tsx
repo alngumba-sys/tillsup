@@ -358,18 +358,18 @@ export function Reports() {
         </Alert>
       )}
 
-      {/* Summary KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Summary KPIs - All in one row */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
-                <p className="text-3xl font-semibold">{formatCurrency(analytics.totalRevenue, currencyCode)}</p>
+                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalRevenue, currencyCode)}</p>
                 {analytics.revenueTrend !== 0 && (
                   <div className={`flex items-center gap-1 text-sm ${analytics.revenueTrend > 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {analytics.revenueTrend > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    <span>{Math.abs(analytics.revenueTrend).toFixed(1)}% vs yesterday</span>
+                    <span className="text-[13px] text-[12px]">{Math.abs(analytics.revenueTrend).toFixed(1)}% vs yesterday</span>
                   </div>
                 )}
               </div>
@@ -385,9 +385,9 @@ export function Reports() {
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Cost of Goods Sold</p>
-                <p className="text-3xl font-semibold">{formatCurrency(analytics.totalCOGS, currencyCode)}</p>
+                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalCOGS, currencyCode)}</p>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span>Purchase costs</span>
+                  <span className="text-[13px] text-[12px]">Purchase costs</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-lg bg-red-50 flex items-center justify-center">
@@ -402,9 +402,9 @@ export function Reports() {
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Gross Profit</p>
-                <p className="text-3xl font-semibold">{formatCurrency(analytics.totalGrossProfit, currencyCode)}</p>
+                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalGrossProfit, currencyCode)}</p>
                 <div className="flex items-center gap-1 text-sm text-emerald-600">
-                  <span className="font-medium">{analytics.grossProfitMargin.toFixed(1)}% margin</span>
+                  <span className="font-medium text-[12px]">{analytics.grossProfitMargin.toFixed(1)}% margin</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -419,9 +419,9 @@ export function Reports() {
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Total Orders</p>
-                <p className="text-3xl font-semibold">{analytics.totalOrders}</p>
+                <p className="font-semibold text-[24px]">{analytics.totalOrders}</p>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span>{analytics.todayOrders} today</span>
+                  <span className="text-[13px] text-[12px]">{analytics.todayOrders} today</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -430,18 +430,15 @@ export function Reports() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Secondary KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Total Customers</p>
-                <p className="text-3xl font-semibold">{analytics.todayCustomers}</p>
+                <p className="font-semibold text-[24px]">{analytics.todayCustomers}</p>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span>Served today</span>
+                  <span className="text-[13px] text-[12px]">Served today</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-lg bg-purple-50 flex items-center justify-center">
@@ -456,7 +453,7 @@ export function Reports() {
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Avg Order Value</p>
-                <p className="text-3xl font-semibold">{formatCurrency(analytics.avgOrderValue, currencyCode)}</p>
+                <p className="font-semibold text-[24px]">{formatCurrency(analytics.avgOrderValue, currencyCode)}</p>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <span>Per transaction</span>
                 </div>

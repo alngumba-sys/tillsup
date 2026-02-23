@@ -135,22 +135,36 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       
       console.log('Uploading file to Inventoryimages bucket:', filePath);
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // Add timeout wrapper for upload (30 seconds)
+      const uploadPromise = supabase.storage
         .from('Inventoryimages')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timeout - please check your internet connection')), 30000)
+      );
+
+      const { data: uploadData, error: uploadError } = await Promise.race([
+        uploadPromise,
+        timeoutPromise
+      ]) as any;
         
       if (uploadError) {
         console.error('Upload error:', uploadError);
         if (uploadError.message.includes("violates row-level security") || uploadError.message.includes("new row violates")) {
           toast.error("Upload Permission Error", {
-            description: "Storage bucket not configured. Please contact administrator."
+            description: "Storage bucket RLS not configured. Go to Supabase Dashboard > Storage > Inventoryimages > Policies and add 'Allow authenticated uploads' policy."
           });
         } else if (uploadError.message.includes("Bucket not found")) {
           toast.error("Storage Not Configured", {
-            description: "The Inventoryimages bucket doesn't exist. Please run the storage setup SQL."
+            description: "The 'Inventoryimages' bucket doesn't exist. Please create it in Supabase Dashboard > Storage with 'Public bucket' enabled."
+          });
+        } else if (uploadError.message.includes("timeout")) {
+          toast.error("Upload Timeout", {
+            description: "Upload took too long. Check your internet connection and try again with a smaller file."
           });
         } else {
           toast.error("Upload failed", {
@@ -172,9 +186,15 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       
     } catch (error: any) {
       console.error('Error uploading image:', error);
-      toast.error("Upload failed", {
-        description: error.message || "Failed to upload image"
-      });
+      if (error.message?.includes('timeout')) {
+        toast.error("Upload Timeout", {
+          description: "Upload took too long. Check your internet connection and try again with a smaller file."
+        });
+      } else {
+        toast.error("Upload failed", {
+          description: error.message || "Failed to upload image. Please try again."
+        });
+      }
     } finally {
       setIsUploading(false);
       // Reset file input

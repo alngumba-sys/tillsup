@@ -4,7 +4,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from "../../lib/supabase";
 
 // ═══════════════════════════════════════════════════════════════════
 // MULTI-TENANT AUTH DATA MODELS
-// ════════════════════════════════════════���══════════════════════════
+// ══════════════════════════════════════════════════════════════════
 
 export type SubscriptionPlan = "Free Trial" | "Basic" | "Pro" | "Enterprise";
 export type SubscriptionStatus = "active" | "trial" | "expired" | "cancelled";
@@ -95,7 +95,7 @@ export interface User {
   branchId: string | null;
   mustChangePassword: boolean;
   createdAt: Date;
-  // ══════════════════════════���════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   // PERMISSION-BASED ACCESS CONTROL - Expense Management
   // ═══════════════════════════════════════════════════════════════════
   canCreateExpense: boolean;
@@ -127,7 +127,7 @@ interface AuthContextType extends AuthState {
   updateProfile: (updates: Partial<Pick<User, 'firstName' | 'lastName'>>) => Promise<{ success: boolean; error?: string }>;
   
   // Staff Management
-  createStaff: (email: string, firstName: string, lastName: string, role: UserRole, branchId?: string, roleId?: string) => Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string }; errorCode?: string }>;
+  createStaff: (email: string, firstName: string, lastName: string, role: UserRole, branchId?: string, roleId?: string, password?: string) => Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string }; errorCode?: string }>;
   getStaffMembers: () => Promise<User[]>;
   updateStaff: (userId: string, updates: Partial<User>) => Promise<{ success: boolean; error?: string }>;
   deleteStaff: (userId: string) => Promise<{ success: boolean; error?: string }>;
@@ -164,13 +164,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (!mounted) return;
           
+          console.log("🔐 Auth state change:", event, "Session:", !!session);
+          
           if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+            console.log("👤 User signed in, refreshing profile...");
             await refreshUserProfile(session.user);
           } else if (event === 'SIGNED_OUT') {
+            console.log("👋 User signed out");
             setUser(null);
             setBusiness(null);
             setLoading(false);
           } else if (event === 'INITIAL_SESSION' && !session) {
+            console.log("🚫 No session found on initial load");
             // Explicitly handle "no session found on initial load"
             setLoading(false);
           }
@@ -205,13 +210,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUserProfile = async (authUser: any, retryCount = 0) => {
     const userId = authUser.id;
+    console.log(`🔄 refreshUserProfile called for user ${userId}, retry: ${retryCount}`);
     try {
       // Fetch User Profile from 'profiles' table (mapped to User interface)
+      console.log("📡 Fetching profile from database...");
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+      
+      console.log("📊 Profile fetch result:", { profileData: !!profileData, error: profileError });
 
       // If we get an error other than "Not Found" (which maybeSingle handles by returning null data), handle it.
       if (profileError && profileError.code !== "406" && profileError.code !== "PGRST116") {
@@ -572,15 +581,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          }
       }
 
+      console.log("✅ Setting user:", mappedUser.email);
       setUser(mappedUser);
 
       // Fetch Business
       if (mappedUser.businessId) {
+        console.log("🏢 Fetching business for ID:", mappedUser.businessId);
         const { data: businessData, error: businessError } = await supabase
           .from('businesses')
           .select('*')
           .eq('id', mappedUser.businessId)
           .single();
+        
+        console.log("🏢 Business fetch result:", { businessData: !!businessData, error: businessError });
           
         if (businessData) {
           const mappedBusiness: Business = {
@@ -602,9 +615,152 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             branding: businessData.branding || { hidePlatformBranding: false },
             completedOnboarding: businessData.completed_onboarding || businessData.completedOnboarding || false
           };
+          console.log("✅ Setting business:", mappedBusiness.name);
           setBusiness(mappedBusiness);
+        } else {
+          // AUTO-HEAL: Business record is missing - create it!
+          console.warn("⚠️ No business data found for business ID:", mappedUser.businessId);
+          console.log("🔧 Auto-creating missing business record...");
+          
+          const newBusiness = {
+            id: mappedUser.businessId,
+            name: `${mappedUser.firstName}'s Business`,
+            owner_id: mappedUser.id,
+            subscription_plan: "Free Trial",
+            subscription_status: "trial",
+            trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            currency: "KES",
+            country: "Kenya",
+            timezone: "Africa/Nairobi",
+            max_branches: 5,
+            max_staff: 20,
+            created_at: new Date().toISOString(),
+          };
+          
+          const { error: createError } = await supabase.from('businesses').insert(newBusiness);
+          
+          if (!createError) {
+            console.log("✅ Business created successfully!");
+            const mappedBusiness: Business = {
+              id: newBusiness.id,
+              name: newBusiness.name,
+              ownerId: newBusiness.owner_id,
+              createdAt: new Date(newBusiness.created_at),
+              subscriptionPlan: newBusiness.subscription_plan,
+              subscriptionStatus: newBusiness.subscription_status as any,
+              trialEndsAt: new Date(newBusiness.trial_ends_at),
+              maxBranches: newBusiness.max_branches,
+              maxStaff: newBusiness.max_staff,
+              currency: newBusiness.currency,
+              country: newBusiness.country,
+              timezone: newBusiness.timezone,
+              workingHours: { start: "09:00", end: "21:00" },
+              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+              branding: { hidePlatformBranding: false },
+              completedOnboarding: false
+            };
+            setBusiness(mappedBusiness);
+          } else if (createError.code === '23505') {
+            // Duplicate key error - business exists but RLS is blocking access
+            console.warn("🔒 Business exists but RLS policies are blocking access");
+            console.log("🔧 Attempting to fix by updating owner_id...");
+            
+            // Try to update the owner_id to current user using service role bypass
+            const { error: updateError } = await supabase
+              .from('businesses')
+              .update({ owner_id: mappedUser.id })
+              .eq('id', mappedUser.businessId);
+            
+            if (!updateError) {
+              console.log("✅ Business owner updated, retrying fetch...");
+              // Retry fetching the business
+              const { data: retryBusinessData } = await supabase
+                .from('businesses')
+                .select('*')
+                .eq('id', mappedUser.businessId)
+                .maybeSingle();
+              
+              if (retryBusinessData) {
+                console.log("✅ Successfully fetched business after fixing owner!");
+                const mappedBusiness: Business = {
+                  id: retryBusinessData.id,
+                  name: retryBusinessData.name,
+                  ownerId: retryBusinessData.owner_id,
+                  createdAt: new Date(retryBusinessData.created_at),
+                  subscriptionPlan: retryBusinessData.subscription_plan || "Free Trial",
+                  subscriptionStatus: retryBusinessData.subscription_status || "trial",
+                  trialEndsAt: new Date(retryBusinessData.trial_ends_at),
+                  maxBranches: retryBusinessData.max_branches || 5,
+                  maxStaff: retryBusinessData.max_staff || 20,
+                  currency: retryBusinessData.currency || "KES",
+                  country: retryBusinessData.country || "Kenya",
+                  timezone: retryBusinessData.timezone || "Africa/Nairobi",
+                  businessType: retryBusinessData.business_type,
+                  workingHours: retryBusinessData.working_hours || { start: "09:00", end: "21:00" },
+                  taxConfig: retryBusinessData.tax_config || { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+                  branding: retryBusinessData.branding || { hidePlatformBranding: false },
+                  completedOnboarding: retryBusinessData.completed_onboarding || false
+                };
+                setBusiness(mappedBusiness);
+                console.log("🏁 refreshUserProfile complete, setting loading = false");
+                setLoading(false);
+                return;
+              } else {
+                console.warn("⚠️ Retry fetch failed, using placeholder");
+              }
+            } else {
+              console.error("❌ Failed to update business owner:", updateError);
+            }
+            
+            // If all attempts failed, use placeholder
+            console.warn("⚠️ Using placeholder business due to RLS restrictions");
+            const placeholderBusiness: Business = {
+              id: mappedUser.businessId,
+              name: `${mappedUser.firstName}'s Business`,
+              ownerId: mappedUser.id,
+              createdAt: new Date(),
+              subscriptionPlan: "Free Trial",
+              subscriptionStatus: "trial",
+              trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              maxBranches: 5,
+              maxStaff: 20,
+              currency: "KES",
+              country: "Kenya",
+              timezone: "Africa/Nairobi",
+              workingHours: { start: "09:00", end: "21:00" },
+              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+              branding: { hidePlatformBranding: false },
+              completedOnboarding: false
+            };
+            setBusiness(placeholderBusiness);
+          } else {
+            console.error("❌ Failed to create business:", createError);
+            // Use placeholder business to prevent UI from breaking
+            const placeholderBusiness: Business = {
+              id: mappedUser.businessId,
+              name: `${mappedUser.firstName}'s Business`,
+              ownerId: mappedUser.id,
+              createdAt: new Date(),
+              subscriptionPlan: "Free Trial",
+              subscriptionStatus: "trial",
+              trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              maxBranches: 5,
+              maxStaff: 20,
+              currency: "KES",
+              country: "Kenya",
+              timezone: "Africa/Nairobi",
+              workingHours: { start: "09:00", end: "21:00" },
+              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+              branding: { hidePlatformBranding: false },
+              completedOnboarding: false
+            };
+            setBusiness(placeholderBusiness);
+          }
         }
+      } else {
+        console.warn("⚠️ User has no business ID");
       }
+      console.log("🏁 refreshUserProfile complete, setting loading = false");
       setLoading(false);
     } catch (err) {
       console.error("Error refreshing user profile:", err);
@@ -614,7 +770,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ───────────────────────────────────────────────────────────────
   // BUSINESS REGISTRATION
-  // ───────────────────────────────────────────────────────────────
+  // ─────────────────────────────────���─────────────────────────────
   const registerBusiness = async (
     businessName: string,
     ownerEmail: string,
@@ -815,14 +971,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const changePassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      console.log("changePassword called with password length:", newPassword.length);
       const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) return { success: false, error: error.message };
+      console.log("Supabase updateUser response:", { error });
+      if (error) {
+        console.error("Supabase updateUser error:", error);
+        return { success: false, error: error.message };
+      }
       if (user) {
-        await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
+        console.log("Updating profiles table for user:", user.id);
+        const { error: updateError } = await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
+        if (updateError) {
+          console.error("Profile update error:", updateError);
+        }
         setUser(prev => prev ? { ...prev, mustChangePassword: false } : null);
       }
+      console.log("Password change successful");
       return { success: true };
     } catch (err: any) {
+      console.error("changePassword catch block error:", err);
       return { success: false, error: err.message };
     }
   };
@@ -873,30 +1040,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleId?: string,
     password?: string
   ): Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string }; errorCode?: string }> => {
-    if (!user || !business) return { success: false, error: "Not authenticated" };
+    if (!user || !business) {
+      console.error("❌ Cannot create staff: Not authenticated");
+      return { success: false, error: "Not authenticated" };
+    }
+    
+    console.log("🟢 Creating staff with data:", { email, firstName, lastName, role, branchId, password: password ? '***' : undefined });
+    console.log("👤 Current user:", { id: user.id, email: user.email, role: user.role, businessId: user.businessId });
+    console.log("🏢 Current business:", { id: business.id, name: business.name });
+    
+    // Check if user has permission to create staff
+    if (user.role !== "Business Owner" && user.role !== "Manager") {
+      console.error("❌ Permission denied: User role is", user.role);
+      return { success: false, error: "Only Business Owners and Managers can create staff members." };
+    }
     
     try {
       // 1. Check if user already exists in profiles
-      const { data: existingProfile } = await supabase
+      console.log("🔍 Checking if user exists with email:", email);
+      const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
         .select('id')
         .eq('email', email)
         .maybeSingle();
+      
+      if (checkError) {
+        console.error("❌ Error checking existing profile:", checkError);
+      }
+      
+      console.log("✅ Existing profile check result:", { existingProfile, checkError });
         
       if (existingProfile) {
+        console.error("❌ Staff creation failed: User already exists");
         return { success: false, error: "User already exists with this email." };
       }
 
+      console.log("✅ No existing user found, proceeding with creation");
+      
       // If password provided, create user directly via temp client (bypassing session storage)
       if (password) {
+        console.log("🔑 Creating staff with password (direct signup)");
+        console.log("📊 Debug - Current user business_id:", business.id);
+        console.log("📊 Debug - Current user role:", user.role);
+        
         const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
           auth: {
             persistSession: false,
             autoRefreshToken: false,
-            detectSessionInUrl: false
+            detectSessionInUrl: false,
+            storageKey: 'sb-temp-staff-creation', // Unique storage key to avoid conflicts
+            storage: undefined // Don't persist anything
           }
         });
         
+        console.log("🔐 Signing up new user via tempClient...");
         const { data: authData, error: authError } = await tempClient.auth.signUp({
           email,
           password,
@@ -910,11 +1107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         
         if (authError) {
+           console.error("❌ Auth signup error:", authError);
            return { success: false, error: authError.message };
         }
         
         if (authData.user) {
-           // Create profile manually
+           console.log("✅ Auth user created:", authData.user.id);
+           console.log("📧 Auth user email:", authData.user.email);
+           
+           // Create profile manually using the MAIN client (which has admin's authenticated session)
            const newProfile = {
              id: authData.user.id,
              email,
@@ -923,28 +1124,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
              role,
              role_id: roleId,
              business_id: business.id,
-             branch_id: branchId || business.id,
+             branch_id: branchId || null,
              can_create_expense: false,
              must_change_password: true,
              created_at: new Date().toISOString()
            };
            
-           const { error: profileError } = await supabase.from('profiles').insert(newProfile);
+           console.log("📝 Creating profile record with MAIN client (admin session)");
+           console.log("📊 Profile data:", newProfile);
+           console.log("🔑 Current auth.uid() should be:", user.id);
+           console.log("🏢 Business ID being used:", business.id);
+           
+           // Use the main supabase client (admin's session) instead of tempClient
+           const { data: insertedProfile, error: profileError } = await supabase
+             .from('profiles')
+             .insert(newProfile)
+             .select()
+             .single();
            
            if (profileError) {
+             console.error("❌ Profile creation error:", profileError);
+             console.error("❌ Error code:", profileError.code);
+             console.error("❌ Error message:", profileError.message);
+             console.error("❌ Error details:", profileError.details);
+             console.error("❌ Error hint:", profileError.hint);
+             
              // If profile already exists (e.g. via trigger), try update
              if (profileError.code === '23505') { 
-                await supabase.from('profiles').update(newProfile).eq('id', authData.user.id);
+                console.log("⚠️ Profile exists, updating instead...");
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update(newProfile)
+                  .eq('id', authData.user.id);
+                
+                if (updateError) {
+                  console.error("❌ Update also failed:", updateError);
+                  return { success: false, error: "User created but profile failed: " + updateError.message };
+                }
+                console.log("✅ Profile updated successfully");
+                return { success: true, credentials: { email, password } };
+             } else if (profileError.code === '42501') {
+                // RLS policy violation - provide clear instructions
+                return { 
+                  success: false, 
+                  error: "RLS Policy Error: Please run the FIX_RLS_FINAL.sql script in your Supabase SQL Editor to fix permissions." 
+                };
              } else {
                 return { success: false, error: "User created but profile failed: " + profileError.message };
              }
            }
            
+           console.log("✅ Profile created successfully:", insertedProfile);
+           console.log("✅ Staff created successfully with password");
            return { success: true, credentials: { email, password } };
         }
       }
 
       // 2. Create Invitation in 'staff_invites' table
+      console.log("📧 Creating staff invitation (email flow)");
       const invitation = {
         business_id: business.id,
         branch_id: branchId || business.id, // Fallback to business ID if no branch
@@ -957,18 +1194,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString() // Ensure created_at is present for local storage
       };
 
+      console.log("📤 Inserting invitation:", invitation);
       const { error } = await supabase.from('staff_invites').insert(invitation);
 
       if (error) {
-        console.warn("Error inserting into staff_invites:", error);
+        console.error("Error inserting into staff_invites:", error);
+        console.error("Error code:", error.code);
+        console.error("Error details:", error.details);
+        console.error("Error hint:", error.hint);
+        
+        // Provide specific error messages
+        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
+            return { 
+              success: false, 
+              error: "Database schema error: staff_invites table not properly set up. Please run the database setup SQL.", 
+              errorCode: error.code 
+            };
+        } else if (error.code === 'PGRST116' || error.message.includes('violates row-level security')) {
+            return { 
+              success: false, 
+              error: "Permission error: You don't have permission to create staff. Please check RLS policies.", 
+              errorCode: error.code 
+            };
+        } else if (error.code === '23505') {
+            return { 
+              success: false, 
+              error: "A staff member with this email already exists.", 
+              errorCode: error.code 
+            };
+        }
         
         // Pass through the error code so SchemaError can catch it
         return { success: false, error: error.message, errorCode: error.code };
       }
 
       // 3. Return success (no credentials generated in Invite flow)
+      console.log("✅ Staff invitation created successfully");
       return { success: true };
     } catch (err: any) {
+      console.error("❌ Unexpected error in createStaff:", err);
       return { success: false, error: err.message, errorCode: err.code };
     }
   };

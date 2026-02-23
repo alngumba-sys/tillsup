@@ -211,11 +211,27 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error("Error adding product:", error);
+        console.error("Error code:", error.code);
+        console.error("Error details:", error.details);
+        console.error("Error hint:", error.hint);
+        
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
             setError(error);
-            // Don't toast if we are showing the large schema error alert
+            toast.error("Database Schema Error", {
+              description: "The inventory table is not properly set up. Please run the database setup SQL."
+            });
+        } else if (error.code === 'PGRST116' || error.message.includes('violates row-level security')) {
+            toast.error("Permission Error", {
+              description: "You don't have permission to add products. Please check RLS policies."
+            });
+        } else if (error.code === '23505') {
+            toast.error("Duplicate Entry", {
+              description: "A product with this SKU already exists."
+            });
         } else {
-            toast.error("Failed to add product: " + (error.message || "Unknown error"));
+            toast.error("Failed to add product", {
+              description: error.message || "Unknown error. Check console for details."
+            });
         }
         return;
       }
@@ -223,9 +239,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (data) {
         // Optimistically update local state or refresh
         await refreshInventory();
+        toast.success("Product added successfully!");
       }
     } catch (err) {
       console.error("Unexpected error adding product:", err);
+      toast.error("Unexpected Error", {
+        description: err instanceof Error ? err.message : "Failed to add product"
+      });
     }
   };
 

@@ -345,7 +345,6 @@ export function SubscriptionBilling() {
                 <div className="bg-white p-2.5 rounded-md border border-emerald-100 shadow-sm">
                   <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Pay To</p>
                   <p className="font-bold text-sm text-emerald-900 leading-tight">WEXLOT LTD PAYMENTS</p>
-                  <p className="text-[10px] text-emerald-600 mt-0.5">PESA</p>
                 </div>
                 <div className="bg-white p-2.5 rounded-md border border-emerald-100 shadow-sm">
                   <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Paybill Number</p>

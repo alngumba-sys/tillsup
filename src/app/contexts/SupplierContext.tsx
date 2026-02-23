@@ -100,6 +100,7 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
     supplier: Omit<Supplier, "id" | "businessId" | "createdAt" | "updatedAt">
   ) => {
     if (!business) {
+        console.error("❌ Cannot add supplier: No business context");
         toast.error("Authentication Error: Business context missing");
         return;
     }
@@ -115,6 +116,8 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
       pin_number: supplier.pinNumber,
     };
 
+    console.log("🟢 Adding supplier to Supabase:", newSupplier);
+
     try {
       const { error } = await supabase
         .from('suppliers')
@@ -124,10 +127,27 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error("Error adding supplier:", error);
+        console.error("Error code:", error.code);
+        console.error("Error details:", error.details);
+        console.error("Error hint:", error.hint);
+        
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
             setError(error);
+            toast.error("Database Schema Error", {
+              description: "The suppliers table is not properly set up. Please run the database setup SQL."
+            });
+        } else if (error.code === 'PGRST116' || error.message.includes('violates row-level security')) {
+            toast.error("Permission Error", {
+              description: "You don't have permission to add suppliers. Please check RLS policies."
+            });
+        } else if (error.code === '23505') {
+            toast.error("Duplicate Entry", {
+              description: "A supplier with this name already exists."
+            });
         } else {
-            toast.error("Failed to add supplier: " + error.message);
+            toast.error("Failed to add supplier", {
+              description: error.message || "Unknown error. Check console for details."
+            });
         }
         return;
       }
@@ -136,7 +156,9 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
       toast.success("Supplier added successfully");
     } catch (err: any) {
       console.error("Unexpected error adding supplier:", err);
-      toast.error("Unexpected error adding supplier");
+      toast.error("Unexpected Error", {
+        description: err instanceof Error ? err.message : "Failed to add supplier"
+      });
     }
   };
 
