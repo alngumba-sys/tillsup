@@ -392,7 +392,7 @@ export function POSTerminal() {
           - Business Owner: Non-blocking warning (can switch branches)
           - Staff/Manager: Full screen block (should never reach here due to login blocking)
           
-          ═══════════════════════════════════════════════════════════════════ */}
+          ═════════════��═════════════════════════════════════════════════════ */}
       {isBranchDeactivated && user?.role !== "Business Owner" && (
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="max-w-md w-full shadow-2xl border-red-200">
@@ -677,7 +677,7 @@ export function POSTerminal() {
       </div>
 
       {/* Desktop Cart Panel */}
-      <div className="hidden lg:block w-96 border-l border-border bg-white sticky top-0 h-screen">
+      <div className="hidden lg:block w-96 border-l border-border bg-white sticky top-0 h-[calc(100vh-4rem)]">
         <CartPanel
           isPOSReady={isPOSReady}
           activeBranch={activeBranch}

@@ -78,15 +78,23 @@ export function CategoriesTab() {
   };
 
   const handleAddCategory = async () => {
-    if (!formData.name.trim()) {
+    const name = formData.name.trim();
+    if (!name) {
       toast.error("Category name is required");
+      return;
+    }
+
+    // Check for duplicates (case-insensitive) to prevent DB errors
+    const existing = getCategoryByName(name);
+    if (existing) {
+      toast.error(`Category "${existing.name}" already exists`);
       return;
     }
 
     setIsProcessing(true);
     try {
       const result = await addCategory({
-        name: formData.name.trim(),
+        name: name,
         description: formData.description.trim(),
       });
       
@@ -231,7 +239,7 @@ export function CategoriesTab() {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════���═════════════════════════
   // DOWNLOAD IMPORT TEMPLATE
   // ═══════════════════════════════════════════════════════════════════
   const downloadImportTemplate = () => {
@@ -626,6 +634,12 @@ export function CategoriesTab() {
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCategory();
+                      }
+                    }}
                     placeholder="e.g., Beverages, Food, Electronics"
                   />
                 </div>

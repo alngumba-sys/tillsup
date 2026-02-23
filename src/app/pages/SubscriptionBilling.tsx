@@ -326,21 +326,21 @@ export function SubscriptionBilling() {
 
       {/* M-Pesa Payment Info (Kenya Only) */}
       {business.country === "Kenya" && (
-        <Card className="bg-emerald-50 border-emerald-200 shadow-sm">
-          <div className="flex flex-col xl:flex-row xl:items-center">
-            <CardHeader className="pb-2 xl:pb-6 flex flex-row items-center gap-4 space-y-0 xl:min-w-fit">
-              <div className="p-2.5 bg-emerald-100 rounded-full border border-emerald-200">
+        <Card className="bg-emerald-50 border-emerald-200 shadow-sm overflow-hidden">
+          <div className="flex flex-col xl:flex-row xl:items-center gap-6 p-1">
+            <CardHeader className="pb-2 xl:pb-6 flex flex-row items-center gap-4 space-y-0 shrink-0 xl:w-auto">
+              <div className="p-2.5 bg-emerald-100 rounded-full border border-emerald-200 shrink-0">
                 <Smartphone className="w-6 h-6 text-emerald-700" />
               </div>
               <div>
-                <CardTitle className="text-lg text-emerald-900">M-PESA Payment Details</CardTitle>
+                <CardTitle className="text-lg text-emerald-900">M-PESA Payment</CardTitle>
                 <CardDescription className="text-emerald-700">
                   Pay instantly via M-PESA
                 </CardDescription>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 pt-0 xl:pt-6 xl:pl-0">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <CardContent className="flex-1 pt-0 xl:pt-6 xl:pl-0 min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="bg-white p-3 rounded-md border border-emerald-100 shadow-sm">
                   <p className="text-xs text-muted-foreground uppercase font-semibold mb-1">Pay To</p>
                   <p className="font-bold text-emerald-900">WEXLOT LTD PAYMENTS</p>
