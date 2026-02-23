@@ -20,6 +20,7 @@ import { useSubscription } from "../hooks/useSubscription";
 import { CartPanel } from "../components/pos/CartPanel";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
+import { SchemaError } from "../components/inventory/SchemaError";
 
 interface Product {
   id: string;
@@ -41,7 +42,7 @@ interface CartItem extends Product {
   quantity: number;
   // ═══════════════════════════════════════════════════════════════════
   // PRICING EXTENSION - Track selected price tier
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════��
   selectedPrice: number; // The actual price being used for this cart item
   priceType: "retail" | "wholesale"; // Which price tier was selected
 }
@@ -68,8 +69,8 @@ export function POSTerminal() {
   const { recordSale } = useSales();
   const { user, business } = useAuth();
   const { formatCurrency } = useCurrency();
-  const { selectedBranchId, branches, setSelectedBranchId } = useBranch();
-  const { activeCategories } = useCategory();
+  const { selectedBranchId, branches, setSelectedBranchId, error: branchError } = useBranch();
+  const { activeCategories, error: categoryError } = useCategory();
   const { hasFeature, plan } = useSubscription();
   const navigate = useNavigate();
   
@@ -130,6 +131,7 @@ export function POSTerminal() {
       category: item.category,
       stock: item.stock,
       branchId: item.branchId,
+      image: item.image,
       // PRICING EXTENSION: Include new pricing fields
       costPrice: item.costPrice,
       retailPrice: item.retailPrice || item.price, // Default to legacy price
@@ -140,6 +142,8 @@ export function POSTerminal() {
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    // Fix: selectedCategory now stores the Category ID (or "All"), and product.category is the Category ID.
+    // This allows direct comparison.
     const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -265,7 +269,7 @@ export function POSTerminal() {
   const tax = useMemo(() => subtotal * 0.16, [subtotal]);
   const total = useMemo(() => subtotal + tax, [subtotal, tax]);
 
-  const handleCheckout = useCallback(() => {
+  const handleCheckout = useCallback(async () => {
     // Clear any previous validation errors
     setValidationError(null);
 
@@ -287,11 +291,11 @@ export function POSTerminal() {
     }));
 
     // STEP 2: Attempt to deduct inventory (with validation)
-    const result = deductMultipleStock(stockDeductions);
+    const result = await deductMultipleStock(stockDeductions);
 
     // STEP 3: Handle validation failures
     if (!result.success) {
-      setValidationError(result.errors.join(", "));
+      setValidationError(result.errors ? result.errors.join(", ") : "Unknown error occurred");
       return; // Block checkout if validation fails
     }
 
@@ -311,7 +315,7 @@ export function POSTerminal() {
     }));
 
     // Record the sale with complete details
-    recordSale({
+    const saleResult = await recordSale({
       items: saleItems,
       subtotal,
       tax,
@@ -333,7 +337,11 @@ export function POSTerminal() {
     
     // STEP 5: Generate fiscal receipt data if enabled
     if (generateFiscalReceipt) {
-      const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+      // Use sequential readableId if available, otherwise generate a fallback
+      const receiptNumber = saleResult.readableId 
+        ? `#${saleResult.readableId.toString().padStart(5, '0')}`
+        : `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+        
       setReceiptData({
         receiptNumber,
         date: new Date(),
@@ -416,6 +424,9 @@ export function POSTerminal() {
 
       {/* Products Section */}
       <div className="flex-1 flex flex-col">
+        {/* Schema Error Display */}
+        {(categoryError || branchError) && <div className="p-4 bg-white border-b"><SchemaError error={categoryError || branchError} /></div>}
+
         <div className="p-4 lg:p-6 border-b border-border bg-white sticky top-0 z-10">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-3xl">POS Terminal</h1>
@@ -520,9 +531,11 @@ export function POSTerminal() {
               {activeCategories.map((category) => (
                 <Badge
                   key={category.id}
-                  variant={selectedCategory === category.name ? "default" : "outline"}
+                  // Fix: Use category.id for comparison and selection, not category.name
+                  // product.category stores the Category ID (UUID), so filtering must match UUIDs.
+                  variant={selectedCategory === category.id ? "default" : "outline"}
                   className="cursor-pointer whitespace-nowrap"
-                  onClick={() => setSelectedCategory(category.name)}
+                  onClick={() => setSelectedCategory(category.id)}
                 >
                   {category.name}
                 </Badge>
@@ -576,15 +589,22 @@ export function POSTerminal() {
                   onClick={() => addToCart(product)}
                 >
                   <CardContent className="p-4">
-                    <div className="aspect-square bg-slate-100 rounded-lg mb-3 flex items-center justify-center">
-                      <Package className="w-12 h-12 text-slate-400" />
-                    </div>
-                    <h4 className="font-medium mb-1 line-clamp-1">{product.name}</h4>
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-lg">{formatCurrency(product.price)}</span>
-                      <Badge variant={product.stock > 10 ? "secondary" : "destructive"} className="text-xs">
+                    <div className="relative aspect-square bg-slate-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                      {product.image ? (
+                        <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Package className="w-12 h-12 text-slate-400" />
+                      )}
+                      <Badge 
+                        variant={product.stock > 10 ? "secondary" : "destructive"} 
+                        className={`absolute top-2 right-2 text-[10px] shadow-sm backdrop-blur-sm ${product.stock > 10 ? "bg-white/90 hover:bg-white text-slate-700" : ""}`}
+                      >
                         {product.stock} left
                       </Badge>
+                    </div>
+                    <h4 className="font-medium mb-1 line-clamp-1 text-[14px]">{product.name}</h4>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[16px]">{formatCurrency(product.price)}</span>
                     </div>
                   </CardContent>
                 </Card>

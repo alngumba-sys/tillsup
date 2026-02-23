@@ -13,7 +13,7 @@ interface KPIContextType {
   kpiUpdated: boolean;
 }
 
-const KPIContext = createContext<KPIContextType | undefined>(undefined);
+export const KPIContext = createContext<KPIContextType | undefined>(undefined);
 
 export function KPIProvider({ children }: { children: ReactNode }) {
   const [kpiData, setKpiData] = useState<KPIData>({

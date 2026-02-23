@@ -154,7 +154,7 @@ export function ReportsEnhanced() {
 
   // ═══════════════════════════════════════════════════════════════════
   // APPLY FILTERS
-  // ═══════════════════════════════════════════════════════════════════
+  // ════════════��══════════════════════════════════════════════════════
   const activeBranchId = defaultBranchId || (filterBranchId !== "ALL_BRANCHES" ? filterBranchId : undefined);
   const activeStaffId = defaultStaffId || (filterStaffId !== "ALL_STAFF" ? filterStaffId : undefined);
 
@@ -868,7 +868,11 @@ export function ReportsEnhanced() {
                         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                         .map((sale) => (
                           <TableRow key={sale.id}>
-                            <TableCell className="font-mono text-xs">{sale.id}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {sale.readableId 
+                                ? `#${sale.readableId.toString().padStart(5, '0')}` 
+                                : sale.id.substring(0, 8)}
+                            </TableCell>
                             <TableCell className="text-sm">
                               <div>{new Date(sale.timestamp).toLocaleDateString()}</div>
                               <div className="text-xs text-muted-foreground">

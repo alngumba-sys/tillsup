@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "./AuthContext";
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPENSE DATA MODEL - Multi-Tenant Accounting with Branch Isolation
@@ -89,7 +91,10 @@ export interface Expense {
 
 interface ExpenseContextType {
   expenses: Expense[];
-  createExpense: (expense: Omit<Expense, "id" | "createdAt">) => { success: boolean; error?: string };
+  loading: boolean;
+  error: any;
+  refreshExpenses: () => Promise<void>;
+  createExpense: (expense: Omit<Expense, "id" | "createdAt" | "status">) => Promise<{ success: boolean; error?: any }>;
   getExpensesForBusiness: (businessId: string) => Expense[];
   getExpensesForBranch: (branchId: string) => Expense[];
   getExpensesForStaff: (staffId: string) => Expense[];
@@ -102,14 +107,14 @@ interface ExpenseContextType {
   // ═══════════════════════════════════════════════════════════════════
   // APPROVAL WORKFLOW (Part 4)
   // ═══════════════════════════════════════════════════════════════════
-  submitExpense: (expenseId: string) => { success: boolean; error?: string };
-  approveExpense: (expenseId: string, approvedBy: string, approvedByName: string) => { success: boolean; error?: string };
-  rejectExpense: (expenseId: string, rejectedBy: string, rejectedByName: string, reason?: string) => { success: boolean; error?: string };
+  submitExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
+  approveExpense: (expenseId: string, approvedBy: string, approvedByName: string) => Promise<{ success: boolean; error?: string }>;
+  rejectExpense: (expenseId: string, rejectedBy: string, rejectedByName: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   
   // ══════════════════════════════════════════════════════════════════
   // PAYMENT WORKFLOW (Part 5)
   // ═══════════════════════════════════════════════════════════════════
-  markExpenseAsPaid: (expenseId: string, paidBy: string, paidByName: string, paymentMethod: PaymentMethod) => { success: boolean; error?: string };
+  markExpenseAsPaid: (expenseId: string, paidBy: string, paidByName: string, paymentMethod: PaymentMethod) => Promise<{ success: boolean; error?: string }>;
   
   // ═══════════════════════════════════════════════════════════════════
   // FILTERED QUERIES (Part 6)
@@ -119,52 +124,98 @@ interface ExpenseContextType {
   getTotalPaidExpenses: (businessId?: string, branchId?: string) => number;
   getPendingApprovalExpenses: (businessId: string) => Expense[];
   getApprovedExpenses: (businessId?: string) => Expense[];
+  deleteExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
+export const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPENSE PROVIDER - Single Source of Truth for All Expense Data
 // ═══════════════════════════════════════════════════════════════════
 
-const STORAGE_KEY = "pos_expense_records";
-
 export function ExpenseProvider({ children }: { children: ReactNode }) {
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    // Load from localStorage on init
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return parsed.map((e: Expense) => ({
-          ...e,
-          date: new Date(e.date),
-          createdAt: new Date(e.createdAt),
-          approvedAt: e.approvedAt ? new Date(e.approvedAt) : undefined,
-          rejectedAt: e.rejectedAt ? new Date(e.rejectedAt) : undefined,
-          paidAt: e.paidAt ? new Date(e.paidAt) : undefined,
-        }));
-      }
-    } catch (error) {
-      console.error("Failed to load expenses from localStorage:", error);
-    }
-    return [];
+  const { business } = useAuth();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<any>(null);
+
+  // Helper to map DB record to Expense object
+  const mapExpenseFromDB = (record: any): Expense => ({
+    id: record.id,
+    title: record.title,
+    category: record.category as ExpenseCategory,
+    description: record.description,
+    amount: Number(record.amount),
+    businessId: record.business_id,
+    branchId: record.branch_id,
+    createdByStaffId: record.created_by,
+    createdByStaffName: record.created_by_name,
+    createdByRole: record.created_by_role,
+    date: new Date(record.date),
+    createdAt: new Date(record.created_at),
+    status: record.status as ExpenseStatus,
+    approvedBy: record.approved_by,
+    approvedByName: record.approved_by_name,
+    approvedAt: record.approved_at ? new Date(record.approved_at) : undefined,
+    rejectedBy: record.rejected_by,
+    rejectedByName: record.rejected_by_name,
+    rejectedAt: record.rejected_at ? new Date(record.rejected_at) : undefined,
+    rejectionReason: record.rejection_reason,
+    paymentMethod: record.payment_method as PaymentMethod,
+    paidAt: record.paid_at ? new Date(record.paid_at) : undefined,
+    paidBy: record.paid_by,
+    paidByName: record.paid_by_name,
+    staffId: record.staff_id,
+    salaryMonth: record.salary_month,
+    salaryPeriod: record.salary_period,
+    sourceType: record.source_type as ExpenseSource,
+    sourceReferenceId: record.source_reference_id,
+    sourceReferenceNumber: record.source_reference_number,
+    isSystemGenerated: record.is_system_generated
   });
 
-  // Persist to localStorage whenever expenses change
-  const updateExpenses = (newExpenses: Expense[]) => {
-    setExpenses(newExpenses);
+  // Fetch expenses from Supabase
+  const refreshExpenses = async () => {
+    if (!business) return;
+    
+    setLoading(true);
+    setError(null);
+    
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newExpenses));
-    } catch (error) {
-      console.error("Failed to save expenses to localStorage:", error);
+      const { data, error: fetchError } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('business_id', business.id);
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      if (data) {
+        setExpenses(data.map(mapExpenseFromDB));
+      }
+    } catch (err) {
+      console.error("Error fetching expenses:", err);
+      setError(err);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (business) {
+      refreshExpenses();
+    } else {
+      setExpenses([]);
+    }
+  }, [business]);
 
   // ───────────────────────────────────────────────────────────────
   // CORE: Create Expense
   // ───────────────────────────────────────────────────────────────
-  const createExpense = (expenseData: Omit<Expense, "id" | "createdAt">): { success: boolean; error?: string } => {
+  const createExpense = async (expenseData: Omit<Expense, "id" | "createdAt" | "status">): Promise<{ success: boolean; error?: any }> => {
+    if (!business) return { success: false, error: "No business context" };
+
     // Validation
     if (!expenseData.title || expenseData.title.trim() === "") {
       return { success: false, error: "Title is required" };
@@ -178,19 +229,46 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Branch is required" };
     }
 
-    if (!expenseData.businessId) {
-      return { success: false, error: "Business ID is required" };
-    }
-
-    const newExpense: Expense = {
-      ...expenseData,
-      id: `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date(),
+    const dbRecord = {
+      title: expenseData.title,
+      category: expenseData.category,
+      description: expenseData.description,
+      amount: expenseData.amount,
+      business_id: business.id,
+      branch_id: expenseData.branchId,
+      created_by: expenseData.createdByStaffId,
+      created_by_name: expenseData.createdByStaffName,
+      created_by_role: expenseData.createdByRole,
+      date: expenseData.date,
       status: "DRAFT",
+      staff_id: expenseData.staffId,
+      salary_month: expenseData.salaryMonth,
+      salary_period: expenseData.salaryPeriod,
+      source_type: expenseData.sourceType || "MANUAL",
+      source_reference_id: expenseData.sourceReferenceId,
+      source_reference_number: expenseData.sourceReferenceNumber,
+      is_system_generated: expenseData.isSystemGenerated || false
     };
 
-    updateExpenses([...expenses, newExpense]);
-    return { success: true };
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert(dbRecord)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setExpenses(prev => [...prev, mapExpenseFromDB(data)]);
+        return { success: true };
+      }
+      return { success: false, error: "No data returned from insert" };
+    } catch (err: any) {
+      console.error("Error creating expense:", err);
+      setError(err);
+      return { success: false, error: err.message || err };
+    }
   };
 
   // ───────────────────────────────────────────────────────────────
@@ -315,124 +393,132 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
   // ───────────────────────────────────────────────────────────────
   // APPROVAL WORKFLOW: Submit Expense for Approval
   // ───────────────────────────────────────────────────────────────
-  const submitExpense = (expenseId: string): { success: boolean; error?: string } => {
-    const expenseIndex = expenses.findIndex((expense) => expense.id === expenseId);
-    if (expenseIndex === -1) {
-      return { success: false, error: "Expense not found" };
+  const submitExpense = async (expenseId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .update({ status: 'PENDING_APPROVAL' })
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      setExpenses(prev => prev.map(e => 
+        e.id === expenseId ? { ...e, status: "PENDING_APPROVAL" } : e
+      ));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error submitting expense:", err);
+      return { success: false, error: err.message };
     }
-
-    const expense = expenses[expenseIndex];
-    if (expense.status !== "DRAFT") {
-      return { success: false, error: "Expense is not in draft status" };
-    }
-
-    const updatedExpense: Expense = {
-      ...expense,
-      status: "PENDING_APPROVAL",
-    };
-
-    updateExpenses([
-      ...expenses.slice(0, expenseIndex),
-      updatedExpense,
-      ...expenses.slice(expenseIndex + 1),
-    ]);
-
-    return { success: true };
   };
 
   // ───────────────────────────────────────────────────────────────
   // APPROVAL WORKFLOW: Approve Expense
   // ───────────────────────────────────────────────────────────────
-  const approveExpense = (expenseId: string, approvedBy: string, approvedByName: string): { success: boolean; error?: string } => {
-    const expenseIndex = expenses.findIndex((expense) => expense.id === expenseId);
-    if (expenseIndex === -1) {
-      return { success: false, error: "Expense not found" };
+  const approveExpense = async (expenseId: string, approvedBy: string, approvedByName: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const updates = {
+        status: 'APPROVED',
+        approved_by: approvedBy,
+        approved_by_name: approvedByName,
+        approved_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('expenses')
+        .update(updates)
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      setExpenses(prev => prev.map(e => 
+        e.id === expenseId ? { 
+          ...e, 
+          status: "APPROVED",
+          approvedBy,
+          approvedByName,
+          approvedAt: new Date()
+        } : e
+      ));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error approving expense:", err);
+      return { success: false, error: err.message };
     }
-
-    const expense = expenses[expenseIndex];
-    if (expense.status !== "PENDING_APPROVAL") {
-      return { success: false, error: "Expense is not pending approval" };
-    }
-
-    const updatedExpense: Expense = {
-      ...expense,
-      status: "APPROVED",
-      approvedBy,
-      approvedByName,
-      approvedAt: new Date(),
-    };
-
-    updateExpenses([
-      ...expenses.slice(0, expenseIndex),
-      updatedExpense,
-      ...expenses.slice(expenseIndex + 1),
-    ]);
-
-    return { success: true };
   };
 
   // ───────────────────────────────────────────────────────────────
   // APPROVAL WORKFLOW: Reject Expense
   // ───────────────────────────────────────────────────────────────
-  const rejectExpense = (expenseId: string, rejectedBy: string, rejectedByName: string, reason?: string): { success: boolean; error?: string } => {
-    const expenseIndex = expenses.findIndex((expense) => expense.id === expenseId);
-    if (expenseIndex === -1) {
-      return { success: false, error: "Expense not found" };
+  const rejectExpense = async (expenseId: string, rejectedBy: string, rejectedByName: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const updates = {
+        status: 'REJECTED',
+        rejected_by: rejectedBy,
+        rejected_by_name: rejectedByName,
+        rejected_at: new Date().toISOString(),
+        rejection_reason: reason
+      };
+
+      const { error } = await supabase
+        .from('expenses')
+        .update(updates)
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      setExpenses(prev => prev.map(e => 
+        e.id === expenseId ? { 
+          ...e, 
+          status: "REJECTED",
+          rejectedBy,
+          rejectedByName,
+          rejectedAt: new Date(),
+          rejectionReason: reason
+        } : e
+      ));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error rejecting expense:", err);
+      return { success: false, error: err.message };
     }
-
-    const expense = expenses[expenseIndex];
-    if (expense.status !== "PENDING_APPROVAL") {
-      return { success: false, error: "Expense is not pending approval" };
-    }
-
-    const updatedExpense: Expense = {
-      ...expense,
-      status: "REJECTED",
-      rejectedBy,
-      rejectedByName,
-      rejectedAt: new Date(),
-      rejectionReason: reason,
-    };
-
-    updateExpenses([
-      ...expenses.slice(0, expenseIndex),
-      updatedExpense,
-      ...expenses.slice(expenseIndex + 1),
-    ]);
-
-    return { success: true };
   };
 
   // ───────────────────────────────────────────────────────────────
   // PAYMENT WORKFLOW: Mark Expense as Paid
   // ───────────────────────────────────────────────────────────────
-  const markExpenseAsPaid = (expenseId: string, paidBy: string, paidByName: string, paymentMethod: PaymentMethod): { success: boolean; error?: string } => {
-    const expenseIndex = expenses.findIndex((expense) => expense.id === expenseId);
-    if (expenseIndex === -1) {
-      return { success: false, error: "Expense not found" };
+  const markExpenseAsPaid = async (expenseId: string, paidBy: string, paidByName: string, paymentMethod: PaymentMethod): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const updates = {
+        status: 'PAID',
+        payment_method: paymentMethod,
+        paid_by: paidBy,
+        paid_by_name: paidByName,
+        paid_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('expenses')
+        .update(updates)
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      setExpenses(prev => prev.map(e => 
+        e.id === expenseId ? { 
+          ...e, 
+          status: "PAID",
+          paymentMethod,
+          paidBy,
+          paidByName,
+          paidAt: new Date()
+        } : e
+      ));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error marking expense as paid:", err);
+      return { success: false, error: err.message };
     }
-
-    const expense = expenses[expenseIndex];
-    if (expense.status !== "APPROVED") {
-      return { success: false, error: "Expense is not approved" };
-    }
-
-    const updatedExpense: Expense = {
-      ...expense,
-      status: "PAID",
-      paymentMethod,
-      paidBy,
-      paidByName,
-      paidAt: new Date(),
-    };
-
-    updateExpenses([
-      ...expenses.slice(0, expenseIndex),
-      updatedExpense,
-      ...expenses.slice(expenseIndex + 1),
-    ]);
-
-    return { success: true };
   };
 
   // ──────────────────────────────────────────────────────────────
@@ -463,10 +549,33 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
     return filterExpenses(businessId).filter((expense) => expense.status === "APPROVED");
   };
 
+  // ───────────────────────────────────────────────────────────────
+  // CORE: Delete Expense
+  // ───────────────────────────────────────────────────────────────
+  const deleteExpense = async (expenseId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      setExpenses(prev => prev.filter(e => e.id !== expenseId));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error deleting expense:", err);
+      return { success: false, error: err.message };
+    }
+  };
+
   return (
     <ExpenseContext.Provider
       value={{
         expenses,
+        loading,
+        error,
+        refreshExpenses,
         createExpense,
         getExpensesForBusiness,
         getExpensesForBranch,
@@ -490,6 +599,7 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
         getTotalPaidExpenses,
         getPendingApprovalExpenses,
         getApprovedExpenses,
+        deleteExpense
       }}
     >
       {children}
@@ -504,7 +614,32 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
 export function useExpense() {
   const context = useContext(ExpenseContext);
   if (context === undefined) {
-    throw new Error("useExpense must be used within an ExpenseProvider");
+    // Fallback to prevent crashes if context is missing
+    console.warn("useExpense used outside ExpenseProvider - returning fallback context");
+    return {
+      expenses: [],
+      loading: false,
+      error: "Context missing",
+      refreshExpenses: async () => {},
+      createExpense: async () => ({ success: false, error: "Expense context missing" }),
+      getExpensesForBusiness: () => [],
+      getExpensesForBranch: () => [],
+      getExpensesForStaff: () => [],
+      getExpensesByDateRange: () => [],
+      getTotalExpenses: () => 0,
+      getTotalExpensesToday: () => 0,
+      getExpensesByBranch: () => new Map(),
+      getExpensesByCategory: () => new Map(),
+      submitExpense: async () => ({ success: false, error: "Context missing" }),
+      approveExpense: async () => ({ success: false, error: "Context missing" }),
+      rejectExpense: async () => ({ success: false, error: "Context missing" }),
+      markExpenseAsPaid: async () => ({ success: false, error: "Context missing" }),
+      getPaidExpenses: () => [],
+      getTotalPaidExpenses: () => 0,
+      getPendingApprovalExpenses: () => [],
+      getApprovedExpenses: () => [],
+      deleteExpense: async () => ({ success: false, error: "Context missing" }),
+    } as ExpenseContextType;
   }
   return context;
 }

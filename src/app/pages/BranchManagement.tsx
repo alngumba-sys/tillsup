@@ -21,13 +21,15 @@ import {
   DialogFooter,
   DialogTrigger
 } from "../components/ui/dialog";
-import { Building2, Plus, MapPin, Edit, CheckCircle, XCircle, Upload, Download, FileSpreadsheet, AlertTriangle } from "lucide-react";
+import { Building2, Plus, MapPin, Edit, CheckCircle, XCircle, Upload, Download, FileSpreadsheet, AlertTriangle, Trash2, Bug } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 import { useBranch } from "../contexts/BranchContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useSubscription } from "../hooks/useSubscription";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { SchemaError } from "../components/inventory/SchemaError";
 import { useNavigate } from "react-router";
 
 export function BranchManagement() {
@@ -40,6 +42,8 @@ export function BranchManagement() {
   const branches = branchContext?.branches || [];
   const createBranch = branchContext?.createBranch || (() => ({ success: false, error: "Service unavailable" }));
   const updateBranch = branchContext?.updateBranch || (() => ({ success: false, error: "Service unavailable" }));
+  const deleteBranch = branchContext?.deleteBranch || (() => ({ success: false, error: "Service unavailable" }));
+  const contextError = branchContext?.error;
   
   const canCreateBranch = subscription?.canCreateBranch || (() => false);
   const plan = subscription?.plan || { name: "Unknown", limits: { maxBranches: 1 } };
@@ -47,6 +51,9 @@ export function BranchManagement() {
   
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -66,8 +73,8 @@ export function BranchManagement() {
     totalRows: number;
   } | null>(null);
 
-  const handleAddBranch = () => {
-    const result = createBranch(formData.name, formData.location);
+  const handleAddBranch = async () => {
+    const result = await createBranch(formData.name, formData.location);
     
     if (result.success) {
       toast.success("Branch created successfully!");
@@ -78,10 +85,10 @@ export function BranchManagement() {
     }
   };
 
-  const handleEditBranch = () => {
+  const handleEditBranch = async () => {
     if (!editingBranch) return;
     
-    const result = updateBranch(editingBranch, {
+    const result = await updateBranch(editingBranch, {
       name: formData.name,
       location: formData.location
     });
@@ -96,15 +103,46 @@ export function BranchManagement() {
     }
   };
 
-  const handleToggleStatus = (branchId: string, currentStatus: "active" | "inactive") => {
+  const handleToggleStatus = async (branchId: string, currentStatus: "active" | "inactive") => {
     const newStatus = currentStatus === "active" ? "inactive" : "active";
-    const result = updateBranch(branchId, { status: newStatus });
+    const result = await updateBranch(branchId, { status: newStatus });
     
     if (result.success) {
       toast.success(`Branch ${newStatus === "active" ? "activated" : "deactivated"} successfully!`);
     } else {
       toast.error(result.error || "Failed to update branch status");
     }
+  };
+
+  const handleDeleteBranch = async () => {
+    if (!deleteConfirmation) return;
+    
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await deleteBranch(deleteConfirmation.id);
+      
+      if (result.success) {
+        toast.success("Branch deleted successfully!");
+        setDeleteConfirmation(null);
+      } else {
+        const errorMsg = result.error || "Failed to delete branch";
+        setDeleteError(errorMsg);
+        toast.error(errorMsg);
+      }
+    } catch (error: any) {
+      console.error("Delete failed:", error);
+      const errorMessage = error?.message || "An unexpected error occurred";
+      setDeleteError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openDeleteDialog = (branchId: string, branchName: string) => {
+    setDeleteConfirmation({ isOpen: true, id: branchId, name: branchName });
+    setDeleteError(null);
   };
 
   const resetForm = () => {
@@ -425,6 +463,38 @@ export function BranchManagement() {
         <p className="text-muted-foreground">Manage your business locations</p>
       </div>
 
+      <SchemaError error={contextError} />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmation} onOpenChange={(open) => !open && setDeleteConfirmation(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Branch</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the branch "{deleteConfirmation?.name}"? 
+              This action cannot be undone.
+              <br/><br/>
+              <span className="text-destructive font-medium">Warning:</span> You cannot delete a branch if it has associated data (products, sales, or staff). Deactivate it instead.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <Alert variant="destructive" className="my-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmation(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteBranch} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete Branch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Action Buttons - Import, Export, Add */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-3">
@@ -687,6 +757,14 @@ export function BranchManagement() {
                         >
                           {branch.status === "active" ? "Deactivate" : "Activate"}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDeleteDialog(branch.id, branch.name)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -710,6 +788,9 @@ export function BranchManagement() {
                 : "Create a new branch location for your business"}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Show schema error inside dialog if it occurs during creation */}
+          {contextError && <SchemaError error={contextError} />}
 
           <div className="space-y-4">
             <div className="space-y-2">

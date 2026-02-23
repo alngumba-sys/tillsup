@@ -261,7 +261,7 @@ export function SupplierRequests() {
     setPoExpectedDelivery(defaultDate.toISOString().split('T')[0]);
   };
 
-  const handleConfirmConversion = () => {
+  const handleConfirmConversion = async () => {
     if (!convertingRequestId || !user || !business) return;
 
     const request = requests.find(r => r.id === convertingRequestId);
@@ -305,7 +305,7 @@ export function SupplierRequests() {
     };
 
     // Create the purchase order
-    const poId = addPurchaseOrder({
+    const poId = await addPurchaseOrder({
       branchId: request.branchId,
       branchName: branch.name,
       supplierId: request.supplierId,
@@ -320,8 +320,10 @@ export function SupplierRequests() {
       createdByRole: user.role
     });
 
+    if (!poId) return;
+
     // Mark the supplier request as converted
-    updateRequestStatus(request.id, "CONVERTED", {
+    await updateRequestStatus(request.id, "CONVERTED", {
       convertedToPOId: poId,
       convertedByStaffId: user.id,
       convertedByStaffName: `${user.firstName} ${user.lastName}`
@@ -346,7 +348,7 @@ export function SupplierRequests() {
   // ═════════════════════════════��════════════════════════════════════
   // DELETE REQUEST
   // ═══════════════════════════════════════════════════════════════════
-  const handleDeleteRequest = (requestId: string) => {
+  const handleDeleteRequest = async (requestId: string) => {
     const request = requests.find(r => r.id === requestId);
     if (!request) return;
 
@@ -360,9 +362,8 @@ export function SupplierRequests() {
 
     // Confirm deletion
     if (confirm(`Are you sure you want to delete this request for ${request.productName}?`)) {
-      deleteRequest(requestId);
+      await deleteRequest(requestId);
       setViewingRequestId(null);
-      toast.success("Request deleted successfully");
     }
   };
 

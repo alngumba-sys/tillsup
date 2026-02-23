@@ -4,6 +4,7 @@ import { useSales } from "../contexts/SalesContext";
 import { useInventory } from "../contexts/InventoryContext";
 import { useForecasting, ProductForecast } from "../contexts/ForecastingContext";
 import { useSupplier } from "../contexts/SupplierContext";
+import { useBranch } from "../contexts/BranchContext";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -22,6 +23,7 @@ export function useReorderForecasting(branchId?: string, periodDays: number = 30
   const { business } = useAuth();
   const { sales } = useSales();
   const { inventory } = useInventory();
+  const { branches } = useBranch();
   const { suppliers } = useSupplier();
   const { calculateProductForecast, forecastingConfig } = useForecasting();
 
@@ -80,27 +82,31 @@ export function useReorderForecasting(branchId?: string, periodDays: number = 30
 
     // Generate forecast for each inventory item
     const productForecasts = inventoryItems.map(item => {
+      // Find branch name
+      const branch = branches.find(b => b.id === item.branchId);
+      const branchName = branch?.name || "Unknown Branch";
+
       // Calculate average daily sales
       const averageDailySales = calculateAverageDailySales(
-        item.productId,
+        item.id,
         item.branchId,
         periodDays
       );
 
       // Find supplier (if exists)
-      const supplier = suppliers.find(s => s.id === item.supplierId);
+      const supplier = suppliers.find(s => s.id === item.supplier);
 
       // Generate forecast using the context function
       const forecast = calculateProductForecast(
-        item.productId,
-        item.productName,
+        item.id,
+        item.name,
         item.sku,
         item.branchId,
-        item.branchName,
+        branchName,
         item.stock,
         item.costPrice || 0,
         periodDays,
-        item.supplierId,
+        item.supplier, // Inventory uses 'supplier' string ID
         supplier?.name
       );
 
@@ -119,7 +125,8 @@ export function useReorderForecasting(branchId?: string, periodDays: number = 30
     periodDays,
     calculateAverageDailySales,
     calculateProductForecast,
-    suppliers
+    suppliers,
+    branches
   ]);
 
   // ═══════════════════════════════════════════════════════════════════

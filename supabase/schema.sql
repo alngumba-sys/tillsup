@@ -367,7 +367,7 @@ CREATE POLICY "Users can insert clock in sessions" ON public.clock_in_sessions
         business_id = get_user_business_id()
     );
 
--- ═══════════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════��═══
 -- 10. WORK SCHEDULES
 -- ═══════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS public.work_schedules (
@@ -493,3 +493,81 @@ CREATE POLICY "Users can delete expenses of their business" ON public.expenses
         OR
         business_id = get_user_business_id()
     );
+
+-- ═══════════════════════════════════════════════════════════════════
+-- 12. INDEXES (Performance Optimization)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Add indexes on foreign keys to improve delete performance and prevent locking
+CREATE INDEX IF NOT EXISTS idx_profiles_branch_id ON public.profiles(branch_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_branch_id ON public.inventory(branch_id);
+CREATE INDEX IF NOT EXISTS idx_sales_branch_id ON public.sales(branch_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_branch_id ON public.expenses(branch_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_branch_id ON public.attendance(branch_id);
+CREATE INDEX IF NOT EXISTS idx_clock_in_sessions_branch_id ON public.clock_in_sessions(branch_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON public.sale_items(sale_id);
+
+-- ═══════════════════════════════════════════════════════════════════
+-- 13. RPC FUNCTIONS (Server-Side Logic)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Function to safely delete a branch with dependency checks on the server side
+-- This avoids network round-trips and timeouts for large datasets
+-- v3: Uses JSONB parameter to avoid PostgREST parameter matching issues
+CREATE OR REPLACE FUNCTION delete_branch_v3(payload JSONB)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    branch_id_arg TEXT;
+    dependency_found TEXT;
+BEGIN
+    -- Extract branch_id from the JSON payload
+    branch_id_arg := payload->>'branch_id';
+    
+    IF branch_id_arg IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'branch_id is required');
+    END IF;
+
+    -- 1. Check Profiles
+    IF EXISTS (SELECT 1 FROM profiles WHERE branch_id = branch_id_arg LIMIT 1) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cannot delete: Staff members are assigned to this branch');
+    END IF;
+
+    -- 2. Check Inventory
+    IF EXISTS (SELECT 1 FROM inventory WHERE branch_id = branch_id_arg LIMIT 1) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cannot delete: Inventory items exist at this branch');
+    END IF;
+
+    -- 3. Check Sales
+    IF EXISTS (SELECT 1 FROM sales WHERE branch_id = branch_id_arg LIMIT 1) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cannot delete: Sales records exist for this branch');
+    END IF;
+    
+    -- 4. Check Expenses
+    IF EXISTS (SELECT 1 FROM expenses WHERE branch_id = branch_id_arg LIMIT 1) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cannot delete: Expenses exist for this branch');
+    END IF;
+
+     -- 5. Check Attendance
+    IF EXISTS (SELECT 1 FROM attendance WHERE branch_id = branch_id_arg LIMIT 1) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cannot delete: Attendance records exist for this branch');
+    END IF;
+
+    -- 6. Delete Branch
+    DELETE FROM branches WHERE id = branch_id_arg;
+    
+    RETURN jsonb_build_object('success', true);
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION delete_branch_v3(JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION delete_branch_v3(JSONB) TO service_role;
+
+
+

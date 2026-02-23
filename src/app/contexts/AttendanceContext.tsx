@@ -1,30 +1,24 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import { toast } from "sonner";
+import { supabase } from "../../lib/supabase";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * ORIGINAL ATTENDANCE TRACKING CONTEXT (TIME-BASED ONLY)
+ * ATTENDANCE TRACKING CONTEXT (SUPABASE-BACKED)
  * ═══════════════════════════════════════════════════════════════════════════
  * 
  * PURPOSE:
- * - Track employee clock-in/clock-out times
+ * - Track employee clock-in/clock-out times via Supabase
  * - Detect lateness based on work schedule
  * - View attendance history
- * - Simple, time-based attendance tracking only
  * 
  * FEATURES:
  * - Real-time clock-in/clock-out
  * - Automatic lateness detection
- * - Work schedule configuration (start time, grace period)
+ * - Work schedule configuration (persisted to DB)
  * - Attendance history viewing
  * - Hours worked calculation
- * 
- * NOT INCLUDED (removed from payroll):
- * - Manual attendance recording
- * - Payroll integration
- * - Salary calculations
- * - Leave balance tracking
  * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -59,6 +53,7 @@ export interface AttendanceRecord {
 }
 
 export interface ClockInSession {
+  id: string;
   staffId: string;
   businessId: string;
   branchId: string;
@@ -76,15 +71,15 @@ export interface WorkSchedule {
 
 interface AttendanceContextType {
   // Clock-in/Clock-out (Real-time)
-  clockIn: () => { success: boolean; error?: string };
-  clockOut: () => { success: boolean; error?: string };
+  clockIn: () => Promise<{ success: boolean; error?: string }>;
+  clockOut: () => Promise<{ success: boolean; error?: string }>;
   isStaffClockedIn: (staffId: string) => boolean;
   getCurrentSession: (staffId: string) => ClockInSession | null;
   getActiveSessionsForToday: () => ClockInSession[];
   
   // Work Schedule
   getWorkSchedule: (businessId: string) => WorkSchedule | null;
-  saveWorkSchedule: (schedule: WorkSchedule) => { success: boolean; error?: string };
+  saveWorkSchedule: (schedule: WorkSchedule) => Promise<{ success: boolean; error?: string }>;
   
   // Attendance History (Read-only viewing)
   attendanceRecords: AttendanceRecord[];
@@ -97,12 +92,6 @@ interface AttendanceContextType {
 }
 
 const AttendanceContext = createContext<AttendanceContextType | undefined>(undefined);
-
-const STORAGE_KEYS = {
-  ATTENDANCE: "pos_attendance_records",
-  SESSIONS: "pos_clock_in_sessions",
-  WORK_SCHEDULES: "pos_work_schedules"
-};
 
 // Standard work hours configuration
 const STANDARD_WORK_DAY_HOURS = 8;
@@ -119,57 +108,93 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   
   const business = authContext?.business;
   const user = authContext?.user;
-  const getStaffMembers = authContext?.getStaffMembers || (async () => []);
 
-  // ════════════════════════════════════��══════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════════════
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [clockInSessions, setClockInSessions] = useState<ClockInSession[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.SESSIONS);
-      const sessions = stored ? JSON.parse(stored) : [];
-      // Convert stored date strings back to Date objects
-      return sessions.map((s: any) => ({
-        ...s,
-        clockInTime: new Date(s.clockInTime)
-      }));
-    } catch {
-      return [];
-    }
-  });
-
-  const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.WORK_SCHEDULES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [clockInSessions, setClockInSessions] = useState<ClockInSession[]>([]);
+  const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // PERSIST TO LOCALSTORAGE
+  // FETCH DATA FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(attendanceRecords));
-  }, [attendanceRecords]);
+    if (!business) {
+      setAttendanceRecords([]);
+      setClockInSessions([]);
+      setWorkSchedules([]);
+      return;
+    }
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(clockInSessions));
-  }, [clockInSessions]);
+    const fetchAllData = async () => {
+      try {
+        // 1. Fetch Attendance Records
+        const { data: records, error: recordsError } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('business_id', business.id);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WORK_SCHEDULES, JSON.stringify(workSchedules));
-  }, [workSchedules]);
+        if (records) {
+          setAttendanceRecords(records.map((r: any) => ({
+            id: r.id,
+            businessId: r.business_id,
+            branchId: r.branch_id,
+            staffId: r.staff_id,
+            staffName: r.staff_name || "Unknown",
+            date: r.date,
+            checkIn: r.check_in,
+            checkOut: r.check_out,
+            hoursWorked: Number(r.hours_worked || 0),
+            overtimeHours: Number(r.overtime_hours || 0),
+            status: r.status as AttendanceStatus,
+            recordedBy: r.recorded_by,
+            recordedByName: r.recorded_by_name || "Unknown",
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+          })));
+        }
+
+        // 2. Fetch Active Sessions
+        const { data: sessions, error: sessionsError } = await supabase
+          .from('attendance_sessions')
+          .select('*')
+          .eq('business_id', business.id);
+
+        if (sessions) {
+          setClockInSessions(sessions.map((s: any) => ({
+            id: s.id,
+            staffId: s.staff_id,
+            businessId: s.business_id,
+            branchId: s.branch_id,
+            clockInTime: new Date(s.clock_in_time),
+            status: s.status as AttendanceStatus,
+            date: s.date
+          })));
+        }
+
+        // 3. Fetch Work Schedules
+        const { data: schedules, error: schedulesError } = await supabase
+          .from('work_schedules')
+          .select('*')
+          .eq('business_id', business.id);
+
+        if (schedules) {
+          setWorkSchedules(schedules.map((s: any) => ({
+            businessId: s.business_id,
+            officialStartTime: s.official_start_time,
+            officialEndTime: s.official_end_time,
+            lateToleranceMinutes: s.late_tolerance_minutes
+          })));
+        }
+
+      } catch (err) {
+        console.error("Error fetching attendance data:", err);
+      }
+    };
+
+    fetchAllData();
+  }, [business]);
 
   // ═══════════════════════════════════════════════════════════════════
   // WORK SCHEDULE
@@ -178,19 +203,42 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     return workSchedules.find(ws => ws.businessId === businessId) || null;
   };
 
-  const saveWorkSchedule = (schedule: WorkSchedule) => {
-    setWorkSchedules(prev => {
-      const existing = prev.findIndex(ws => ws.businessId === schedule.businessId);
-      if (existing !== -1) {
-        const updated = [...prev];
-        updated[existing] = schedule;
-        return updated;
-      } else {
-        return [...prev, schedule];
-      }
-    });
-    toast.success("Work schedule saved");
-    return { success: true };
+  const saveWorkSchedule = async (schedule: WorkSchedule) => {
+    if (!business) return { success: false, error: "Not authenticated" };
+
+    try {
+      // Check if schedule exists
+      const existing = workSchedules.find(ws => ws.businessId === schedule.businessId);
+      
+      const dbSchedule = {
+        business_id: schedule.businessId,
+        official_start_time: schedule.officialStartTime,
+        official_end_time: schedule.officialEndTime,
+        late_tolerance_minutes: schedule.lateToleranceMinutes
+      };
+
+      const { error } = await supabase
+        .from('work_schedules')
+        .upsert(dbSchedule, { onConflict: 'business_id' });
+
+      if (error) throw error;
+
+      // Update local state
+      setWorkSchedules(prev => {
+        if (existing) {
+          return prev.map(ws => ws.businessId === schedule.businessId ? schedule : ws);
+        } else {
+          return [...prev, schedule];
+        }
+      });
+
+      toast.success("Work schedule saved");
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error saving work schedule:", err);
+      toast.error("Failed to save schedule");
+      return { success: false, error: err.message };
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
@@ -229,7 +277,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // CLOCK-IN / CLOCK-OUT
   // ═══════════════════════════════════════════════════════════════════
-  const clockIn = (): { success: boolean; error?: string } => {
+  const clockIn = async (): Promise<{ success: boolean; error?: string }> => {
     if (!user || !business) {
       return { success: false, error: "Not authenticated" };
     }
@@ -266,25 +314,49 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Create session
-    const session: ClockInSession = {
-      staffId: user.id,
-      businessId: business.id,
-      branchId: user.branchId || "",
-      clockInTime: now,
-      status,
-      date: currentDate
-    };
+    try {
+      // Create session in DB
+      const sessionData = {
+        staff_id: user.id,
+        business_id: business.id,
+        branch_id: user.branchId || business.id, // Fallback to business ID if no branch
+        clock_in_time: now.toISOString(),
+        status,
+        date: currentDate
+      };
 
-    setClockInSessions(prev => [...prev, session]);
-    toast.success(status === "Late" ? "Clocked In (Late)" : "Clocked In", {
-      description: `Time: ${currentTime}`
-    });
+      const { data, error } = await supabase
+        .from('attendance_sessions')
+        .insert(sessionData)
+        .select()
+        .single();
 
-    return { success: true };
+      if (error) throw error;
+
+      // Update local state
+      const newSession: ClockInSession = {
+        id: data.id,
+        staffId: user.id,
+        businessId: business.id,
+        branchId: user.branchId || business.id,
+        clockInTime: now,
+        status,
+        date: currentDate
+      };
+
+      setClockInSessions(prev => [...prev, newSession]);
+      toast.success(status === "Late" ? "Clocked In (Late)" : "Clocked In", {
+        description: `Time: ${currentTime}`
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error clocking in:", err);
+      return { success: false, error: err.message };
+    }
   };
 
-  const clockOut = (): { success: boolean; error?: string } => {
+  const clockOut = async (): Promise<{ success: boolean; error?: string }> => {
     if (!user || !business) {
       return { success: false, error: "Not authenticated" };
     }
@@ -305,36 +377,72 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     // Calculate hours
     const { regular, overtime } = calculateHoursWorked(checkInTime, checkOutTime);
 
-    // Create attendance record
-    const record: AttendanceRecord = {
-      id: `ATT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      businessId: business.id,
-      branchId: session.branchId,
-      staffId: user.id,
-      staffName: `${user.firstName} ${user.lastName}`,
-      date: session.date,
-      checkIn: checkInTime,
-      checkOut: checkOutTime,
-      hoursWorked: regular,
-      overtimeHours: overtime,
-      status: session.status,
-      recordedBy: user.id,
-      recordedByName: `${user.firstName} ${user.lastName}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    try {
+      // Create attendance record in DB
+      const recordData = {
+        business_id: business.id,
+        branch_id: session.branchId,
+        staff_id: user.id,
+        staff_name: `${user.firstName} ${user.lastName}`,
+        date: session.date,
+        check_in: checkInTime,
+        check_out: checkOutTime,
+        hours_worked: regular,
+        overtime_hours: overtime,
+        status: session.status,
+        recorded_by: user.id,
+        recorded_by_name: `${user.firstName} ${user.lastName}`
+      };
 
-    // Save record
-    setAttendanceRecords(prev => [...prev, record]);
+      const { data: record, error: recordError } = await supabase
+        .from('attendance_records')
+        .insert(recordData)
+        .select()
+        .single();
 
-    // Remove session
-    setClockInSessions(prev => prev.filter((_, i) => i !== sessionIndex));
+      if (recordError) throw recordError;
 
-    toast.success("Clocked Out", {
-      description: `Hours worked: ${regular.toFixed(1)}h${overtime > 0 ? ` + ${overtime.toFixed(1)}h OT` : ''}`
-    });
+      // Delete session from DB
+      const { error: deleteError } = await supabase
+        .from('attendance_sessions')
+        .delete()
+        .eq('id', session.id); // Use ID for precise deletion
 
-    return { success: true };
+      if (deleteError) {
+        console.warn("Clock out recorded but session deletion failed:", deleteError);
+      }
+
+      // Update local state
+      const newRecord: AttendanceRecord = {
+        id: record.id,
+        businessId: business.id,
+        branchId: session.branchId,
+        staffId: user.id,
+        staffName: `${user.firstName} ${user.lastName}`,
+        date: session.date,
+        checkIn: checkInTime,
+        checkOut: checkOutTime,
+        hoursWorked: regular,
+        overtimeHours: overtime,
+        status: session.status,
+        recordedBy: user.id,
+        recordedByName: `${user.firstName} ${user.lastName}`,
+        createdAt: record.created_at,
+        updatedAt: record.created_at // Assuming updated_at same as created_at initially
+      };
+
+      setAttendanceRecords(prev => [...prev, newRecord]);
+      setClockInSessions(prev => prev.filter((_, i) => i !== sessionIndex));
+
+      toast.success("Clocked Out", {
+        description: `Hours worked: ${regular.toFixed(1)}h${overtime > 0 ? ` + ${overtime.toFixed(1)}h OT` : ''}`
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error clocking out:", err);
+      return { success: false, error: err.message };
+    }
   };
 
   const isStaffClockedIn = (staffId: string): boolean => {

@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "../components/ui/select";
-import { Plus, DollarSign, Building2, TrendingDown, AlertCircle, Filter, X } from "lucide-react";
+import { Plus, DollarSign, Building2, TrendingDown, AlertCircle, Filter, X, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranch } from "../contexts/BranchContext";
 import { useExpense } from "../contexts/ExpenseContext";
@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { useCurrency } from "../hooks/useCurrency";
 import { Textarea } from "../components/ui/textarea";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import { SchemaError } from "../components/inventory/SchemaError";
 
 const EXPENSE_CATEGORIES = [
   "Rent",
@@ -59,14 +60,20 @@ export function Expenses() {
   const navigate = useNavigate();
   const { 
     expenses, 
-    createExpense, 
+    createExpense,
+    deleteExpense,
     getTotalExpenses,
     getTotalExpensesToday,
-    getExpensesByCategory
+    getExpensesByCategory,
+    error
   } = useExpense();
   const { formatCurrency, currencySymbol } = useCurrency();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [filterBranchId, setFilterBranchId] = useState<string>(
     user?.role === "Business Owner" ? "ALL_BRANCHES" : user?.branchId || ""
   );
@@ -84,7 +91,7 @@ export function Expenses() {
 
   // ═══════════════════════════════════════════════════════════════════
   // RBAC: Permission Check
-  // ════════════════════════���══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
   const canCreateExpense = user?.canCreateExpense || false;
   const isFeatureEnabled = hasFeature("expenseTracking");
 
@@ -186,7 +193,7 @@ export function Expenses() {
   // ═══════════════════════════════════════════════════════════════════
   // HANDLER: Create Expense
   // ═══════════════════════════════════════════════════════════════════
-  const handleCreateExpense = () => {
+  const handleCreateExpense = async () => {
     if (!user || !business) return;
 
     // Validation
@@ -205,9 +212,9 @@ export function Expenses() {
       return;
     }
 
-    const result = createExpense({
+    const result = await createExpense({
       title: formData.title,
-      category: formData.category,
+      category: formData.category as any,
       description: formData.description,
       amount: parseFloat(formData.amount),
       businessId: business.id,
@@ -224,6 +231,22 @@ export function Expenses() {
       resetForm();
     } else {
       toast.error(result.error || "Failed to create expense");
+    }
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!expenseToDelete) return;
+
+    setIsDeleting(true);
+    const result = await deleteExpense(expenseToDelete);
+    setIsDeleting(false);
+
+    if (result.success) {
+      toast.success("Expense deleted successfully");
+      setIsDeleteDialogOpen(false);
+      setExpenseToDelete(null);
+    } else {
+      toast.error(result.error || "Failed to delete expense");
     }
   };
 
@@ -377,6 +400,8 @@ export function Expenses() {
         )}
       </div>
 
+      <SchemaError error={error} />
+
       {/* Permission Alert */}
       {!canCreateExpense && (
         <Alert className="border-amber-200 bg-amber-50">
@@ -501,6 +526,7 @@ export function Expenses() {
                     <TableHead>Branch</TableHead>
                     <TableHead>Created By</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -537,12 +563,25 @@ export function Expenses() {
                           <TableCell className="text-right font-semibold text-red-600">
                             {formatCurrency(expense.amount)}
                           </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                              onClick={() => {
+                                setExpenseToDelete(expense.id);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                         <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
                         <p>No expenses found</p>
                         {searchQuery || filterCategory !== "ALL_CATEGORIES" ? (
@@ -561,6 +600,40 @@ export function Expenses() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Expense</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this expense? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteExpense}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

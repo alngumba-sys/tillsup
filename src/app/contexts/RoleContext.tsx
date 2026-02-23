@@ -1,32 +1,11 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * ROLE CONTEXT - ROLE-BASED ACCESS CONTROL (RBAC)
- * ═══════════════════════════════════════════════════════════════════════════
- * 
- * ARCHITECTURE PRINCIPLES:
- * 
- * 1. ROLES ARE PERMISSION CONTAINERS
- *    - Roles group multiple permissions
- *    - Staff inherit permissions from their assigned role
- *    - Permissions are NEVER assigned directly to staff
- * 
- * 2. BUSINESS-LEVEL ROLES
- *    - Roles are shared across all branches within a business
- *    - Each role belongs to a specific business (businessId)
- *    - Roles are NOT branch-specific
- * 
- * 3. SOFT DELETE (DISABLE/ENABLE)
- *    - Roles can be disabled instead of hard-deleted
- *    - Disabled roles won't appear in staff creation dropdown
- *    - Historical staff retain role reference
- * 
- * 4. REQUIRED FOR STAFF
- *    - Staff must have a roleId (not just a role name)
- *    - Staff creation is blocked if no active roles exist
- * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -146,10 +125,10 @@ export interface Role {
 interface RoleContextType {
   roles: Role[];
   activeRoles: Role[];
-  addRole: (role: Omit<Role, "id" | "businessId" | "createdAt" | "updatedAt" | "status">) => void;
-  updateRole: (id: string, role: Partial<Role>) => void;
-  disableRole: (id: string) => void;
-  enableRole: (id: string) => void;
+  addRole: (role: Omit<Role, "id" | "businessId" | "createdAt" | "updatedAt" | "status">) => Promise<void>;
+  updateRole: (id: string, role: Partial<Role>) => Promise<void>;
+  disableRole: (id: string) => Promise<void>;
+  enableRole: (id: string) => Promise<void>;
   getRoleById: (id: string) => Role | undefined;
   getRoleByName: (name: string) => Role | undefined;
   hasPermission: (roleId: string, permission: Permission) => boolean;
@@ -157,8 +136,6 @@ interface RoleContextType {
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
-
-const STORAGE_KEY = "pos_roles";
 
 // ═══════════════════════════════════════════════════════════════════
 // DEFAULT SYSTEM ROLES WITH PERMISSIONS
@@ -217,11 +194,6 @@ const getDefaultSystemRoles = (businessId: string): Omit<Role, "id" | "createdAt
 ];
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  // ═══════════════════════════════════════════════════════════════════
-  // SAFE CONTEXT ACCESS
-  // ═══════════════════════════════════════════════════════════════════
-  // We wrap useAuth in a try-catch to prevent the entire app from crashing
-  // if the AuthContext is not yet available or if there's an initialization error.
   let authContext;
   try {
     authContext = useAuth();
@@ -231,68 +203,186 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   
   const business = authContext?.business;
 
-  const [allRoles, setAllRoles] = useState<Role[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error("Failed to load roles from localStorage:", error);
-    }
-    return [];
-  });
+  const [roles, setRoles] = useState<Role[]>([]);
 
-  const updateRoles = (newRoles: Role[]) => {
-    setAllRoles(newRoles);
+  // ═══════════════════════════════════════════════════════════════════
+  // FETCH FROM SUPABASE
+  // ═══════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!business) {
+      setRoles([]);
+      return;
+    }
+
+    const fetchRoles = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('roles')
+          .select('*')
+          .eq('business_id', business.id);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setRoles(data.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            businessId: r.business_id,
+            permissions: r.permissions || [],
+            isSystemRole: r.is_system_role,
+            status: r.status as "active" | "disabled",
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+          })));
+        } else {
+          // No roles found - seed default roles
+          await seedDefaultRoles(business.id);
+        }
+      } catch (err) {
+        console.error("Error fetching roles:", err);
+      }
+    };
+
+    fetchRoles();
+  }, [business]);
+
+  // Helper for generating UUIDs
+  const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
+  const seedDefaultRoles = async (businessId: string) => {
+    const defaultRoles = getDefaultSystemRoles(businessId);
+    
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newRoles));
-    } catch (error) {
-      console.error("Failed to save roles:", error);
+      const rolesToInsert = defaultRoles.map(role => ({
+        id: generateUUID(),
+        name: role.name,
+        description: role.description,
+        business_id: role.businessId,
+        permissions: role.permissions,
+        is_system_role: role.isSystemRole,
+        status: role.status
+      }));
+
+      console.log("Seeding roles:", rolesToInsert);
+
+      const { data, error } = await supabase
+        .from('roles')
+        .insert(rolesToInsert)
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        setRoles(data.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description,
+          businessId: r.business_id,
+          permissions: r.permissions || [],
+          isSystemRole: r.is_system_role,
+          status: r.status as "active" | "disabled",
+          createdAt: r.created_at,
+          updatedAt: r.updated_at
+        })));
+        console.log(`Auto-seeded ${data.length} default system roles`);
+      }
+    } catch (err) {
+      console.error("Error seeding default roles:", err);
     }
   };
 
-  // Filter roles by current business
-  const roles = business
-    ? allRoles.filter((role) => role.businessId === business.id)
-    : [];
-
-  // Get only active roles (for staff creation dropdown)
+  // Get only active roles
   const activeRoles = roles.filter((role) => role.status === "active");
 
-  const addRole = (role: Omit<Role, "id" | "businessId" | "createdAt" | "updatedAt" | "status">) => {
+  const addRole = async (role: Omit<Role, "id" | "businessId" | "createdAt" | "updatedAt" | "status">) => {
     if (!business) {
       console.error("Cannot add role: No business context");
       return;
     }
 
-    const newRole: Role = {
-      ...role,
-      id: `role_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      businessId: business.id,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const dbRole = {
+        id: generateUUID(),
+        name: role.name,
+        description: role.description,
+        business_id: business.id,
+        permissions: role.permissions,
+        is_system_role: role.isSystemRole,
+        status: "active"
+      };
 
-    updateRoles([...allRoles, newRole]);
+      const { data, error } = await supabase
+        .from('roles')
+        .insert(dbRole)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newRole: Role = {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        businessId: data.business_id,
+        permissions: data.permissions,
+        isSystemRole: data.is_system_role,
+        status: data.status,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+
+      setRoles(prev => [...prev, newRole]);
+      toast.success("Role created successfully");
+    } catch (err: any) {
+      console.error("Error adding role:", err);
+      toast.error("Failed to create role");
+    }
   };
 
-  const updateRole = (id: string, updates: Partial<Role>) => {
-    const updated = allRoles.map((role) =>
-      role.id === id
-        ? { ...role, ...updates, updatedAt: new Date().toISOString() }
-        : role
-    );
-    updateRoles(updated);
+  const updateRole = async (id: string, updates: Partial<Role>) => {
+    try {
+      const dbUpdates: any = { updated_at: new Date().toISOString() };
+      
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.permissions !== undefined) dbUpdates.permissions = updates.permissions;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+
+      const { error } = await supabase
+        .from('roles')
+        .update(dbUpdates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setRoles(prev => prev.map(role => 
+        role.id === id 
+          ? { ...role, ...updates, updatedAt: dbUpdates.updated_at } 
+          : role
+      ));
+      
+      toast.success("Role updated successfully");
+    } catch (err: any) {
+      console.error("Error updating role:", err);
+      toast.error("Failed to update role");
+    }
   };
 
-  const disableRole = (id: string) => {
-    updateRole(id, { status: "disabled" });
+  const disableRole = async (id: string) => {
+    await updateRole(id, { status: "disabled" });
   };
 
-  const enableRole = (id: string) => {
-    updateRole(id, { status: "active" });
+  const enableRole = async (id: string) => {
+    await updateRole(id, { status: "active" });
   };
 
   const getRoleById = (id: string): Role | undefined => {
@@ -312,25 +402,6 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     const role = getRoleById(roleId);
     return role ? role.permissions : [];
   };
-
-  // ═══════════════════════════════════════════════════════════════════
-  // AUTO-SEED DEFAULT SYSTEM ROLES FOR NEW BUSINESSES
-  // ═══════════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (business && roles.length === 0) {
-      // This business has no roles yet - seed with default system roles
-      const defaultRoles = getDefaultSystemRoles(business.id);
-      const rolesWithIds: Role[] = defaultRoles.map((role) => ({
-        ...role,
-        id: `role_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }));
-      
-      updateRoles([...allRoles, ...rolesWithIds]);
-      console.log(`Auto-seeded ${rolesWithIds.length} default system roles for business ${business.id}`);
-    }
-  }, [business?.id, roles.length]); // Run when business changes or roles length changes
 
   return (
     <RoleContext.Provider

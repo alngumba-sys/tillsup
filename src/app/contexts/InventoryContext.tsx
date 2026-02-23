@@ -1,11 +1,10 @@
 import { createContext, useContext, useState, ReactNode, useMemo, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { useBranch } from "./BranchContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 
 /**
- * ═══════════════════════════════════════════════════════════════════════════
+ * ════════════════���══════════════════════════════════════════════════════════
  * INVENTORY CONTEXT - ENTERPRISE POS BRANCH-BASED INVENTORY MANAGEMENT
  * ═══════════════════════════════════════════════════════════════════════════
  * 
@@ -38,6 +37,7 @@ export interface InventoryItem {
   businessId: string;
   branchId: string; // MANDATORY - Determines which branch owns this product
   lowStockThreshold?: number; // Optional threshold for low-stock alerts (default: 10)
+  image?: string; // Product image URL
   // ═══════════════════════════════════════════════════════════════════
   // PRICING EXTENSION - Multi-tier pricing support
   // ═══════════════════════════════════════════════════════════════════
@@ -61,14 +61,15 @@ interface InventoryContextType {
   increaseStock: (productId: string, branchId: string, quantity: number) => Promise<boolean>;
   increaseMultipleStock: (items: { productId: string; sku: string; name: string; quantity: number }[], branchId: string) => Promise<{ success: boolean; errors: string[]; createdProducts: string[] }>;
   refreshInventory: () => Promise<void>;
+  error: any;
 }
 
-const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
+export const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // SAFE CONTEXT ACCESS - Hooks must be called unconditionally
-  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════��═══════════════════════════
   let auth;
   try {
     auth = useAuth();
@@ -76,19 +77,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     console.warn("InventoryProvider: AuthContext not available", e);
   }
 
-  let branch;
-  try {
-    branch = useBranch();
-  } catch (e) {
-    console.warn("InventoryProvider: BranchContext not available", e);
-  }
-  
   const business = auth?.business || null;
   const user = auth?.user || null;
-  const selectedBranchId = branch?.selectedBranchId || null;
-  const branches = branch?.branches || [];
 
   const [allInventory, setAllInventory] = useState<InventoryItem[]>([]);
+  const [error, setError] = useState<any>(null);
 
   // ═══════════════════════════════════════════════════════════════════
   // FETCH INVENTORY FROM SUPABASE
@@ -96,15 +89,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const refreshInventory = async () => {
     if (!business) return;
 
+    setError(null);
+
     try {
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('inventory')
         .select('*')
         .eq('business_id', business.id);
 
-      if (error) {
-        console.error("Error fetching inventory:", error);
-        toast.error("Failed to load inventory");
+      if (fetchError) {
+        console.error("Error fetching inventory:", fetchError);
+        // Check for schema errors to show fix UI
+        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(fetchError.code)) {
+            setError(fetchError);
+        } else {
+            setError(fetchError);
+        }
         return;
       }
 
@@ -117,6 +117,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           stock: Number(item.stock || 0),
           sku: item.sku || "",
           supplier: item.supplier || "",
+          image: item.image,
           businessId: item.business_id,
           branchId: item.branch_id,
           lowStockThreshold: Number(item.low_stock_threshold || 10),
@@ -161,6 +162,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!business) {
       console.error("Cannot add product: No business context");
+      toast.error("Authentication Error: Business context missing. Please refresh.");
       return;
     }
     
@@ -169,7 +171,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     
     if (!targetBranchId) {
       if (user?.role === "Business Owner") {
-        targetBranchId = selectedBranchId || "";
+        // Business Owner must select a branch when adding products
+        // targetBranchId = ""; // No default fallback, caller must provide it
       } else {
         targetBranchId = user?.branchId || "";
       }
@@ -193,8 +196,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       stock: product.stock,
       sku: product.sku,
       supplier: product.supplier,
+      image: product.image,
       low_stock_threshold: product.lowStockThreshold || 10
     };
+
+    console.log("Adding product to Supabase:", newItem);
 
     try {
       const { data, error } = await supabase
@@ -205,7 +211,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error("Error adding product:", error);
-        toast.error("Failed to add product");
+        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
+            setError(error);
+            // Don't toast if we are showing the large schema error alert
+        } else {
+            toast.error("Failed to add product: " + (error.message || "Unknown error"));
+        }
         return;
       }
 
@@ -227,6 +238,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (updates.stock !== undefined) dbUpdates.stock = updates.stock;
     if (updates.sku !== undefined) dbUpdates.sku = updates.sku;
     if (updates.supplier !== undefined) dbUpdates.supplier = updates.supplier;
+    if (updates.image !== undefined) dbUpdates.image = updates.image;
     if (updates.branchId !== undefined) dbUpdates.branch_id = updates.branchId;
     if (updates.lowStockThreshold !== undefined) dbUpdates.low_stock_threshold = updates.lowStockThreshold;
     
@@ -535,7 +547,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     isLowStock,
     increaseStock,
     increaseMultipleStock,
-    refreshInventory
+    refreshInventory,
+    error
   };
 
   return (

@@ -1,28 +1,11 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * INVENTORY AUDIT LOG CONTEXT - IMMUTABLE STOCK TRANSACTION HISTORY
- * ═══════════════════════════════════════════════════════════════════════════
- * 
- * PURPOSE:
- * - Maintain immutable audit trail of ALL inventory stock changes
- * - Track source of every stock increase/decrease
- * - Enable full traceability for compliance and debugging
- * - Support rollback and reconciliation operations
- * 
- * AUDIT SOURCES:
- * - GRN_CONFIRMATION: Stock increase from confirmed Goods Received Note
- * - POS_SALE: Stock decrease from point-of-sale transaction
- * - MANUAL_ADJUSTMENT: Manual stock correction (future)
- * - STOCK_TRANSFER: Inter-branch stock transfer (future)
- * 
- * IMMUTABILITY GUARANTEE:
- * - Audit records can ONLY be created, never updated or deleted
- * - Each record has a unique, chronological ID
- * - Timestamp is immutable and server-authoritative
- * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -58,7 +41,7 @@ export interface InventoryAuditRecord {
 
 interface InventoryAuditContextType {
   auditRecords: InventoryAuditRecord[];
-  addAuditRecord: (record: Omit<InventoryAuditRecord, "id" | "businessId" | "timestamp">) => void;
+  addAuditRecord: (record: Omit<InventoryAuditRecord, "id" | "businessId" | "timestamp">) => Promise<void>;
   getAuditsByProduct: (productId: string) => InventoryAuditRecord[];
   getAuditsByBranch: (branchId: string) => InventoryAuditRecord[];
   getAuditsBySource: (source: AuditSource) => InventoryAuditRecord[];
@@ -67,8 +50,6 @@ interface InventoryAuditContextType {
 }
 
 const InventoryAuditContext = createContext<InventoryAuditContextType | undefined>(undefined);
-
-const STORAGE_KEY = "pos_inventory_audit_log";
 
 export function InventoryAuditProvider({ children }: { children: ReactNode }) {
   let auth;
@@ -82,31 +63,62 @@ export function InventoryAuditProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // STATE MANAGEMENT - Immutable Audit Records
   // ═══════════════════════════════════════════════════════════════════
-  const [auditRecords, setAuditRecords] = useState<InventoryAuditRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      console.error("Failed to load inventory audit log:", error);
-      return [];
-    }
-  });
+  const [auditRecords, setAuditRecords] = useState<InventoryAuditRecord[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // PERSIST TO LOCALSTORAGE
+  // FETCH FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(auditRecords));
-    } catch (error) {
-      console.error("Failed to save inventory audit log:", error);
+    if (!business) {
+      setAuditRecords([]);
+      return;
     }
-  }, [auditRecords]);
+
+    const fetchAudits = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('inventory_audit_log')
+          .select('*')
+          .eq('business_id', business.id)
+          .order('timestamp', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          setAuditRecords(data.map((rec: any) => ({
+            id: rec.id,
+            businessId: rec.business_id,
+            branchId: rec.branch_id,
+            branchName: rec.branch_name,
+            productId: rec.product_id,
+            productName: rec.product_name,
+            productSKU: rec.product_sku,
+            action: rec.action as AuditAction,
+            quantity: Number(rec.quantity),
+            previousStock: Number(rec.previous_stock),
+            newStock: Number(rec.new_stock),
+            source: rec.source as AuditSource,
+            sourceReferenceId: rec.source_reference_id,
+            sourceReferenceNumber: rec.source_reference_number,
+            performedByStaffId: rec.performed_by_staff_id,
+            performedByStaffName: rec.performed_by_staff_name,
+            performedByRole: rec.performed_by_role,
+            notes: rec.notes,
+            timestamp: rec.timestamp
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching inventory audit log:", err);
+      }
+    };
+
+    fetchAudits();
+  }, [business]);
 
   // ═══════════════════════════════════════════════════════════════════
   // ADD AUDIT RECORD (Create-Only, Immutable)
   // ═══════════════════════════════════════════════════════════════════
-  const addAuditRecord = (
+  const addAuditRecord = async (
     record: Omit<InventoryAuditRecord, "id" | "businessId" | "timestamp">
   ) => {
     if (!business) {
@@ -118,15 +130,49 @@ export function InventoryAuditProvider({ children }: { children: ReactNode }) {
     const dateStr = timestamp.split('T')[0].replace(/-/g, '');
     const timeStr = timestamp.split('T')[1].replace(/[:.]/g, '').substring(0, 6);
     const randomId = Math.random().toString(36).substr(2, 4).toUpperCase();
+    const id = `AUDIT-${dateStr}-${timeStr}-${randomId}`;
 
     const newRecord: InventoryAuditRecord = {
       ...record,
-      id: `AUDIT-${dateStr}-${timeStr}-${randomId}`,
+      id,
       businessId: business.id,
       timestamp
     };
 
-    setAuditRecords(prev => [newRecord, ...prev]);
+    try {
+      const dbRecord = {
+        id: newRecord.id,
+        business_id: newRecord.businessId,
+        branch_id: newRecord.branchId,
+        branch_name: newRecord.branchName,
+        product_id: newRecord.productId,
+        product_name: newRecord.productName,
+        product_sku: newRecord.productSKU,
+        action: newRecord.action,
+        quantity: newRecord.quantity,
+        previous_stock: newRecord.previousStock,
+        new_stock: newRecord.newStock,
+        source: newRecord.source,
+        source_reference_id: newRecord.sourceReferenceId,
+        source_reference_number: newRecord.sourceReferenceNumber,
+        performed_by_staff_id: newRecord.performedByStaffId,
+        performed_by_staff_name: newRecord.performedByStaffName,
+        performed_by_role: newRecord.performedByRole,
+        notes: newRecord.notes,
+        timestamp: newRecord.timestamp
+      };
+
+      const { error } = await supabase
+        .from('inventory_audit_log')
+        .insert(dbRecord);
+
+      if (error) throw error;
+
+      setAuditRecords(prev => [newRecord, ...prev]);
+    } catch (err: any) {
+      console.error("Error adding audit record:", err);
+      toast.error("Failed to log inventory audit");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════

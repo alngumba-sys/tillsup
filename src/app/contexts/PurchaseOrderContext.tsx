@@ -1,29 +1,12 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * PURCHASE ORDER CONTEXT - ENTERPRISE PROCUREMENT REQUEST SYSTEM
  * ═══════════════════════════════════════════════════════════════════════════
- * 
- * PURPOSE:
- * - Manage formal purchase order requests to suppliers
- * - Track multi-product orders with line items
- * - Support professional approval workflows
- * - Maintain complete audit trail
- * - Branch-aware and role-based access controlled
- * 
- * CRITICAL NON-DESTRUCTIVE GUARANTEE:
- * - Does NOT modify inventory stock levels at ANY stage
- * - Does NOT auto-create expenses or invoices
- * - Does NOT affect POS or sales logic
- * - Purchase Orders are REQUESTS ONLY - require manual fulfillment
- * 
- * STATUS WORKFLOW:
- * Draft → Sent → Approved → Cancelled
- * (Delivered status reserved for future Goods Received module)
- * 
- * ══════════════════════════════════════════════════════════════════════════
  */
 
 export type POStatus = "Draft" | "Sent" | "Approved" | "Cancelled" | "Delivered";
@@ -74,11 +57,11 @@ export interface PurchaseOrder {
 
 interface PurchaseOrderContextType {
   purchaseOrders: PurchaseOrder[];
-  addPurchaseOrder: (po: Omit<PurchaseOrder, "id" | "poNumber" | "businessId" | "createdAt" | "updatedAt" | "status">) => void;
-  updatePurchaseOrder: (id: string, updates: Partial<PurchaseOrder>) => void;
-  sendPurchaseOrder: (id: string, methods: CommunicationMethod[]) => void;
-  approvePurchaseOrder: (id: string, approverStaffId: string, approverStaffName: string) => void;
-  cancelPurchaseOrder: (id: string, reason: string) => void;
+  addPurchaseOrder: (po: Omit<PurchaseOrder, "id" | "poNumber" | "businessId" | "createdAt" | "updatedAt" | "status">) => Promise<string | undefined>;
+  updatePurchaseOrder: (id: string, updates: Partial<PurchaseOrder>) => Promise<void>;
+  sendPurchaseOrder: (id: string, methods: CommunicationMethod[]) => Promise<void>;
+  approvePurchaseOrder: (id: string, approverStaffId: string, approverStaffName: string) => Promise<void>;
+  cancelPurchaseOrder: (id: string, reason: string) => Promise<void>;
   getPurchaseOrderById: (id: string) => PurchaseOrder | undefined;
   getPurchaseOrdersByBranch: (branchId: string) => PurchaseOrder[];
   getPurchaseOrdersBySupplier: (supplierId: string) => PurchaseOrder[];
@@ -87,8 +70,6 @@ interface PurchaseOrderContextType {
 }
 
 const PurchaseOrderContext = createContext<PurchaseOrderContextType | undefined>(undefined);
-
-const STORAGE_KEY = "pos_purchase_orders";
 
 export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
@@ -105,30 +86,68 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // STATE MANAGEMENT
   // ═══════════════════════════════════════════════════════════════════
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      console.error("Failed to load purchase orders:", error);
-      return [];
-    }
-  });
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   // ══════════════════════════════════════════════════════════════════
-  // PERSIST TO LOCALSTORAGE
+  // FETCH FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(purchaseOrders));
-    } catch (error) {
-      console.error("Failed to save purchase orders:", error);
+    if (!business) {
+      setPurchaseOrders([]);
+      return;
     }
-  }, [purchaseOrders]);
+
+    const fetchPOs = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('purchase_orders')
+          .select('*')
+          .eq('business_id', business.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          setPurchaseOrders(data.map((po: any) => ({
+            id: po.id,
+            poNumber: po.po_number,
+            businessId: po.business_id,
+            branchId: po.branch_id,
+            branchName: po.branch_name,
+            supplierId: po.supplier_id,
+            supplierName: po.supplier_name,
+            supplierContact: po.supplier_contact,
+            items: po.items || [],
+            expectedDeliveryDate: po.expected_delivery_date,
+            notes: po.notes,
+            status: po.status as POStatus,
+            totalAmount: po.total_amount ? Number(po.total_amount) : undefined,
+            sourceRequestId: po.source_request_id,
+            createdByStaffId: po.created_by_staff_id,
+            createdByStaffName: po.created_by_staff_name,
+            createdByRole: po.created_by_role,
+            createdAt: po.created_at,
+            updatedAt: po.updated_at,
+            sentAt: po.sent_at,
+            sentVia: po.sent_via,
+            approvedAt: po.approved_at,
+            approvedByStaffId: po.approved_by_staff_id,
+            approvedByStaffName: po.approved_by_staff_name,
+            cancelledAt: po.cancelled_at,
+            cancelledReason: po.cancelled_reason
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching purchase orders:", err);
+      }
+    };
+
+    fetchPOs();
+  }, [business]);
 
   // ═══════════════════════════════════════════════════════════════════
   // GENERATE NEXT PO NUMBER
-  // ══════════════════════════════════════════════════════════════════���
+  // ═══════════════════════════════════════════════════════════════════
   const getNextPONumber = (): string => {
     if (!business) return "PO-001";
 
@@ -140,17 +159,18 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // ADD PURCHASE ORDER (Draft status)
   // ═══════════════════════════════════════════════════════════════════
-  const addPurchaseOrder = (
+  const addPurchaseOrder = async (
     po: Omit<PurchaseOrder, "id" | "poNumber" | "businessId" | "createdAt" | "updatedAt" | "status">
-  ) => {
+  ): Promise<string | undefined> => {
     if (!business) {
       console.error("Cannot create purchase order: No business context");
-      return;
+      return undefined;
     }
 
     const timestamp = new Date().toISOString();
     const dateStr = timestamp.split('T')[0].replace(/-/g, '');
     const randomId = Math.random().toString(36).substr(2, 6).toUpperCase();
+    const id = `PO-${dateStr}-${randomId}`;
 
     // Calculate total amount
     const totalAmount = po.items.reduce((sum, item) => {
@@ -159,8 +179,8 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
 
     const newPO: PurchaseOrder = {
       ...po,
-      id: `PO-${dateStr}-${randomId}`,
-      poNumber: getNextPONumber(),
+      id,
+      poNumber: getNextPONumber(), // Note: potential race condition here but acceptable for this scope
       businessId: business.id,
       status: "Draft",
       totalAmount: totalAmount > 0 ? totalAmount : undefined,
@@ -168,113 +188,233 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
       updatedAt: timestamp
     };
 
-    setPurchaseOrders(prev => [newPO, ...prev]);
+    try {
+      const dbPO = {
+        id: newPO.id,
+        po_number: newPO.poNumber,
+        business_id: newPO.businessId,
+        branch_id: newPO.branchId,
+        branch_name: newPO.branchName,
+        supplier_id: newPO.supplierId,
+        supplier_name: newPO.supplierName,
+        supplier_contact: newPO.supplierContact,
+        items: newPO.items,
+        expected_delivery_date: newPO.expectedDeliveryDate,
+        notes: newPO.notes,
+        status: newPO.status,
+        total_amount: newPO.totalAmount,
+        source_request_id: newPO.sourceRequestId,
+        created_by_staff_id: newPO.createdByStaffId,
+        created_by_staff_name: newPO.createdByStaffName,
+        created_by_role: newPO.createdByRole,
+        created_at: newPO.createdAt,
+        updated_at: newPO.updatedAt
+      };
+
+      const { error } = await supabase
+        .from('purchase_orders')
+        .insert(dbPO);
+
+      if (error) throw error;
+
+      setPurchaseOrders(prev => [newPO, ...prev]);
+      toast.success("Purchase Order Created");
+      return id;
+    } catch (err: any) {
+      console.error("Error creating purchase order:", err);
+      toast.error("Failed to create Purchase Order");
+      return undefined;
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // UPDATE PURCHASE ORDER (Draft only)
   // ═══════════════════════════════════════════════════════════════════
-  const updatePurchaseOrder = (id: string, updates: Partial<PurchaseOrder>) => {
-    setPurchaseOrders(prev =>
-      prev.map(po => {
-        if (po.id !== id) return po;
+  const updatePurchaseOrder = async (id: string, updates: Partial<PurchaseOrder>) => {
+    const po = purchaseOrders.find(p => p.id === id);
+    if (!po) return;
 
-        // Only allow updates to Draft status
-        if (po.status !== "Draft") {
-          console.warn(`Cannot update PO ${id}: Status is ${po.status}, not Draft`);
-          return po;
-        }
+    if (po.status !== "Draft") {
+      toast.error(`Cannot update PO: Status is ${po.status}`);
+      return;
+    }
 
-        // Recalculate total if items changed
-        let totalAmount = po.totalAmount;
-        if (updates.items) {
-          totalAmount = updates.items.reduce((sum, item) => {
-            return sum + (item.totalCost || 0);
-          }, 0);
-        }
+    try {
+      const dbUpdates: any = { ...updates, updated_at: new Date().toISOString() };
+      
+      // Recalculate total if items changed
+      if (updates.items) {
+        dbUpdates.total_amount = updates.items.reduce((sum, item) => {
+          return sum + (item.totalCost || 0);
+        }, 0);
+        dbUpdates.items = updates.items;
+      }
 
-        return {
-          ...po,
-          ...updates,
-          totalAmount: totalAmount && totalAmount > 0 ? totalAmount : undefined,
-          updatedAt: new Date().toISOString()
+      // Map other fields to snake_case if necessary (assuming direct mapping for simplistic fields works if keys match or are explicitly handled)
+      // Since updates uses camelCase, we need to map strictly.
+      const mappedUpdates: any = { updated_at: dbUpdates.updated_at };
+      if (dbUpdates.total_amount) mappedUpdates.total_amount = dbUpdates.total_amount;
+      if (dbUpdates.items) mappedUpdates.items = dbUpdates.items;
+      if (updates.notes !== undefined) mappedUpdates.notes = updates.notes;
+      if (updates.expectedDeliveryDate !== undefined) mappedUpdates.expected_delivery_date = updates.expectedDeliveryDate;
+      if (updates.supplierContact !== undefined) mappedUpdates.supplier_contact = updates.supplierContact;
+
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update(mappedUpdates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setPurchaseOrders(prev => prev.map(p => {
+        if (p.id !== id) return p;
+        return { 
+          ...p, 
+          ...updates, 
+          totalAmount: dbUpdates.total_amount,
+          updatedAt: dbUpdates.updated_at 
         };
-      })
-    );
+      }));
+      
+      toast.success("Purchase Order Updated");
+    } catch (err: any) {
+      console.error("Error updating PO:", err);
+      toast.error("Failed to update Purchase Order");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // SEND PURCHASE ORDER (Draft → Sent)
   // ═══════════════════════════════════════════════════════════════════
-  const sendPurchaseOrder = (id: string, methods: CommunicationMethod[]) => {
-    setPurchaseOrders(prev =>
-      prev.map(po => {
-        if (po.id !== id) return po;
+  const sendPurchaseOrder = async (id: string, methods: CommunicationMethod[]) => {
+    const po = purchaseOrders.find(p => p.id === id);
+    if (!po) return;
 
-        if (po.status !== "Draft") {
-          console.warn(`Cannot send PO ${id}: Status is ${po.status}, not Draft`);
-          return po;
-        }
+    if (po.status !== "Draft") {
+      toast.error(`Cannot send PO: Status is ${po.status}`);
+      return;
+    }
 
+    try {
+      const sentAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update({
+          status: 'Sent',
+          sent_at: sentAt,
+          sent_via: methods,
+          updated_at: sentAt
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setPurchaseOrders(prev => prev.map(p => {
+        if (p.id !== id) return p;
         return {
-          ...po,
-          status: "Sent" as POStatus,
-          sentAt: new Date().toISOString(),
+          ...p,
+          status: "Sent",
+          sentAt,
           sentVia: methods,
-          updatedAt: new Date().toISOString()
+          updatedAt: sentAt
         };
-      })
-    );
+      }));
+      
+      toast.success("Purchase Order Sent");
+    } catch (err: any) {
+      console.error("Error sending PO:", err);
+      toast.error("Failed to send Purchase Order");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // APPROVE PURCHASE ORDER (Sent → Approved)
   // ═══════════════════════════════════════════════════════════════════
-  const approvePurchaseOrder = (id: string, approverStaffId: string, approverStaffName: string) => {
-    setPurchaseOrders(prev =>
-      prev.map(po => {
-        if (po.id !== id) return po;
+  const approvePurchaseOrder = async (id: string, approverStaffId: string, approverStaffName: string) => {
+    const po = purchaseOrders.find(p => p.id === id);
+    if (!po) return;
 
-        if (po.status !== "Sent") {
-          console.warn(`Cannot approve PO ${id}: Status is ${po.status}, not Sent`);
-          return po;
-        }
+    if (po.status !== "Sent") {
+      toast.error(`Cannot approve PO: Status is ${po.status}`);
+      return;
+    }
 
+    try {
+      const approvedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update({
+          status: 'Approved',
+          approved_at: approvedAt,
+          approved_by_staff_id: approverStaffId,
+          approved_by_staff_name: approverStaffName,
+          updated_at: approvedAt
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setPurchaseOrders(prev => prev.map(p => {
+        if (p.id !== id) return p;
         return {
-          ...po,
-          status: "Approved" as POStatus,
-          approvedAt: new Date().toISOString(),
+          ...p,
+          status: "Approved",
+          approvedAt,
           approvedByStaffId: approverStaffId,
           approvedByStaffName: approverStaffName,
-          updatedAt: new Date().toISOString()
+          updatedAt: approvedAt
         };
-      })
-    );
+      }));
+      
+      toast.success("Purchase Order Approved");
+    } catch (err: any) {
+      console.error("Error approving PO:", err);
+      toast.error("Failed to approve Purchase Order");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // CANCEL PURCHASE ORDER
   // ═══════════════════════════════════════════════════════════════════
-  const cancelPurchaseOrder = (id: string, reason: string) => {
-    setPurchaseOrders(prev =>
-      prev.map(po => {
-        if (po.id !== id) return po;
+  const cancelPurchaseOrder = async (id: string, reason: string) => {
+    const po = purchaseOrders.find(p => p.id === id);
+    if (!po) return;
 
-        // Can cancel Draft, Sent, or Approved (not Delivered)
-        if (po.status === "Cancelled" || po.status === "Delivered") {
-          console.warn(`Cannot cancel PO ${id}: Status is ${po.status}`);
-          return po;
-        }
+    if (po.status === "Cancelled" || po.status === "Delivered") {
+      toast.error(`Cannot cancel PO: Status is ${po.status}`);
+      return;
+    }
 
+    try {
+      const cancelledAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update({
+          status: 'Cancelled',
+          cancelled_at: cancelledAt,
+          cancelled_reason: reason,
+          updated_at: cancelledAt
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setPurchaseOrders(prev => prev.map(p => {
+        if (p.id !== id) return p;
         return {
-          ...po,
-          status: "Cancelled" as POStatus,
-          cancelledAt: new Date().toISOString(),
+          ...p,
+          status: "Cancelled",
+          cancelledAt,
           cancelledReason: reason,
-          updatedAt: new Date().toISOString()
+          updatedAt: cancelledAt
         };
-      })
-    );
+      }));
+      
+      toast.success("Purchase Order Cancelled");
+    } catch (err: any) {
+      console.error("Error cancelling PO:", err);
+      toast.error("Failed to cancel Purchase Order");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════

@@ -28,12 +28,12 @@ export default function App() {
         <BranchProvider>
         <RoleProvider>
           <CategoryProvider>
-            <SupplierProvider>
-              <SupplierManagementProvider>
-                <SupplierRequestProvider>
-                  <InventoryProvider>
-                    <InventoryAuditProvider>
-                      <SalesProvider>
+            <SalesProvider>
+              <SupplierProvider>
+                <SupplierManagementProvider>
+                  <SupplierRequestProvider>
+                    <InventoryProvider>
+                      <InventoryAuditProvider>
                         <ExpenseProvider>
                           <PurchaseOrderProvider>
                             <GoodsReceivedProvider>
@@ -49,12 +49,12 @@ export default function App() {
                             </GoodsReceivedProvider>
                           </PurchaseOrderProvider>
                         </ExpenseProvider>
-                      </SalesProvider>
-                    </InventoryAuditProvider>
-                  </InventoryProvider>
-                </SupplierRequestProvider>
-              </SupplierManagementProvider>
-            </SupplierProvider>
+                      </InventoryAuditProvider>
+                    </InventoryProvider>
+                  </SupplierRequestProvider>
+                </SupplierManagementProvider>
+              </SupplierProvider>
+            </SalesProvider>
           </CategoryProvider>
         </RoleProvider>
       </BranchProvider>

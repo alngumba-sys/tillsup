@@ -1,23 +1,11 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * SUPPLIER REQUEST CONTEXT - LOW-STOCK PROCUREMENT AUTOMATION
- * ═══════════════════════════════════════════════════════════════════════════
- * 
- * PURPOSE:
- * - Track supplier requests for low-stock inventory items
- * - Support multi-channel communication (Email, SMS, WhatsApp)
- * - Maintain audit trail of all supplier communications
- * - Branch-aware and role-based access controlled
- * 
- * NON-DESTRUCTIVE GUARANTEE:
- * - Does NOT modify inventory stock levels
- * - Does NOT auto-create purchase orders
- * - Does NOT deduct or add inventory
- * - Read-only integration with inventory data
- * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -59,14 +47,14 @@ export interface SupplierRequest {
 
 interface SupplierRequestContextType {
   requests: SupplierRequest[];
-  addRequest: (request: Omit<SupplierRequest, "id" | "businessId" | "timestamp" | "status" | "conversionStatus">) => void;
+  addRequest: (request: Omit<SupplierRequest, "id" | "businessId" | "timestamp" | "status" | "conversionStatus">) => Promise<void>;
   updateRequestStatus: (id: string, conversionStatus: SupplierRequestStatus, metadata?: {
     convertedToPOId?: string;
     convertedByStaffId?: string;
     convertedByStaffName?: string;
     cancelledReason?: string;
-  }) => void;
-  deleteRequest: (id: string) => void;
+  }) => Promise<void>;
+  deleteRequest: (id: string) => Promise<void>;
   getRequestById: (id: string) => SupplierRequest | undefined;
   getRequestsByBranch: (branchId: string) => SupplierRequest[];
   getRequestsByProduct: (productId: string) => SupplierRequest[];
@@ -75,8 +63,6 @@ interface SupplierRequestContextType {
 }
 
 const SupplierRequestContext = createContext<SupplierRequestContextType | undefined>(undefined);
-
-const STORAGE_KEY = "pos_supplier_requests";
 
 export function SupplierRequestProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
@@ -92,81 +78,194 @@ export function SupplierRequestProvider({ children }: { children: ReactNode }) {
 
   // ═══════════════════════════════════════════════════════════════════
   // STATE MANAGEMENT
-  // ═══════════════════════════════════════════════════════════════════
-  const [requests, setRequests] = useState<SupplierRequest[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      console.error("Failed to load supplier requests:", error);
-      return [];
-    }
-  });
+  // ═══════════════���═══════════════════════════════════════════════════
+  const [requests, setRequests] = useState<SupplierRequest[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // PERSIST TO LOCALSTORAGE
+  // FETCH FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
-    } catch (error) {
-      console.error("Failed to save supplier requests:", error);
+    if (!business) {
+      setRequests([]);
+      return;
     }
-  }, [requests]);
+
+    const fetchRequests = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('supplier_requests')
+          .select('*')
+          .eq('business_id', business.id)
+          .order('timestamp', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          setRequests(data.map((req: any) => ({
+            id: req.id,
+            businessId: req.business_id,
+            branchId: req.branch_id,
+            branchName: req.branch_name,
+            productId: req.product_id,
+            productName: req.product_name,
+            supplierId: req.supplier_id,
+            supplierName: req.supplier_name,
+            currentStock: Number(req.current_stock),
+            requestedQuantity: Number(req.requested_quantity),
+            communicationMethods: req.communication_methods || [],
+            customMessage: req.custom_message,
+            status: req.status as RequestStatus,
+            conversionStatus: req.conversion_status as SupplierRequestStatus,
+            convertedToPOId: req.converted_to_po_id,
+            convertedAt: req.converted_at,
+            convertedByStaffId: req.converted_by_staff_id,
+            convertedByStaffName: req.converted_by_staff_name,
+            cancelledAt: req.cancelled_at,
+            cancelledReason: req.cancelled_reason,
+            createdByStaffId: req.created_by_staff_id,
+            createdByStaffName: req.created_by_staff_name,
+            createdByRole: req.created_by_role,
+            timestamp: req.timestamp,
+            sentVia: req.sent_via
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching supplier requests:", err);
+      }
+    };
+
+    fetchRequests();
+  }, [business]);
 
   // ═══════════════════════════════════════════════════════════════════
   // ADD SUPPLIER REQUEST
   // ═══════════════════════════════════════════════════════════════════
-  const addRequest = (request: Omit<SupplierRequest, "id" | "businessId" | "timestamp" | "status" | "conversionStatus">) => {
+  const addRequest = async (request: Omit<SupplierRequest, "id" | "businessId" | "timestamp" | "status" | "conversionStatus">) => {
     if (!business) {
       console.error("Cannot create supplier request: No business context");
       return;
     }
 
+    const timestamp = new Date().toISOString();
+    const id = `REQ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     const newRequest: SupplierRequest = {
       ...request,
-      id: `REQ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id,
       businessId: business.id,
-      timestamp: new Date().toISOString(),
-      status: "Sent", // Default to "Sent" for simulation (would be API response in production)
+      timestamp,
+      status: "Sent", // Default to "Sent" for simulation
       sentVia: request.communicationMethods.join(", "),
       conversionStatus: "REQUESTED"
     };
 
-    setRequests(prev => [newRequest, ...prev]);
+    try {
+      const dbRequest = {
+        id: newRequest.id,
+        business_id: newRequest.businessId,
+        branch_id: newRequest.branchId,
+        branch_name: newRequest.branchName,
+        product_id: newRequest.productId,
+        product_name: newRequest.productName,
+        supplier_id: newRequest.supplierId,
+        supplier_name: newRequest.supplierName,
+        current_stock: newRequest.currentStock,
+        requested_quantity: newRequest.requestedQuantity,
+        communication_methods: newRequest.communicationMethods,
+        custom_message: newRequest.customMessage,
+        status: newRequest.status,
+        conversion_status: newRequest.conversionStatus,
+        created_by_staff_id: newRequest.createdByStaffId,
+        created_by_staff_name: newRequest.createdByStaffName,
+        created_by_role: newRequest.createdByRole,
+        timestamp: newRequest.timestamp,
+        sent_via: newRequest.sentVia
+      };
+
+      const { error } = await supabase
+        .from('supplier_requests')
+        .insert(dbRequest);
+
+      if (error) throw error;
+
+      setRequests(prev => [newRequest, ...prev]);
+      toast.success("Supplier request sent");
+    } catch (err: any) {
+      console.error("Error adding supplier request:", err);
+      toast.error("Failed to send supplier request");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // UPDATE REQUEST STATUS
   // ═══════════════════════════════════════════════════════════════════
-  const updateRequestStatus = (id: string, conversionStatus: SupplierRequestStatus, metadata?: {
+  const updateRequestStatus = async (id: string, conversionStatus: SupplierRequestStatus, metadata?: {
     convertedToPOId?: string;
     convertedByStaffId?: string;
     convertedByStaffName?: string;
     cancelledReason?: string;
   }) => {
-    setRequests(prev => prev.map(req => {
-      if (req.id === id) {
-        return {
-          ...req,
-          conversionStatus,
-          convertedToPOId: metadata?.convertedToPOId,
-          convertedAt: conversionStatus === "CONVERTED" ? new Date().toISOString() : req.convertedAt,
-          convertedByStaffId: metadata?.convertedByStaffId,
-          convertedByStaffName: metadata?.convertedByStaffName,
-          cancelledAt: conversionStatus === "CANCELLED" ? new Date().toISOString() : req.cancelledAt,
-          cancelledReason: metadata?.cancelledReason
-        };
+    try {
+      const updates: any = {
+        conversion_status: conversionStatus
+      };
+
+      if (conversionStatus === "CONVERTED") {
+        updates.converted_to_po_id = metadata?.convertedToPOId;
+        updates.converted_at = new Date().toISOString();
+        updates.converted_by_staff_id = metadata?.convertedByStaffId;
+        updates.converted_by_staff_name = metadata?.convertedByStaffName;
+      } else if (conversionStatus === "CANCELLED") {
+        updates.cancelled_at = new Date().toISOString();
+        updates.cancelled_reason = metadata?.cancelledReason;
       }
-      return req;
-    }));
+
+      const { error } = await supabase
+        .from('supplier_requests')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setRequests(prev => prev.map(req => {
+        if (req.id === id) {
+          return {
+            ...req,
+            conversionStatus,
+            convertedToPOId: metadata?.convertedToPOId,
+            convertedAt: conversionStatus === "CONVERTED" ? updates.converted_at : req.convertedAt,
+            convertedByStaffId: metadata?.convertedByStaffId,
+            convertedByStaffName: metadata?.convertedByStaffName,
+            cancelledAt: conversionStatus === "CANCELLED" ? updates.cancelled_at : req.cancelledAt,
+            cancelledReason: metadata?.cancelledReason
+          };
+        }
+        return req;
+      }));
+    } catch (err: any) {
+      console.error("Error updating request status:", err);
+      toast.error("Failed to update request status");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // DELETE REQUEST
   // ═══════════════════════════════════════════════════════════════════
-  const deleteRequest = (id: string) => {
-    setRequests(prev => prev.filter(req => req.id !== id));
+  const deleteRequest = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('supplier_requests')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setRequests(prev => prev.filter(req => req.id !== id));
+      toast.success("Request deleted");
+    } catch (err: any) {
+      console.error("Error deleting request:", err);
+      toast.error("Failed to delete request");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════

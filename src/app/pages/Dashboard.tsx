@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Package } from "lucide-react";
 import { Building2 } from "lucide-react";
+import { SchemaError } from "../components/inventory/SchemaError";
 
 const salesData = [
   { name: "Mon", sales: 4200 },
@@ -41,9 +42,9 @@ export function Dashboard() {
     getTotalCOGS
   } = useSales();
   const { inventory } = useInventory();
-  const { user, business } = useAuth();
+  const { user, business, schemaError } = useAuth();
   const { usage } = useSubscription();
-  const { branches } = useBranch();
+  const { branches, error: branchError } = useBranch();
   const { expenses } = useExpense();
   const navigate = useNavigate();
   const [isDemoDataLoaded, setIsDemoDataLoaded] = useState(false);
@@ -293,8 +294,14 @@ export function Dashboard() {
       .slice(0, 5)
       .map(sale => {
         const timeAgo = getTimeAgo(new Date(sale.timestamp));
+        // Use readable ID if available, otherwise fallback to short UUID
+        const displayId = sale.readableId 
+          ? `Order #${sale.readableId.toString().padStart(5, '0')}`
+          : `Order #${sale.id.substring(0, 8).toUpperCase()}`;
+          
         return {
           id: sale.id,
+          displayId,
           // ═══════════════════════════════════════════════════════════════════
           // CUSTOMER NAME VISIBILITY - Display customer name if provided
           // ═══════════════════════════════════════════════════════════════════
@@ -388,6 +395,9 @@ export function Dashboard() {
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
+      {/* Schema Error Display */}
+      {(branchError || schemaError) && <SchemaError error={branchError || schemaError} />}
+
       {/* Page Header */}
       <div>
         <h1 className="text-3xl mb-1">Dashboard</h1>
@@ -619,8 +629,8 @@ export function Dashboard() {
               >
                 <div className="flex-1">
                   <p className="font-medium">{transaction.customer}</p>
-                  <p className="text-sm text-muted-foreground">{transaction.id} • {transaction.time}</p>
-                  {/* ═══════════════════════════════════════════════════════════════════
+                  <p className="text-sm text-muted-foreground">{transaction.displayId} • {transaction.time}</p>
+                  {/* ════════════���════════════════════��═════════════════════════════════
                       SOLD BY (STAFF/CASHIER) - Display who processed the transaction
                       ═══════════════════════════════════════════════════════════════════ */}
                   <p className="text-xs text-muted-foreground mt-0.5">Sold by: {transaction.staffName}</p>
@@ -637,45 +647,7 @@ export function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Load Demo Data Button */}
-      {!isDemoDataLoaded && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Load Demo Data</CardTitle>
-            <CardDescription>
-              Generate 60+ sample sales transactions over the last 7 days to test the reporting system
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {inventory.length === 0 ? (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  You need to add products to your inventory before loading demo sales data.
-                </p>
-                <Button
-                  onClick={() => navigate("/app/inventory")}
-                  variant="outline"
-                  className="gap-2"
-                >
-                  <Package className="w-4 h-4" />
-                  Go to Inventory
-                </Button>
-              </div>
-            ) : (
-              <Button
-                onClick={() => {
-                  seedDemoSales(recordSale, inventory, addSaleDirectly, user, business);
-                  setIsDemoDataLoaded(true);
-                }}
-                className="gap-2"
-              >
-                <Database className="w-4 h-4" />
-                Load Demo Data
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
+
     </div>
   );
 }

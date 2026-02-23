@@ -22,7 +22,16 @@ export interface SubscriptionContextType {
 
 export function useSubscription(): SubscriptionContextType {
   const { user, business, getStaffMembers } = useAuth();
-  const { branches } = useBranch();
+  
+  // Safe branch context access
+  let branches: any[] = [];
+  try {
+    const branchContext = useBranch();
+    branches = branchContext.branches;
+  } catch (e) {
+    console.warn("useSubscription: BranchContext not available", e);
+  }
+
   const [staffCount, setStaffCount] = useState(0);
 
   useEffect(() => {

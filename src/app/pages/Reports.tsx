@@ -22,6 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { useSales } from "../contexts/SalesContext";
 import { useInventory } from "../contexts/InventoryContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useCategory } from "../contexts/CategoryContext";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { formatCurrency } from "../utils/currency";
@@ -44,6 +45,7 @@ export function Reports() {
   
   const { inventory } = useInventory();
   const { user, business } = useAuth();
+  const { categories } = useCategory(); // Get categories to force re-render when they load
   const currencyCode = business?.currency || "KES";
 
   // ═══════════════════════════════════════════════════════════════════
@@ -66,7 +68,7 @@ export function Reports() {
 
   // ═══════════════════════════════════════════════════════════════════
   // REAL-TIME ANALYTICS - Computed from Actual Data (with RBAC filtering)
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════���═════════════════════════
   const analytics = useMemo(() => {
     // KPIs
     const totalRevenue = getTotalRevenue(businessId, staffId);
@@ -107,8 +109,12 @@ export function Reports() {
     // Inventory with sold quantities
     const inventoryWithSold = inventory.map(item => {
       const soldData = soldByProduct.get(item.id);
+      const categoryObj = categories.find(c => c.id === item.category);
+      const categoryName = categoryObj ? categoryObj.name : (item.category || "Uncategorized");
+
       return {
         ...item,
+        categoryName,
         soldQuantity: soldData?.quantity || 0,
         soldRevenue: soldData?.revenue || 0
       };
@@ -124,12 +130,13 @@ export function Reports() {
     const categoryMap = new Map<string, { sales: number; revenue: number; value: number }>();
     
     inventoryWithSold.forEach(item => {
-      const existing = categoryMap.get(item.category);
+      const catName = item.categoryName;
+      const existing = categoryMap.get(catName);
       if (existing) {
         existing.sales += item.soldRevenue;
         existing.value += item.soldQuantity;
       } else {
-        categoryMap.set(item.category, {
+        categoryMap.set(catName, {
           sales: item.soldRevenue,
           value: item.soldQuantity,
           revenue: item.soldRevenue
@@ -172,7 +179,7 @@ export function Reports() {
       grossProfitMargin,
       filteredSales // ═══════ ADD FILTERED SALES TO ANALYTICS ═══════
     };
-  }, [sales, inventory, businessId, staffId, getTotalRevenue, getTotalRevenueToday, getTotalCustomersToday, getDailySales, getBestSellingProducts, getSalesByProduct, getTotalCOGS, getTotalGrossProfit, getGrossProfitMargin]);
+  }, [sales, inventory, categories, businessId, staffId, getTotalRevenue, getTotalRevenueToday, getTotalCustomersToday, getDailySales, getBestSellingProducts, getSalesByProduct, getTotalCOGS, getTotalGrossProfit, getGrossProfitMargin]);
 
   // ═══════════════════════════════════════════════════════════════════
   // EMPTY STATE - Show when no sales data exists
@@ -453,7 +460,11 @@ export function Reports() {
                       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                       .map((sale) => (
                       <TableRow key={sale.id}>
-                        <TableCell className="font-mono text-xs">{sale.id}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {sale.readableId 
+                            ? `#${sale.readableId.toString().padStart(5, '0')}` 
+                            : sale.id.substring(0, 8)}
+                        </TableCell>
                         <TableCell className="text-sm">
                           <div>{new Date(sale.timestamp).toLocaleDateString()}</div>
                           <div className="text-xs text-muted-foreground">
@@ -642,7 +653,7 @@ export function Reports() {
                     {analytics.inventoryWithSold.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.category}</TableCell>
+                        <TableCell>{item.categoryName}</TableCell>
                         <TableCell className="text-center font-semibold">{item.stock}</TableCell>
                         <TableCell className="text-center">{item.soldQuantity}</TableCell>
                         <TableCell className="text-right">{formatCurrency(item.soldRevenue)}</TableCell>

@@ -216,7 +216,7 @@ export function SupplierInvoices() {
   // ═══════════════════════════════════════════════════════════════════
   // CREATE SUPPLIER INVOICE (Draft)
   // ═══════════════════════════════════════════════════════════════════
-  const handleCreateInvoice = () => {
+  const handleCreateInvoice = async () => {
     if (!selectedGRN) {
       toast.error("Please select a GRN");
       return;
@@ -247,7 +247,7 @@ export function SupplierInvoices() {
       return;
     }
 
-    addSupplierInvoice({
+    await addSupplierInvoice({
       invoiceNumber: invoiceNumber.trim(),
       branchId: selectedGRN.branchId,
       branchName: selectedGRN.branchName,
@@ -289,10 +289,10 @@ export function SupplierInvoices() {
   // ═══════════════════════════════════════════════════════════════════
   // APPROVE INVOICE
   // ═══════════════════════════════════════════════════════════════════
-  const handleApproveInvoice = () => {
+  const handleApproveInvoice = async () => {
     if (!selectedInvoice || !user) return;
 
-    const result = approveSupplierInvoice(
+    const result = await approveSupplierInvoice(
       selectedInvoice,
       user.id,
       `${user.firstName} ${user.lastName}`
@@ -318,10 +318,10 @@ export function SupplierInvoices() {
   // ═══════════════════════════════════════════════════════════════════
   // MARK AS PAID
   // ═══════════════════════════════════════════════════════════════════
-  const handleMarkAsPaid = () => {
+  const handleMarkAsPaid = async () => {
     if (!selectedInvoice || !user) return;
 
-    markInvoiceAsPaid(
+    await markInvoiceAsPaid(
       selectedInvoice,
       user.id,
       `${user.firstName} ${user.lastName}`

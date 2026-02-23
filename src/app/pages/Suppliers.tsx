@@ -27,6 +27,7 @@ import { useSupplier } from "../contexts/SupplierContext";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { SchemaError } from "../components/inventory/SchemaError";
 
 interface SupplierFormData {
   name: string;
@@ -49,7 +50,7 @@ const emptyForm: SupplierFormData = {
 };
 
 export function Suppliers() {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useSupplier();
+  const { suppliers, addSupplier, updateSupplier, deleteSupplier, error } = useSupplier();
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -81,12 +82,12 @@ export function Suppliers() {
     );
   });
 
-  const handleAddSupplier = () => {
+  const handleAddSupplier = async () => {
     if (!formData.name.trim()) {
       return;
     }
 
-    addSupplier(formData);
+    await addSupplier(formData);
     setFormData(emptyForm);
     setIsAddDialogOpen(false);
   };
@@ -108,12 +109,12 @@ export function Suppliers() {
     }
   };
 
-  const handleUpdateSupplier = () => {
+  const handleUpdateSupplier = async () => {
     if (!selectedSupplierId || !formData.name.trim()) {
       return;
     }
 
-    updateSupplier(selectedSupplierId, formData);
+    await updateSupplier(selectedSupplierId, formData);
     setFormData(emptyForm);
     setSelectedSupplierId(null);
     setIsEditDialogOpen(false);
@@ -124,9 +125,9 @@ export function Suppliers() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedSupplierId) {
-      deleteSupplier(selectedSupplierId);
+      await deleteSupplier(selectedSupplierId);
       setSelectedSupplierId(null);
       setIsDeleteDialogOpen(false);
     }
@@ -419,6 +420,9 @@ export function Suppliers() {
             </p>
           </div>
         </div>
+
+        {/* Schema Error */}
+        {error && <SchemaError error={error} />}
 
         {/* Action Buttons */}
         <div className="flex justify-between items-center gap-3 flex-wrap">

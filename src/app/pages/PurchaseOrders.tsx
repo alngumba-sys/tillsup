@@ -218,7 +218,7 @@ export function PurchaseOrders() {
   // ═══════════════════════════════════════════════════════════════════
   // CREATE PURCHASE ORDER
   // ═══════════════════════════════════════════════════════════════════
-  const handleCreatePO = () => {
+  const handleCreatePO = async () => {
     // Validation
     if (!formBranchId) {
       toast.error("Please select a branch");
@@ -253,7 +253,7 @@ export function PurchaseOrders() {
       return;
     }
 
-    addPurchaseOrder({
+    await addPurchaseOrder({
       branchId: formBranchId,
       branchName: branch.name,
       supplierId: formSupplierId,
@@ -283,13 +283,13 @@ export function PurchaseOrders() {
   // ═══════════════════════════════════════════════════════════════════
   // SEND PURCHASE ORDER
   // ═══════════════════════════════════════════════════════════════════
-  const handleSendPO = () => {
+  const handleSendPO = async () => {
     if (!selectedPO || sendMethods.length === 0) {
       toast.error("Please select at least one communication method");
       return;
     }
 
-    sendPurchaseOrder(selectedPO, sendMethods);
+    await sendPurchaseOrder(selectedPO, sendMethods);
 
     const po = purchaseOrders.find(p => p.id === selectedPO);
     toast.success("Purchase Order sent successfully!", {
@@ -304,10 +304,10 @@ export function PurchaseOrders() {
   // ═══════════════════════════════════════════════════════════════════
   // APPROVE PURCHASE ORDER
   // ═══════════════════════════════════════════════════════════════════
-  const handleApprovePO = (poId: string) => {
+  const handleApprovePO = async (poId: string) => {
     if (!user) return;
 
-    approvePurchaseOrder(poId, user.id, `${user.firstName} ${user.lastName}`);
+    await approvePurchaseOrder(poId, user.id, `${user.firstName} ${user.lastName}`);
 
     const po = purchaseOrders.find(p => p.id === poId);
     toast.success("Purchase Order approved!", {

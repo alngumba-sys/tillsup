@@ -375,7 +375,7 @@ export function Landing() {
               <div className="inline-flex rounded-xl shadow-2xl">
                 <Button
                   size="lg"
-                  className="text-lg bg-[#ED363F] hover:bg-[#d92b34] border-0 rounded-l-xl rounded-r-none text-white h-auto px-[32px] py-[17px]"
+                  className="text-lg bg-[#ED363F] hover:bg-[#d92b34] border-0 rounded-l-xl rounded-r-none text-white h-auto px-[32px] py-[11px]"
                   onClick={() => navigate("/register")}
                 >
                   Start Free Trial
@@ -383,7 +383,7 @@ export function Landing() {
                 </Button>
                 <Button
                   size="lg"
-                  className="text-lg bg-white hover:bg-slate-50 text-[#0479a1] border-0 rounded-none h-auto px-[32px] py-[17px]"
+                  className="text-lg bg-white hover:bg-slate-50 text-[#0479a1] border-0 rounded-none h-auto px-[32px] py-[11px]"
                   onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
                 >
                   View Pricing
@@ -391,7 +391,7 @@ export function Landing() {
                 <div className="w-px bg-slate-100 h-auto self-stretch" />
                 <Button
                   size="lg"
-                  className="text-lg bg-white hover:bg-slate-50 text-[#0479a1] border-0 rounded-r-xl rounded-l-none h-auto px-[32px] py-[17px]"
+                  className="text-lg bg-white hover:bg-slate-50 text-[#0479a1] border-0 rounded-r-xl rounded-l-none h-auto px-[32px] py-[11px]"
                   onClick={() => navigate("/login")}
                 >
                   Sign In

@@ -1,32 +1,11 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { supabase } from "../../lib/supabase";
+import { toast } from "sonner";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * GOODS RECEIVED NOTES (GRN) CONTEXT - DELIVERY CONFIRMATION SYSTEM
- * ═══════════════════════════════════════════════════════════════════════════
- * 
- * PURPOSE:
- * - Record ACTUAL physical delivery of goods from suppliers
- * - Derived strictly from Purchase Orders
- * - Track ordered vs received quantities
- * - Handle partial deliveries
- * - Maintain immutable delivery records
- * - Provide foundation for inventory stock updates (future)
- * 
- * CRITICAL NON-DESTRUCTIVE GUARANTEE:
- * - Does NOT automatically update inventory stock levels
- * - Does NOT auto-create expenses or invoices
- * - Does NOT affect POS or sales logic
- * - GRNs are CONFIRMATION ONLY - stock updates happen separately
- * 
- * STATUS WORKFLOW:
- * Draft → Confirmed (immutable)
- * 
- * DELIVERY STATUS:
- * - Full: All items received as ordered
- * - Partial: Some items received less than ordered
- * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -66,9 +45,9 @@ export interface GoodsReceivedNote {
 
 interface GoodsReceivedContextType {
   goodsReceivedNotes: GoodsReceivedNote[];
-  addGRN: (grn: Omit<GoodsReceivedNote, "id" | "grnNumber" | "businessId" | "createdAt" | "updatedAt" | "status" | "confirmedAt">) => void;
-  updateGRN: (id: string, updates: Partial<GoodsReceivedNote>) => void;
-  confirmGRN: (id: string) => void;
+  addGRN: (grn: Omit<GoodsReceivedNote, "id" | "grnNumber" | "businessId" | "createdAt" | "updatedAt" | "status" | "confirmedAt">) => Promise<void>;
+  updateGRN: (id: string, updates: Partial<GoodsReceivedNote>) => Promise<void>;
+  confirmGRN: (id: string) => Promise<void>;
   getGRNById: (id: string) => GoodsReceivedNote | undefined;
   getGRNsByBranch: (branchId: string) => GoodsReceivedNote[];
   getGRNsByPO: (purchaseOrderId: string) => GoodsReceivedNote[];
@@ -78,8 +57,6 @@ interface GoodsReceivedContextType {
 }
 
 const GoodsReceivedContext = createContext<GoodsReceivedContextType | undefined>(undefined);
-
-const STORAGE_KEY = "pos_goods_received_notes";
 
 export function GoodsReceivedProvider({ children }: { children: ReactNode }) {
   let auth;
@@ -93,26 +70,57 @@ export function GoodsReceivedProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // STATE MANAGEMENT
   // ═══════════════════════════════════════════════════════════════════
-  const [goodsReceivedNotes, setGoodsReceivedNotes] = useState<GoodsReceivedNote[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      console.error("Failed to load goods received notes:", error);
-      return [];
-    }
-  });
+  const [goodsReceivedNotes, setGoodsReceivedNotes] = useState<GoodsReceivedNote[]>([]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // PERSIST TO LOCALSTORAGE
+  // FETCH FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(goodsReceivedNotes));
-    } catch (error) {
-      console.error("Failed to save goods received notes:", error);
+    if (!business) {
+      setGoodsReceivedNotes([]);
+      return;
     }
-  }, [goodsReceivedNotes]);
+
+    const fetchGRNs = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('goods_received_notes')
+          .select('*')
+          .eq('business_id', business.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          setGoodsReceivedNotes(data.map((grn: any) => ({
+            id: grn.id,
+            grnNumber: grn.grn_number,
+            businessId: grn.business_id,
+            branchId: grn.branch_id,
+            branchName: grn.branch_name,
+            purchaseOrderId: grn.purchase_order_id,
+            purchaseOrderNumber: grn.purchase_order_number,
+            supplierId: grn.supplier_id,
+            supplierName: grn.supplier_name,
+            items: grn.items || [],
+            deliveryStatus: grn.delivery_status as DeliveryStatus,
+            status: grn.status as GRNStatus,
+            receivedByStaffId: grn.received_by_staff_id,
+            receivedByStaffName: grn.received_by_staff_name,
+            receivedByRole: grn.received_by_role,
+            notes: grn.notes,
+            createdAt: grn.created_at,
+            updatedAt: grn.updated_at,
+            confirmedAt: grn.confirmed_at
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching GRNs:", err);
+      }
+    };
+
+    fetchGRNs();
+  }, [business]);
 
   // ═══════════════════════════════════════════════════════════════════
   // CALCULATE DELIVERY STATUS
@@ -136,7 +144,7 @@ export function GoodsReceivedProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   // ADD GRN (Draft status)
   // ═══════════════════════════════════════════════════════════════════
-  const addGRN = (
+  const addGRN = async (
     grn: Omit<GoodsReceivedNote, "id" | "grnNumber" | "businessId" | "createdAt" | "updatedAt" | "status" | "confirmedAt">
   ) => {
     if (!business) {
@@ -147,13 +155,14 @@ export function GoodsReceivedProvider({ children }: { children: ReactNode }) {
     const timestamp = new Date().toISOString();
     const dateStr = timestamp.split('T')[0].replace(/-/g, '');
     const randomId = Math.random().toString(36).substr(2, 6).toUpperCase();
+    const id = `GRN-${dateStr}-${randomId}`;
 
     const deliveryStatus = calculateDeliveryStatus(grn.items);
 
     const newGRN: GoodsReceivedNote = {
       ...grn,
-      id: `GRN-${dateStr}-${randomId}`,
-      grnNumber: getNextGRNNumber(),
+      id,
+      grnNumber: getNextGRNNumber(), // Race condition possible
       businessId: business.id,
       status: "Draft",
       deliveryStatus,
@@ -161,60 +170,130 @@ export function GoodsReceivedProvider({ children }: { children: ReactNode }) {
       updatedAt: timestamp
     };
 
-    setGoodsReceivedNotes(prev => [newGRN, ...prev]);
+    try {
+      const dbGRN = {
+        id: newGRN.id,
+        grn_number: newGRN.grnNumber,
+        business_id: newGRN.businessId,
+        branch_id: newGRN.branchId,
+        branch_name: newGRN.branchName,
+        purchase_order_id: newGRN.purchaseOrderId,
+        purchase_order_number: newGRN.purchaseOrderNumber,
+        supplier_id: newGRN.supplierId,
+        supplier_name: newGRN.supplierName,
+        items: newGRN.items,
+        delivery_status: newGRN.deliveryStatus,
+        status: newGRN.status,
+        received_by_staff_id: newGRN.receivedByStaffId,
+        received_by_staff_name: newGRN.receivedByStaffName,
+        received_by_role: newGRN.receivedByRole,
+        notes: newGRN.notes,
+        created_at: newGRN.createdAt,
+        updated_at: newGRN.updatedAt
+      };
+
+      const { error } = await supabase
+        .from('goods_received_notes')
+        .insert(dbGRN);
+
+      if (error) throw error;
+
+      setGoodsReceivedNotes(prev => [newGRN, ...prev]);
+      toast.success("GRN Created");
+    } catch (err: any) {
+      console.error("Error creating GRN:", err);
+      toast.error("Failed to create GRN");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // UPDATE GRN (Draft only - before confirmation)
   // ═══════════════════════════════════════════════════════════════════
-  const updateGRN = (id: string, updates: Partial<GoodsReceivedNote>) => {
-    setGoodsReceivedNotes(prev =>
-      prev.map(grn => {
-        if (grn.id !== id) return grn;
+  const updateGRN = async (id: string, updates: Partial<GoodsReceivedNote>) => {
+    const grn = goodsReceivedNotes.find(g => g.id === id);
+    if (!grn) return;
 
-        // Only allow updates to Draft status (before confirmation)
-        if (grn.status !== "Draft") {
-          console.warn(`Cannot update GRN ${id}: Status is ${grn.status}, not Draft`);
-          return grn;
-        }
+    if (grn.status !== "Draft") {
+      toast.error(`Cannot update GRN: Status is ${grn.status}`);
+      return;
+    }
 
-        // Recalculate delivery status if items changed
-        let deliveryStatus = grn.deliveryStatus;
-        if (updates.items) {
-          deliveryStatus = calculateDeliveryStatus(updates.items);
-        }
+    try {
+      const dbUpdates: any = { updated_at: new Date().toISOString() };
+      
+      let deliveryStatus = grn.deliveryStatus;
+      if (updates.items) {
+        deliveryStatus = calculateDeliveryStatus(updates.items);
+        dbUpdates.items = updates.items;
+        dbUpdates.delivery_status = deliveryStatus;
+      }
 
-        return {
-          ...grn,
-          ...updates,
-          deliveryStatus,
-          updatedAt: new Date().toISOString()
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+
+      const { error } = await supabase
+        .from('goods_received_notes')
+        .update(dbUpdates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setGoodsReceivedNotes(prev => prev.map(g => {
+        if (g.id !== id) return g;
+        return { 
+          ...g, 
+          ...updates, 
+          deliveryStatus, 
+          updatedAt: dbUpdates.updated_at 
         };
-      })
-    );
+      }));
+      
+      toast.success("GRN Updated");
+    } catch (err: any) {
+      console.error("Error updating GRN:", err);
+      toast.error("Failed to update GRN");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
   // CONFIRM GRN (Draft → Confirmed, becomes immutable)
   // ═══════════════════════════════════════════════════════════════════
-  const confirmGRN = (id: string) => {
-    setGoodsReceivedNotes(prev =>
-      prev.map(grn => {
-        if (grn.id !== id) return grn;
+  const confirmGRN = async (id: string) => {
+    const grn = goodsReceivedNotes.find(g => g.id === id);
+    if (!grn) return;
 
-        if (grn.status !== "Draft") {
-          console.warn(`Cannot confirm GRN ${id}: Status is ${grn.status}, not Draft`);
-          return grn;
-        }
+    if (grn.status !== "Draft") {
+      toast.error(`Cannot confirm GRN: Status is ${grn.status}`);
+      return;
+    }
 
+    try {
+      const confirmedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('goods_received_notes')
+        .update({
+          status: 'Confirmed',
+          confirmed_at: confirmedAt,
+          updated_at: confirmedAt
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setGoodsReceivedNotes(prev => prev.map(g => {
+        if (g.id !== id) return g;
         return {
-          ...grn,
-          status: "Confirmed" as GRNStatus,
-          confirmedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          ...g,
+          status: "Confirmed",
+          confirmedAt,
+          updatedAt: confirmedAt
         };
-      })
-    );
+      }));
+      
+      toast.success("GRN Confirmed");
+    } catch (err: any) {
+      console.error("Error confirming GRN:", err);
+      toast.error("Failed to confirm GRN");
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════
