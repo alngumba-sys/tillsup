@@ -100,6 +100,9 @@ export function useSubscription(): SubscriptionContextType {
     // Override for Demo User
     if (user?.email === "demo@test.com") return true;
 
+    // Override for Trial Users - give full access
+    if (business?.subscriptionStatus === "trial") return true;
+
     return hasFeature(currentPlanName, feature);
   };
 

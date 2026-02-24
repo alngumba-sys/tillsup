@@ -806,7 +806,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // But authUser is created.
           // Let's assume user tries again later, or we let auto-heal handle it next login.
           console.error("Business creation failed:", bizError);
-          return { success: false, error: "Failed to create business record: " + bizError.message };
+          console.error("Business creation error details:", {
+            code: bizError.code,
+            message: bizError.message,
+            details: bizError.details,
+            hint: bizError.hint
+          });
+          
+          // Provide more helpful error message
+          let errorMessage = "Failed to create business record. ";
+          if (bizError.message.includes("permission denied")) {
+            errorMessage += "Database permissions issue detected. Please contact support or check your database RLS policies.";
+          } else if (bizError.code === "23505") {
+            errorMessage += "Business already exists. Try logging in instead.";
+          } else {
+            errorMessage += bizError.message;
+          }
+          
+          return { success: false, error: errorMessage };
         }
       } else {
         finalBusinessId = existingBusiness.id;
@@ -830,7 +847,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const { error: profileError } = await supabase.from('profiles').insert(newProfile);
         if (profileError) {
-          return { success: false, error: "Failed to create user profile: " + profileError.message };
+          console.error("Profile creation failed:", profileError);
+          console.error("Profile creation error details:", {
+            code: profileError.code,
+            message: profileError.message,
+            details: profileError.details,
+            hint: profileError.hint
+          });
+          
+          let errorMessage = "Failed to create user profile. ";
+          if (profileError.message.includes("permission denied")) {
+            errorMessage += "Database permissions issue detected. Please contact support.";
+          } else if (profileError.code === "23505") {
+            errorMessage += "Profile already exists. Try logging in instead.";
+          } else {
+            errorMessage += profileError.message;
+          }
+          
+          return { success: false, error: errorMessage };
         }
       }
       
@@ -1003,7 +1037,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       // 1. Check if user already exists in profiles
-      console.log("🔍 Checking if user exists with email:", email);
+      console.log("���� Checking if user exists with email:", email);
       const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
         .select('id')
