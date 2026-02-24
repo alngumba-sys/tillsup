@@ -1657,7 +1657,10 @@ export function StaffManagementTab() {
           ]}
           onConfirm={async () => {
             try {
+              console.log("Resetting password for staff:", resetPasswordConfirmation.staffId);
               const result = await resetStaffPassword(resetPasswordConfirmation.staffId);
+              console.log("Password reset result:", result);
+              
               if (result.success && result.temporaryPassword) {
                 setResetPasswordDialog({
                   isOpen: true,
@@ -1665,15 +1668,26 @@ export function StaffManagementTab() {
                   staffName: resetPasswordConfirmation.staffName,
                   temporaryPassword: result.temporaryPassword
                 });
-                toast.success("Password reset successfully!");
-                // Refresh list not strictly needed for password reset but good practice if status changes
+                toast.success("Password reset successfully! Staff member can now login with the temporary password.");
+                // Refresh list to show updated status
                 const updatedList = await getStaffMembers();
                 setStaffMembers(updatedList);
               } else {
-                toast.error(result.error || "Failed to reset password");
+                console.error("Password reset failed:", result.error);
+                // Show detailed error message
+                if (result.error?.includes("does not exist")) {
+                  toast.error("Database function not found. Please run the setup SQL script first. See PASSWORD_RESET_COMPLETE_GUIDE.md");
+                } else if (result.error?.includes("Insufficient permissions")) {
+                  toast.error("You don't have permission to reset passwords. Only Business Owners and Managers can reset passwords.");
+                } else if (result.error?.includes("different business")) {
+                  toast.error("Cannot reset password for staff in a different business.");
+                } else {
+                  toast.error(result.error || "Failed to reset password. Check console for details.");
+                }
               }
-            } catch (error) {
-              toast.error("An unexpected error occurred");
+            } catch (error: any) {
+              console.error("Password reset exception:", error);
+              toast.error(`An unexpected error occurred: ${error.message || "Unknown error"}`);
             }
           }}
         />

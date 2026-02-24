@@ -48,7 +48,8 @@ import {
   ScanBarcode,
   Image as ImageIcon,
   Loader2,
-  Info
+  Info,
+  DollarSign
 } from "lucide-react";
 import { useInventory, InventoryItem } from "../contexts/InventoryContext";
 import { useCategory } from "../contexts/CategoryContext";
@@ -103,7 +104,64 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
 
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [showDebugPanel, setShowDebugPanel] = useState(false);
+
+  // Compress image before upload
+  const compressImage = async (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.src = e.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Resize if image is too large (max 1200px width)
+          const maxWidth = 1200;
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to blob with compression (0.7 quality for good balance)
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error('Failed to compress image'));
+                return;
+              }
+              // Create new file from blob
+              const compressedFile = new File([blob], file.name.replace(/\.\w+$/, '.jpg'), {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              console.log('Original size:', (file.size / 1024).toFixed(2), 'KB');
+              console.log('Compressed size:', (compressedFile.size / 1024).toFixed(2), 'KB');
+              console.log('Compression ratio:', ((1 - compressedFile.size / file.size) * 100).toFixed(1), '%');
+              resolve(compressedFile);
+            },
+            'image/jpeg',
+            0.7
+          );
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+    });
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -129,28 +187,41 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
     setIsUploading(true);
     
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${fileName}`;
+      // Check authentication status FIRST
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user during upload:', user?.id, user?.email);
       
-      console.log('Uploading file to Inventoryimages bucket:', filePath);
-      
-      // Add timeout wrapper for upload (30 seconds)
-      const uploadPromise = supabase.storage
-        .from('Inventoryimages')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
+      if (!user) {
+        toast.error("Not Authenticated", {
+          description: "You must be logged in to upload images."
         });
-
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Upload timeout - please check your internet connection')), 30000)
-      );
-
-      const { data: uploadData, error: uploadError } = await Promise.race([
-        uploadPromise,
-        timeoutPromise
-      ]) as any;
+        throw new Error('User not authenticated');
+      }
+      
+      console.log('Original file size:', file.size, 'bytes');
+      console.log('Compressing image...');
+      
+      // Compress image before upload
+      const compressedFile = await compressImage(file);
+      console.log('Compressed file size:', compressedFile.size, 'bytes');
+      
+      // Simple file naming
+      const fileExt = 'jpg';
+      const fileName = `${Date.now()}.${fileExt}`;
+      
+      console.log('Starting upload to Inventoryimages bucket:', fileName);
+      const uploadStartTime = Date.now();
+      
+      // Upload with upsert: true to avoid conflicts
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('Inventoryimages')
+        .upload(fileName, compressedFile, {
+          cacheControl: '3600',
+          upsert: true // Changed to true to avoid conflicts
+        });
+      
+      const uploadDuration = Date.now() - uploadStartTime;
+      console.log('Upload completed in', uploadDuration, 'ms');
         
       if (uploadError) {
         console.error('Upload error:', uploadError);
@@ -178,7 +249,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       
       const { data: { publicUrl } } = supabase.storage
         .from('Inventoryimages')
-        .getPublicUrl(filePath);
+        .getPublicUrl(fileName);
         
       console.log('Public URL:', publicUrl);
       onFormChange({ ...formData, image: publicUrl });
@@ -204,7 +275,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
 
   // ═══════════════════════════════════════════════════════════════════
   // CATEGORY STATUS VALIDATION
-  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════��═══════════════════════════════════════════════════════
   const activeCategories = allCategories.filter(cat => cat.status === "active");
   const disabledCategories = allCategories.filter(cat => cat.status === "disabled");
   const selectedCategory = allCategories.find(cat => cat.id === formData.category);
@@ -227,9 +298,9 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
   };
   
   return (
-    <div className="grid gap-4 py-4">
+    <div className="grid gap-2.5 py-2">
       {/* Branch Selection - REQUIRED */}
-      <div className="grid gap-2">
+      <div className="grid gap-1.5">
         <Label htmlFor="branchId">
           Branch <span className="text-destructive">*</span>
         </Label>
@@ -254,79 +325,63 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center gap-2 p-3 rounded-md border border-dashed bg-muted/30">
-            <Building2 className="w-4 h-4 text-muted-foreground" />
-            <div className="flex-1">
-              <p className="text-sm text-muted-foreground">
-                No active branches available. Create branches in the Staff tab.
-              </p>
-            </div>
+          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed bg-muted/30">
+            <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              No active branches available.
+            </p>
           </div>
-        )}
-        {isBranchDisabled && (
-          <p className="text-xs text-muted-foreground">
-            Products will be added to your assigned branch
-          </p>
         )}
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="image">Product Image <span className="text-xs text-muted-foreground">(Max 2MB)</span></Label>
-        <div className="flex items-start gap-4">
+      <div className="grid gap-1.5">
+        <Label htmlFor="image" className="text-sm">Product Image <span className="text-xs text-muted-foreground">(Max 2MB)</span></Label>
+        <div className="flex items-start gap-3">
           <div className="shrink-0 relative">
             {formData.image ? (
               <div className="relative group">
-                <div className="w-20 h-20 rounded-lg border overflow-hidden">
+                <div className="w-14 h-14 rounded-md border overflow-hidden">
                   <img src={formData.image} alt="Product" className="w-full h-full object-cover" />
                 </div>
                 <Button
                   type="button"
                   variant="destructive"
                   size="icon"
-                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={() => onFormChange({ ...formData, image: undefined })}
                 >
-                  <XCircle className="w-4 h-4" />
+                  <XCircle className="w-3 h-3" />
                 </Button>
               </div>
             ) : (
-              <div className="w-20 h-20 rounded-lg border border-dashed flex items-center justify-center bg-muted/30">
-                <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
+              <div className="w-14 h-14 rounded-md border border-dashed flex items-center justify-center bg-muted/30">
+                <ImageIcon className="w-6 h-6 text-muted-foreground/50" />
               </div>
             )}
           </div>
           
-          <div className="flex-1 space-y-2">
+          <div className="flex-1 space-y-1">
             <Input
               id="image"
               type="file"
               accept="image/*"
-              className="cursor-pointer"
+              className="cursor-pointer text-sm"
               onChange={handleImageUpload}
               disabled={isUploading}
             />
             {isUploading && (
-              <div className="flex items-center gap-2 text-sm text-blue-600 animate-pulse">
+              <div className="flex items-center gap-1.5 text-xs text-blue-600 animate-pulse">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                Uploading image...
+                Uploading...
               </div>
-            )}
-            {formData.image && !isUploading && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle className="w-3 h-3" />
-                Image uploaded successfully
-              </div>
-            )}
-            {!formData.image && !isUploading && (
-              <p className="text-xs text-muted-foreground">No image uploaded yet</p>
             )}
           </div>
         </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="name">Product Name <span className="text-destructive">*</span></Label>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor="name" className="text-sm">Product Name <span className="text-destructive">*</span></Label>
           <Input
             id="name"
             value={formData.name}
@@ -336,19 +391,17 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
         </div>
         
         {/* Category Selection - Uses CategoryContext */}
-        <div className="grid gap-2">
-        <Label htmlFor="category">Category <span className="text-destructive">*</span></Label>
+        <div className="grid gap-1.5">
+        <Label htmlFor="category" className="text-sm">Category <span className="text-destructive">*</span></Label>
         
         {/* ═══════════════════════════════════════════════════════════════════
             EDGE CASE: Product with deactivated category (Edit Mode)
-            ═══════════════════════════════════════════════════════════════════ */}
+            ═══════════════════════════════════════════════════════════����══════ */}
         {isEditMode && isCategoryDeactivated && (
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-900 text-sm">
-              This product belongs to a deactivated category.
-              <br />
-              Please select an active category to continue.
+          <Alert className="border-amber-200 bg-amber-50 py-1.5">
+            <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+            <AlertDescription className="text-amber-900 text-xs">
+              Deactivated category. Please select an active one.
             </AlertDescription>
           </Alert>
         )}
@@ -399,96 +452,110 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center gap-2 p-3 rounded-md border border-dashed bg-destructive/10">
-            <AlertCircle className="w-4 h-4 text-destructive" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-destructive">
-                No categories available
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Please create a category first in the Categories tab before adding products.
-              </p>
-            </div>
+          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed bg-destructive/10">
+            <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+            <p className="text-xs text-destructive">
+              No categories. Create one first.
+            </p>
           </div>
         )}
       </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="price">Retail Price ({currencySymbol}) <span className="text-destructive">*</span></Label>
-          <Input
-            id="price"
-            type="number"
-            step="0.01"
-            value={formData.price}
-            onChange={(e) => onFormChange({ ...formData, price: e.target.value })}
-            placeholder="0.00"
-          />
+      {/* ═══════════════════════════════════════════════════════════════════
+          PRICING SECTION - Grouped for clarity
+          ═══════════════════════════════════════════════════════════════════ */}
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center gap-1.5 pb-0.5 border-b">
+          <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
+          <h3 className="text-xs font-medium">Pricing</h3>
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="stock">Stock Quantity <span className="text-destructive">*</span></Label>
-          <Input
-            id="stock"
-            type="number"
-            value={formData.stock}
-            onChange={(e) => onFormChange({ ...formData, stock: e.target.value })}
-            placeholder="0"
-          />
+        
+        <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="costPrice" className="text-xs">
+              Cost ({currencySymbol})
+            </Label>
+            <Input
+              id="costPrice"
+              type="number"
+              step="0.01"
+              value={formData.costPrice || ""}
+              onChange={(e) => onFormChange({ ...formData, costPrice: e.target.value })}
+              placeholder="0.00"
+            />
+            <p className="text-[10px] text-muted-foreground leading-tight">What you pay</p>
+          </div>
+          
+          <div className="grid gap-1.5">
+            <Label htmlFor="price" className="text-xs">Retail ({currencySymbol}) <span className="text-destructive">*</span></Label>
+            <Input
+              id="price"
+              type="number"
+              step="0.01"
+              value={formData.price}
+              onChange={(e) => onFormChange({ ...formData, price: e.target.value })}
+              placeholder="0.00"
+            />
+            <p className="text-[10px] text-muted-foreground leading-tight">Single items</p>
+          </div>
+          
+          <div className="grid gap-1.5">
+            <Label htmlFor="wholesalePrice" className="text-xs">
+              Wholesale ({currencySymbol})
+            </Label>
+            <Input
+              id="wholesalePrice"
+              type="number"
+              step="0.01"
+              value={formData.wholesalePrice || ""}
+              onChange={(e) => onFormChange({ ...formData, wholesalePrice: e.target.value })}
+              placeholder="0.00"
+            />
+            <p className="text-[10px] text-muted-foreground leading-tight">Bulk orders</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="lowStockThreshold">
-            Reorder Level <span className="text-xs text-muted-foreground">(Optional)</span>
-          </Label>
-          <Input
-            id="lowStockThreshold"
-            type="number"
-            value={formData.lowStockThreshold || "10"}
-            onChange={(e) => onFormChange({ ...formData, lowStockThreshold: e.target.value })}
-            placeholder="10"
-          />
-          <p className="text-xs text-muted-foreground">Alert when stock falls below this level</p>
+      {/* ═══════════════════════════════════════════════════════════════════
+          STOCK MANAGEMENT SECTION
+          ═══════════════════════════════════════════════════════════════════ */}
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center gap-1.5 pb-0.5 border-b">
+          <Package className="w-3.5 h-3.5 text-muted-foreground" />
+          <h3 className="text-xs font-medium">Stock Management</h3>
         </div>
-        <div className="grid gap-2"></div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="costPrice">
-            Cost Price ({currencySymbol}) <span className="text-xs text-muted-foreground">(Optional)</span>
-          </Label>
-          <Input
-            id="costPrice"
-            type="number"
-            step="0.01"
-            value={formData.costPrice || ""}
-            onChange={(e) => onFormChange({ ...formData, costPrice: e.target.value })}
-            placeholder="0.00"
-          />
-          <p className="text-xs text-muted-foreground">Purchase/supplier price</p>
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="wholesalePrice">
-            Wholesale Price ({currencySymbol}) <span className="text-xs text-muted-foreground">(Optional)</span>
-          </Label>
-          <Input
-            id="wholesalePrice"
-            type="number"
-            step="0.01"
-            value={formData.wholesalePrice || ""}
-            onChange={(e) => onFormChange({ ...formData, wholesalePrice: e.target.value })}
-            placeholder="0.00"
-          />
-          <p className="text-xs text-muted-foreground">Bulk/wholesale selling price</p>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="stock" className="text-sm">Stock Quantity <span className="text-destructive">*</span></Label>
+            <Input
+              id="stock"
+              type="number"
+              value={formData.stock}
+              onChange={(e) => onFormChange({ ...formData, stock: e.target.value })}
+              placeholder="0"
+            />
+          </div>
+          
+          <div className="grid gap-1.5">
+            <Label htmlFor="lowStockThreshold" className="text-sm">
+              Reorder Level
+            </Label>
+            <Input
+              id="lowStockThreshold"
+              type="number"
+              value={formData.lowStockThreshold || "10"}
+              onChange={(e) => onFormChange({ ...formData, lowStockThreshold: e.target.value })}
+              placeholder="10"
+            />
+          </div>
         </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor="sku">SKU/Size</Label>
+      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-1.5">
+        <Label htmlFor="sku" className="text-sm">SKU/Size</Label>
         <div className="flex gap-2">
           <Input
             id="sku"
@@ -528,8 +595,8 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
           </DialogContent>
         </Dialog>
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor="supplier">
+      <div className="grid gap-1.5">
+        <Label htmlFor="supplier" className="text-sm">
           Supplier <span className="text-xs text-muted-foreground">(Optional)</span>
         </Label>
         {suppliers.length > 0 ? (
@@ -555,140 +622,14 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center gap-2 p-3 rounded-md border border-dashed bg-muted/30">
-            <Truck className="w-4 h-4 text-muted-foreground" />
-            <div className="flex-1">
-              <p className="text-sm text-muted-foreground">
-                No suppliers available. Add suppliers in the Suppliers tab.
-              </p>
-            </div>
+          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed bg-muted/30">
+            <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              No suppliers available.
+            </p>
           </div>
         )}
       </div>
-      </div>
-      
-      {/* Debug Panel */}
-      <div className="mt-6 pt-4 border-t">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowDebugPanel(!showDebugPanel)}
-          className="text-xs"
-        >
-          {showDebugPanel ? "Hide" : "Show"} Debug Info
-        </Button>
-        
-        {showDebugPanel && (
-          <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-sm">Diagnostic Panel</h4>
-              <Badge variant={isUploading ? "destructive" : "default"} className="text-xs">
-                {isUploading ? "Uploading..." : "Ready"}
-              </Badge>
-            </div>
-            
-            <div className="space-y-2 text-xs font-mono">
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Mode:</span>
-                <span className="font-medium">{isEditMode ? "Edit" : "Add"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Product Name:</span>
-                <span className="font-medium">{formData.name || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Category:</span>
-                <span className="font-medium">{formData.category || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Price:</span>
-                <span className="font-medium">{formData.price || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Stock:</span>
-                <span className="font-medium">{formData.stock || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Branch ID:</span>
-                <span className="font-medium">{formData.branchId || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">SKU:</span>
-                <span className="font-medium">{formData.sku || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Supplier:</span>
-                <span className="font-medium">{formData.supplier || "(empty)"}</span>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2 items-start">
-                <span className="text-muted-foreground font-semibold">Image URL:</span>
-                <div className="space-y-1">
-                  {formData.image ? (
-                    <>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Uploaded
-                      </Badge>
-                      <p className="break-all text-[10px] text-slate-600">{formData.image}</p>
-                      <img src={formData.image} alt="Preview" className="w-16 h-16 object-cover rounded border mt-2" />
-                    </>
-                  ) : (
-                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
-                      <AlertCircle className="w-3 h-3 mr-1" />
-                      No Image
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <span className="text-muted-foreground font-semibold">Upload Status:</span>
-                <span className="font-medium">{isUploading ? "🔄 Uploading..." : "✅ Idle"}</span>
-              </div>
-            </div>
-            
-            <Alert className="bg-blue-50 border-blue-200">
-              <Info className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-xs text-blue-900">
-                <strong>Debug Tips:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-0.5">
-                  <li>Check browser console (F12) for detailed logs</li>
-                  <li>Image URL should appear after upload completes</li>
-                  <li>All fields should populate when editing</li>
-                  <li>Click "Save Changes" and watch console for errors</li>
-                </ul>
-              </AlertDescription>
-            </Alert>
-            
-            <div className="pt-2 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                onClick={() => {
-                  console.log('=== FULL FORM DATA DEBUG ===');
-                  console.log('formData:', formData);
-                  console.log('isEditMode:', isEditMode);
-                  console.log('isUploading:', isUploading);
-                  console.log('===========================');
-                  toast.success("Check console for full debug output");
-                }}
-              >
-                Log Full State to Console
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -716,7 +657,7 @@ export function Inventory() {
   
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; id: string; name: string } | null>(null);
   
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════��════════════════════════════════════════════════
   // EXCEL IMPORT STATE
   // ═══════════════════════════════════════════════════════════════════
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -813,38 +754,49 @@ export function Inventory() {
   });
 
   const handleAddProduct = async () => {
+    console.log('🟢 handleAddProduct called');
+    console.log('📋 formData:', formData);
+    
     // Validation
     if (!formData.name.trim()) {
-      alert("Product name is required");
+      console.log('❌ Name validation failed');
+      toast.error("Product name is required");
       return;
     }
     if (!formData.price || parseFloat(formData.price) <= 0) {
-      alert("Valid price is required");
+      console.log('❌ Price validation failed:', formData.price);
+      toast.error("Valid price is required");
       return;
     }
     if (!formData.stock || parseInt(formData.stock) < 0) {
-      alert("Valid stock quantity is required");
+      console.log('❌ Stock validation failed:', formData.stock);
+      toast.error("Valid stock quantity is required");
       return;
     }
     if (!formData.branchId) {
-      alert("Branch selection is required");
+      console.log('❌ BranchId validation failed:', formData.branchId);
+      toast.error("Branch selection is required");
       return;
     }
 
     const selectedCategory = categoryList.find(cat => cat.id === formData.category);
     if (!selectedCategory) {
+      console.log('❌ Category not found:', formData.category);
       toast.error("Category is required");
       return;
     }
     if (selectedCategory.status === "disabled") {
+      console.log('❌ Category disabled:', selectedCategory);
       toast.error("Invalid Category", {
         description: "This category is deactivated and cannot be used. Please select an active category."
       });
       return;
     }
 
+    console.log('✅ All validations passed, creating product...');
+    
     try {
-      await addProduct({
+      const productData = {
         name: formData.name,
         category: formData.category,
         price: parseFloat(formData.price),
@@ -856,13 +808,21 @@ export function Inventory() {
         retailPrice: parseFloat(formData.price),
         wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : undefined,
         lowStockThreshold: parseInt(formData.lowStockThreshold)
-      }, formData.branchId);
+      };
       
+      console.log('📦 Product data to add:', productData);
+      console.log('🏢 Branch ID:', formData.branchId);
+      
+      await addProduct(productData, formData.branchId);
+      
+      console.log('✅ Product added successfully!');
       setIsAddDialogOpen(false);
       resetForm();
-      toast.success("Product added successfully!");
-    } catch (error) {
-      // Toast already handled in context
+    } catch (error: any) {
+      console.error('❌ Error in handleAddProduct:', error);
+      toast.error("Failed to add product", {
+        description: error?.message || "Unknown error occurred"
+      });
     }
   };
 
@@ -1415,18 +1375,33 @@ export function Inventory() {
           {/* Add Product Dialog */}
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
             if (open) {
-            setIsAddDialogOpen(true);
-          } else {
-            setIsAddDialogOpen(false);
-          }
-        }}>
+              // Reset form when opening the dialog
+              setFormData({
+                name: "",
+                category: getDefaultCategoryId(),
+                price: "",
+                stock: "",
+                sku: "",
+                supplier: "",
+                branchId: getDefaultBranchId(),
+                image: undefined,
+                costPrice: "",
+                retailPrice: "",
+                wholesalePrice: "",
+                lowStockThreshold: "10"
+              });
+              setIsAddDialogOpen(true);
+            } else {
+              setIsAddDialogOpen(false);
+            }
+          }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
               Add Product
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Product</DialogTitle>
               <DialogDescription>
@@ -1444,7 +1419,18 @@ export function Inventory() {
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddProduct}>Create Product</Button>
+              <Button onClick={async () => {
+                console.log('🔵 Create Product button clicked');
+                console.log('📊 Current formData:', JSON.stringify(formData, null, 2));
+                try {
+                  await handleAddProduct();
+                } catch (error) {
+                  console.error('🔴 Error caught in button handler:', error);
+                  toast.error('Error', {
+                    description: error instanceof Error ? error.message : 'Unknown error'
+                  });
+                }
+              }}>Create Product</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1643,34 +1629,10 @@ export function Inventory() {
           setEditingItem(null);
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <DialogTitle>Edit Product</DialogTitle>
-                <DialogDescription>Update product details.</DialogDescription>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  console.log('=== EDIT PRODUCT DEBUG INFO ===');
-                  console.log('Editing Item:', editingItem);
-                  console.log('Form Data:', formData);
-                  console.log('Image URL:', formData.image);
-                  console.log('Has Image:', !!formData.image);
-                  console.log('===============================');
-                  toast.success("Debug info logged to console (F12)", {
-                    description: "Check browser console for details"
-                  });
-                }}
-                className="shrink-0"
-              >
-                <Info className="w-4 h-4 mr-2" />
-                Debug
-              </Button>
-            </div>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>Update product details.</DialogDescription>
           </DialogHeader>
           <ProductForm 
             formData={formData} 
@@ -1682,43 +1644,11 @@ export function Inventory() {
             allCategories={categoryList}
             isEditMode={true}
           />
-          <DialogFooter className="flex-col gap-3">
-            {/* Debug Status Bar */}
-            <div className="flex items-center justify-between gap-4 p-3 bg-slate-50 rounded-lg border text-xs">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Product:</span>
-                  {editingItem && (
-                    <span className="font-medium">{editingItem.name}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Image:</span>
-                  {formData.image ? (
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Uploaded
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
-                      <AlertCircle className="w-3 h-3 mr-1" />
-                      No Image
-                    </Badge>
-                  )}
-                </div>
-                {formData.image && (
-                  <img src={formData.image} alt="Preview" className="w-8 h-8 object-cover rounded border" />
-                )}
-              </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex justify-between gap-2">
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleEditProduct}>
-                Save Changes
-              </Button>
-            </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleEditProduct}>
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

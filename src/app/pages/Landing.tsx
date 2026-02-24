@@ -100,18 +100,18 @@ import { useBranding } from "../contexts/BrandingContext";
 
 export function Landing() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const { assets } = useBranding();
   
-  console.log('🏠 Landing page loaded, isAuthenticated:', isAuthenticated);
+  console.log('🏠 Landing page loaded, isAuthenticated:', isAuthenticated, 'loading:', loading);
   
-  // Redirect authenticated users to the app
+  // Redirect authenticated users to the app (but only after loading is complete)
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !loading) {
       console.log('🔀 Redirecting to dashboard...');
       navigate("/app/dashboard");
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, loading, navigate]);
   
   // Real-time Statistics
   const [businessCount, setBusinessCount] = useState(2431);
@@ -278,6 +278,24 @@ export function Landing() {
   const cardBgClass = isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200";
   const glassClass = isDark ? "backdrop-blur-xl bg-slate-950/80 border-b border-white/10" : "backdrop-blur-xl bg-white/80 border-b border-slate-200";
 
+  // Show loading only if auth is loading AND we're going to redirect (authenticated)
+  // This prevents blank screen on initial load
+  if (loading && isAuthenticated) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${bgClass}`}>
+        <div className="text-center">
+          <div className="inline-flex items-center gap-3 mb-4">
+            <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
+              <Store className="w-8 h-8 animate-pulse" strokeWidth={2.5} />
+            </div>
+            <span className="text-2xl font-bold text-white">Tillsup</span>
+          </div>
+          <div className="text-slate-400">Redirecting to dashboard...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen transition-colors duration-300 ${bgClass} ${textClass} overflow-x-hidden relative`}>
       
@@ -332,7 +350,7 @@ export function Landing() {
         {/* Hero Icons Background - Left */}
         <div className="absolute top-0 left-0 w-[55%] h-full overflow-hidden pointer-events-none select-none z-0 hidden lg:block" style={{ maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)' }}>
           <div className="absolute top-[-10%] -left-[15%] w-[130%] h-[130%] opacity-20 -rotate-12">
-            <div className="grid grid-cols-8 gap-12 p-8">
+            <div className="grid grid-cols-8 gap-12 p-8 opacity-90">
               {heroIcons.map((Icon, i) => (
                 <div key={`left-${i}`} className="flex items-center justify-center transform hover:scale-110 transition-transform duration-500">
                   <Icon className={`w-6 h-6 ${isDark ? "text-white" : "text-slate-900"}`} strokeWidth={1.5} />

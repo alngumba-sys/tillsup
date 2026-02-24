@@ -200,20 +200,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       low_stock_threshold: product.lowStockThreshold || 10
     };
 
-    console.log("Adding product to Supabase:", newItem);
-
+    let data, error;
     try {
-      const { data, error } = await supabase
+      const response = await supabase
         .from('inventory')
         .insert(newItem)
         .select()
         .single();
+      
+      data = response.data;
+      error = response.error;
 
       if (error) {
         console.error("Error adding product:", error);
-        console.error("Error code:", error.code);
-        console.error("Error details:", error.details);
-        console.error("Error hint:", error.hint);
         
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
             setError(error);
@@ -238,8 +237,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       if (data) {
         // Optimistically update local state or refresh
-        await refreshInventory();
         toast.success("Product added successfully!");
+        // Refresh in background - don't await to prevent blocking
+        refreshInventory().catch(err => {
+          console.error("Error refreshing inventory after add:", err);
+        });
       }
     } catch (err) {
       console.error("Unexpected error adding product:", err);
@@ -251,8 +253,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const updateProduct = async (id: string, updates: Partial<InventoryItem>) => {
     if (!business) return;
-    
-    console.log('🔵 updateProduct called with:', { id, updates });
     
     const dbUpdates: any = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
@@ -276,31 +276,24 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (updates.costPrice !== undefined) dbUpdates.cost_price = updates.costPrice;
     if (updates.wholesalePrice !== undefined) dbUpdates.wholesale_price = updates.wholesalePrice;
 
-    console.log('📤 Sending to Supabase:', { dbUpdates, id, business_id: business.id });
-
     try {
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('inventory')
         .update(dbUpdates)
         .eq('id', id)
         .eq('business_id', business.id)
         .select();
 
-      console.log('📥 Supabase response received');
-      console.log('📥 Error:', error);
-      console.log('📥 Data:', data);
-
       if (error) {
-        console.error("❌ Error updating product:", error);
-        console.error("Error details:", { code: error.code, message: error.message, details: error.details, hint: error.hint });
+        console.error("Error updating product:", error);
         toast.error("Failed to update product: " + error.message);
         return;
       }
       
-      console.log('✅ Product updated successfully');
+      toast.success("Product updated successfully!");
       await refreshInventory();
     } catch (err) {
-      console.error("❌ Unexpected error updating product:", err);
+      console.error("Unexpected error updating product:", err);
       toast.error("Unexpected error: " + (err as Error).message);
     }
   };

@@ -6,11 +6,15 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Public Pages
 import { Landing } from "./pages/Landing";
+import { SimpleLanding } from "./pages/SimpleLanding";
+import { LandingSafe } from "./pages/LandingSafe";
+import { TestPage } from "./pages/TestPage";
 import { Login } from "./pages/Login";
 import { BusinessRegistration } from "./pages/BusinessRegistration";
 import { WhoWeAre } from "./pages/WhoWeAre";
 import { BranchClosed } from "./pages/BranchClosed";
 import { ChangePassword } from "./pages/ChangePassword";
+import { DiagnosticPage } from "./pages/DiagnosticPage";
 
 // App Pages
 import { Dashboard } from "./pages/Dashboard";
@@ -36,12 +40,32 @@ import { AdminDashboard } from "./pages/AdminDashboard";
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: <LandingSafe />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/test",
+    element: <TestPage />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/simple",
+    element: <SimpleLanding />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/landing-full",
     element: <Landing />,
     errorElement: <ErrorBoundary />,
   },
   {
     path: "/admin-hidden",
     element: <AdminDashboard />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/diagnostic",
+    element: <DiagnosticPage />,
     errorElement: <ErrorBoundary />,
   },
   {

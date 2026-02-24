@@ -41,20 +41,22 @@ export function ChangePassword() {
 
     try {
       // Change password
-      console.log("Attempting to change password...");
+      console.log("🔐 Attempting to change password for user:", user?.email);
+      console.log("   Current mustChangePassword flag:", user?.mustChangePassword);
       const result = await changePassword(formData.newPassword);
-      console.log("Password change result:", result);
+      console.log("✅ Password change result:", result);
 
       if (result.success) {
+        console.log("🎉 Password changed successfully! Redirecting to dashboard...");
         // Navigate to dashboard after successful password change
         navigate("/app/dashboard");
       } else {
-        console.error("Password change failed:", result.error);
-        setError(result.error || "Failed to change password");
+        console.error("❌ Password change failed:", result.error);
+        setError(result.error || "Failed to change password. Please try again or contact support.");
       }
-    } catch (err) {
-      console.error("Password change error:", err);
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err: any) {
+      console.error("❌ Password change exception:", err);
+      setError(`An unexpected error occurred: ${err.message || "Unknown error"}. Please try again.`);
     } finally {
       setLoading(false);
     }

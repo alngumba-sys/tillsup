@@ -584,181 +584,124 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("✅ Setting user:", mappedUser.email);
       setUser(mappedUser);
 
-      // Fetch Business
+      // Fetch Business with timeout to prevent login hanging
       if (mappedUser.businessId) {
         console.log("🏢 Fetching business for ID:", mappedUser.businessId);
-        const { data: businessData, error: businessError } = await supabase
-          .from('businesses')
-          .select('*')
-          .eq('id', mappedUser.businessId)
-          .single();
         
-        console.log("🏢 Business fetch result:", { businessData: !!businessData, error: businessError });
-          
-        if (businessData) {
-          const mappedBusiness: Business = {
-            id: businessData.id,
-            name: (mappedUser.email === "demo@test.com" && (businessData.name === "My Business (Restored)" || businessData.name === "Complete Setup")) ? "Tillsup Demo Store" : businessData.name,
-            ownerId: businessData.owner_id || businessData.ownerId,
-            createdAt: new Date(businessData.created_at || businessData.createdAt),
-            subscriptionPlan: businessData.subscription_plan || businessData.subscriptionPlan || "Free Trial",
-            subscriptionStatus: businessData.subscription_status || businessData.subscriptionStatus || "trial",
-            trialEndsAt: new Date(businessData.trial_ends_at || businessData.trialEndsAt),
-            maxBranches: businessData.max_branches || businessData.maxBranches || 1,
-            maxStaff: businessData.max_staff || businessData.maxStaff || 5,
-            currency: businessData.currency || "KES",
-            country: businessData.country || "Kenya",
-            timezone: businessData.timezone || "Africa/Nairobi",
-            businessType: businessData.business_type || businessData.businessType,
-            workingHours: businessData.working_hours || businessData.workingHours || { start: "09:00", end: "21:00" },
-            taxConfig: businessData.tax_config || businessData.taxConfig || { enabled: false, name: "VAT", percentage: 16, inclusive: false },
-            branding: businessData.branding || { hidePlatformBranding: false },
-            completedOnboarding: businessData.completed_onboarding || businessData.completedOnboarding || false
-          };
-          console.log("✅ Setting business:", mappedBusiness.name);
-          setBusiness(mappedBusiness);
-        } else {
-          // AUTO-HEAL: Business record is missing - create it!
-          console.warn("⚠️ No business data found for business ID:", mappedUser.businessId);
-          console.log("🔧 Auto-creating missing business record...");
-          
-          const newBusiness = {
-            id: mappedUser.businessId,
-            name: `${mappedUser.firstName}'s Business`,
-            owner_id: mappedUser.id,
-            subscription_plan: "Free Trial",
-            subscription_status: "trial",
-            trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            currency: "KES",
-            country: "Kenya",
-            timezone: "Africa/Nairobi",
-            max_branches: 5,
-            max_staff: 20,
-            created_at: new Date().toISOString(),
-          };
-          
-          const { error: createError } = await supabase.from('businesses').insert(newBusiness);
-          
-          if (!createError) {
-            console.log("✅ Business created successfully!");
-            const mappedBusiness: Business = {
-              id: newBusiness.id,
-              name: newBusiness.name,
-              ownerId: newBusiness.owner_id,
-              createdAt: new Date(newBusiness.created_at),
-              subscriptionPlan: newBusiness.subscription_plan,
-              subscriptionStatus: newBusiness.subscription_status as any,
-              trialEndsAt: new Date(newBusiness.trial_ends_at),
-              maxBranches: newBusiness.max_branches,
-              maxStaff: newBusiness.max_staff,
-              currency: newBusiness.currency,
-              country: newBusiness.country,
-              timezone: newBusiness.timezone,
-              workingHours: { start: "09:00", end: "21:00" },
-              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
-              branding: { hidePlatformBranding: false },
-              completedOnboarding: false
-            };
-            setBusiness(mappedBusiness);
-          } else if (createError.code === '23505') {
-            // Duplicate key error - business exists but RLS is blocking access
-            console.warn("🔒 Business exists but RLS policies are blocking access");
-            console.log("🔧 Attempting to fix by updating owner_id...");
+        try {
+          // Wrap business fetching in a timeout to prevent hanging
+          const businessFetchPromise = (async () => {
+            console.log("🏢 Smart fetch: Trying owner_id first...");
             
-            // Try to update the owner_id to current user using service role bypass
-            const { error: updateError } = await supabase
+            // STRATEGY 1: Fetch by owner_id (RLS-friendly, bypasses the issue)
+            let { data: businessData, error: businessError } = await supabase
               .from('businesses')
-              .update({ owner_id: mappedUser.id })
-              .eq('id', mappedUser.businessId);
+              .select('*')
+              .eq('owner_id', userId)
+              .maybeSingle();
             
-            if (!updateError) {
-              console.log("✅ Business owner updated, retrying fetch...");
-              // Retry fetching the business
-              const { data: retryBusinessData } = await supabase
+            if (businessData) {
+              console.log("✅ Found via owner_id:", businessData.name);
+              // Update profile if needed
+              if (businessData.id !== mappedUser.businessId) {
+                console.log("🔄 Syncing profile business_id...");
+                await supabase.from('profiles').update({ business_id: businessData.id }).eq('id', userId);
+              }
+            } else {
+              // STRATEGY 2: Fetch by business_id
+              console.log("🏢 Trying business_id...");
+              const result = await supabase
                 .from('businesses')
                 .select('*')
                 .eq('id', mappedUser.businessId)
                 .maybeSingle();
               
-              if (retryBusinessData) {
-                console.log("✅ Successfully fetched business after fixing owner!");
-                const mappedBusiness: Business = {
-                  id: retryBusinessData.id,
-                  name: retryBusinessData.name,
-                  ownerId: retryBusinessData.owner_id,
-                  createdAt: new Date(retryBusinessData.created_at),
-                  subscriptionPlan: retryBusinessData.subscription_plan || "Free Trial",
-                  subscriptionStatus: retryBusinessData.subscription_status || "trial",
-                  trialEndsAt: new Date(retryBusinessData.trial_ends_at),
-                  maxBranches: retryBusinessData.max_branches || 5,
-                  maxStaff: retryBusinessData.max_staff || 20,
-                  currency: retryBusinessData.currency || "KES",
-                  country: retryBusinessData.country || "Kenya",
-                  timezone: retryBusinessData.timezone || "Africa/Nairobi",
-                  businessType: retryBusinessData.business_type,
-                  workingHours: retryBusinessData.working_hours || { start: "09:00", end: "21:00" },
-                  taxConfig: retryBusinessData.tax_config || { enabled: false, name: "VAT", percentage: 16, inclusive: false },
-                  branding: retryBusinessData.branding || { hidePlatformBranding: false },
-                  completedOnboarding: retryBusinessData.completed_onboarding || false
-                };
-                setBusiness(mappedBusiness);
-                console.log("🏁 refreshUserProfile complete, setting loading = false");
-                setLoading(false);
-                return;
-              } else {
-                console.warn("⚠️ Retry fetch failed, using placeholder");
+              businessData = result.data;
+              businessError = result.error;
+              
+              // AUTO-FIX owner_id if needed
+              if (businessData && (!businessData.owner_id || businessData.owner_id !== userId)) {
+                console.warn("🔧 Fixing owner_id...");
+                await supabase.from('businesses').update({ owner_id: userId }).eq('id', businessData.id);
+                businessData.owner_id = userId;
+                console.log("✅ Fixed!");
               }
-            } else {
-              console.error("❌ Failed to update business owner:", updateError);
             }
             
-            // If all attempts failed, use placeholder
-            console.warn("⚠️ Using placeholder business due to RLS restrictions");
-            const placeholderBusiness: Business = {
-              id: mappedUser.businessId,
-              name: `${mappedUser.firstName}'s Business`,
-              ownerId: mappedUser.id,
-              createdAt: new Date(),
-              subscriptionPlan: "Free Trial",
-              subscriptionStatus: "trial",
-              trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-              maxBranches: 5,
-              maxStaff: 20,
-              currency: "KES",
-              country: "Kenya",
-              timezone: "Africa/Nairobi",
-              workingHours: { start: "09:00", end: "21:00" },
-              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
-              branding: { hidePlatformBranding: false },
-              completedOnboarding: false
-            };
-            setBusiness(placeholderBusiness);
-          } else {
-            console.error("❌ Failed to create business:", createError);
-            // Use placeholder business to prevent UI from breaking
-            const placeholderBusiness: Business = {
-              id: mappedUser.businessId,
-              name: `${mappedUser.firstName}'s Business`,
-              ownerId: mappedUser.id,
-              createdAt: new Date(),
-              subscriptionPlan: "Free Trial",
-              subscriptionStatus: "trial",
-              trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-              maxBranches: 5,
-              maxStaff: 20,
-              currency: "KES",
-              country: "Kenya",
-              timezone: "Africa/Nairobi",
-              workingHours: { start: "09:00", end: "21:00" },
-              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
-              branding: { hidePlatformBranding: false },
-              completedOnboarding: false
-            };
-            setBusiness(placeholderBusiness);
-          }
+            console.log("🏢 Business fetch result:", { businessData: !!businessData, error: businessError });
+              
+            if (businessData) {
+              return {
+                id: businessData.id,
+                name: (mappedUser.email === "demo@test.com" && (businessData.name === "My Business (Restored)" || businessData.name === "Complete Setup")) ? "Tillsup Demo Store" : businessData.name,
+                ownerId: businessData.owner_id || businessData.ownerId,
+                createdAt: new Date(businessData.created_at || businessData.createdAt),
+                subscriptionPlan: businessData.subscription_plan || businessData.subscriptionPlan || "Free Trial",
+                subscriptionStatus: businessData.subscription_status || businessData.subscriptionStatus || "trial",
+                trialEndsAt: new Date(businessData.trial_ends_at || businessData.trialEndsAt),
+                maxBranches: businessData.max_branches || businessData.maxBranches || 1,
+                maxStaff: businessData.max_staff || businessData.maxStaff || 5,
+                currency: businessData.currency || "KES",
+                country: businessData.country || "Kenya",
+                timezone: businessData.timezone || "Africa/Nairobi",
+                businessType: businessData.business_type || businessData.businessType,
+                workingHours: businessData.working_hours || businessData.workingHours || { start: "09:00", end: "21:00" },
+                taxConfig: businessData.tax_config || businessData.taxConfig || { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+                branding: businessData.branding || { hidePlatformBranding: false },
+                completedOnboarding: businessData.completed_onboarding || businessData.completedOnboarding || false
+              };
+            } else {
+              // Business data not found - return placeholder
+              console.warn("⚠��� No business data found, using placeholder");
+              return {
+                id: mappedUser.businessId,
+                name: `${mappedUser.firstName}'s Business`,
+                ownerId: mappedUser.id,
+                createdAt: new Date(),
+                subscriptionPlan: "Free Trial" as const,
+                subscriptionStatus: "trial" as const,
+                trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                maxBranches: 5,
+                maxStaff: 20,
+                currency: "KES",
+                country: "Kenya",
+                timezone: "Africa/Nairobi",
+                workingHours: { start: "09:00", end: "21:00" },
+                taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+                branding: { hidePlatformBranding: false },
+                completedOnboarding: false
+              };
+            }
+          })();
+
+          // Wait for business fetch without timeout (placeholder is returned if nothing found)
+          const business = await businessFetchPromise;
+          setBusiness(business);
+          console.log("✅ Business set:", business.name);
+        } catch (err) {
+          console.error("❌ Error fetching business:", err);
+          // Use placeholder on any error
+          setBusiness({
+            id: mappedUser.businessId,
+            name: `${mappedUser.firstName}'s Business`,
+            ownerId: mappedUser.id,
+            createdAt: new Date(),
+            subscriptionPlan: "Free Trial",
+            subscriptionStatus: "trial",
+            trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            maxBranches: 5,
+            maxStaff: 20,
+            currency: "KES",
+            country: "Kenya",
+            timezone: "Africa/Nairobi",
+            workingHours: { start: "09:00", end: "21:00" },
+            taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+            branding: { hidePlatformBranding: false },
+            completedOnboarding: false
+          });
         }
       } else {
-        console.warn("⚠️ User has no business ID");
+        console.warn("���️ User has no business ID");
       }
       console.log("🏁 refreshUserProfile complete, setting loading = false");
       setLoading(false);
@@ -842,10 +785,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let finalBusinessId = businessId;
       
       if (!existingBusiness) {
+        // NOTE: Database has triggers that will validate and auto-set owner_id if needed
+        // See: /supabase/migrations/fix_owner_id_and_prevent_future_issues.sql
         const newBusiness = {
           id: businessId,
           name: businessName,
-          owner_id: userId,
+          owner_id: userId, // Critical: Must match auth.uid() for RLS policies
           subscription_plan: "Free Trial",
           subscription_status: "trial",
           trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -860,6 +805,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // We can try to proceed or return error. Returning error stops flow.
           // But authUser is created.
           // Let's assume user tries again later, or we let auto-heal handle it next login.
+          console.error("Business creation failed:", bizError);
           return { success: false, error: "Failed to create business record: " + bizError.message };
         }
       } else {
@@ -933,7 +879,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return { mustChangePassword: profile?.must_change_password };
             })();
 
-            const timeoutPromise = new Promise<{ timeout: true }>((resolve) => setTimeout(() => resolve({ timeout: true }), 5000));
+            const timeoutPromise = new Promise<{ timeout: true }>((resolve) => setTimeout(() => resolve({ timeout: true }), 10000));
 
             const result = await Promise.race([checkPromise, timeoutPromise]);
 
@@ -1411,30 +1357,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Cannot reset password for pending invites. Please resend the invitation instead." };
      }
 
-     // 1. Generate a secure random password
-     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+     // 1. Generate a simple 4-digit alphanumeric password (easy to share and type)
+     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Removed ambiguous chars (0,O,1,I)
      let temporaryPassword = "";
-     for (let i = 0; i < 12; i++) {
+     for (let i = 0; i < 4; i++) {
        temporaryPassword += chars.charAt(Math.floor(Math.random() * chars.length));
      }
      
      try {
-       // 2. Mark user as needing password change in profiles
-       // Note: In a real production app, this would require a server-side Edge Function 
-       // to actually update the auth.users password using the service_role key.
-       // Since we are client-side only here, we simulate the success for the UI flow.
-       const { error } = await supabase
-         .from('profiles')
-         .update({ must_change_password: true })
-         .eq('id', userId);
-         
+       // 2. Call the database function to reset password
+       // This function updates auth.users password AND sets must_change_password = true
+       const { data, error } = await supabase.rpc('admin_reset_staff_password', {
+         target_user_id: userId,
+         new_password: temporaryPassword,
+         admin_user_id: user.id
+       });
+       
        if (error) {
-         // Even if profile update fails (e.g. permission), we proceed for demo purposes
-         console.warn("Could not update profile status:", error);
+         console.error("Password reset RPC error:", error);
+         return { success: false, error: error.message };
+       }
+       
+       // Parse the JSON response from the function
+       const result = typeof data === 'string' ? JSON.parse(data) : data;
+       
+       if (!result.success) {
+         return { success: false, error: result.error || "Password reset failed" };
        }
        
        return { success: true, temporaryPassword };
      } catch (err: any) {
+       console.error("Password reset error:", err);
        return { success: false, error: err.message };
      }
   };

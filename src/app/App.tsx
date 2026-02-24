@@ -17,6 +17,7 @@ import { SupplierProvider } from "./contexts/SupplierContext";
 import { SupplierInvoiceProvider } from "./contexts/SupplierInvoiceContext";
 import { SupplierManagementProvider } from "./contexts/SupplierManagementContext";
 import { SupplierRequestProvider } from "./contexts/SupplierRequestContext";
+import { Toaster } from "sonner";
 
 import { BrandingProvider } from "./contexts/BrandingContext";
 
@@ -41,7 +42,10 @@ export default function App() {
                                 <ForecastingProvider>
                                   <AttendanceProvider>
                                     <KPIProvider>
-                                      <RouterProvider router={router} />
+                                      <>
+                                        <RouterProvider router={router} />
+                                        <Toaster position="top-right" richColors />
+                                      </>
                                     </KPIProvider>
                                   </AttendanceProvider>
                                 </ForecastingProvider>

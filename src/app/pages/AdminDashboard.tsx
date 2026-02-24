@@ -360,6 +360,11 @@ export function AdminDashboard() {
             fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
         }
 
+        console.log('Uploading file to platform-assets bucket:', fileName);
+        console.log('File size:', file.size, 'bytes');
+        console.log('File type:', file.type);
+
+        // Upload without timeout - let it take as long as needed
         const { error: uploadError } = await supabase.storage
             .from('platform-assets')
             .upload(fileName, file, {
@@ -382,6 +387,10 @@ export function AdminDashboard() {
              setStorageError(true);
              toast.error("Upload failed: Storage policies not configured.");
              setShowRLSDialog(true);
+        } else if (error.message && error.message.includes("timeout")) {
+             toast.error("Upload Timeout", {
+                 description: "Upload took too long. Check your internet connection and try again with a smaller file."
+             });
         } else {
              toast.error("Error uploading image: " + error.message);
         }

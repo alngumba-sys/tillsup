@@ -31,22 +31,32 @@ export function ErrorBoundary() {
           {errorMessage}
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button 
-            variant="outline" 
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-2"
-          >
-            <RefreshCcw className="w-4 h-4" />
-            Try Again
-          </Button>
+        <div className="flex flex-col gap-3 justify-center">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => window.location.reload()}
+              className="flex items-center gap-2"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Try Again
+            </Button>
+            
+            <Button 
+              onClick={() => navigate("/")}
+              className="flex items-center gap-2 w-full sm:w-auto"
+            >
+              <Home className="w-4 h-4" />
+              Return Home
+            </Button>
+          </div>
           
           <Button 
-            onClick={() => navigate("/app/dashboard")}
-            className="flex items-center gap-2 w-full sm:w-auto"
+            variant="ghost"
+            onClick={() => navigate("/diagnostic")}
+            className="text-sm text-gray-500 hover:text-gray-700"
           >
-            <Home className="w-4 h-4" />
-            Return Home
+            Run System Diagnostics
           </Button>
         </div>
       </div>

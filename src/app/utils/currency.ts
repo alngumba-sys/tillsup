@@ -22,8 +22,8 @@ export function formatCurrency(amount: number | string, currencyCode: string = "
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(numAmount);
 }
 

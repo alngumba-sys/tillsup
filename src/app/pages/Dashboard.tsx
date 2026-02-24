@@ -483,7 +483,7 @@ export function Dashboard() {
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
           
-          // ════════════════════════════════���══════════════════════════════════
+          // ══════════════════════════════════════════════════════════════════
           // BASELINE VISUAL RULES - Apply neutral styling when no baseline
           // ═══════════════════════════════════════════════════════════════════
           const showNeutralStyle = baselineMetrics && !baselineMetrics.hasBaseline;

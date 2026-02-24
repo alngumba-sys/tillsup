@@ -58,9 +58,9 @@ export function Login() {
     setLoading(true);
 
     try {
-      // Basic safeguard: timeout if login takes > 15 seconds (rare but possible network issue)
+      // Basic safeguard: timeout if login takes > 30 seconds (increased from 15s)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Login timed out. Please check your connection and try again.")), 15000)
+        setTimeout(() => reject(new Error("Login timed out. Please check your connection and try again.")), 30000)
       );
 
       // Attempt login with race against timeout
@@ -80,9 +80,14 @@ export function Login() {
 
       if (result && result.success) {
         // Redirect based on mustChangePassword flag
+        console.log("✅ Login successful!");
+        console.log("   mustChangePassword:", result.mustChangePassword);
+        
         if (result.mustChangePassword) {
+          console.log("🔐 User must change password - redirecting to /change-password");
           navigate("/change-password");
         } else {
+          console.log("📊 Redirecting to dashboard");
           navigate("/app/dashboard");
         }
       } else {
@@ -90,11 +95,13 @@ export function Login() {
         // BRANCH DEACTIVATION - HARD BLOCK (redirect to branch closed page)
         // ═══════════════════════════════════════════════════════════════════
         if (result?.branchDeactivated) {
+          console.log("🚫 Branch deactivated - redirecting to branch-closed page");
           navigate("/branch-closed", { replace: true });
           return;
         }
         
-        setError(result?.error || "Login failed. Please try again.");
+        console.error("❌ Login failed:", result?.error);
+        setError(result?.error || "Login failed. Please check your credentials and try again.");
         // Clear password on error
         setFormData(prev => ({ ...prev, password: "" }));
       }
