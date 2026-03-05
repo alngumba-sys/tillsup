@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext";
 import { ExpenseContext } from "./ExpenseContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
+import { isPreviewMode } from "../utils/previewMode";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -95,6 +96,21 @@ export function SupplierInvoiceProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!business) {
+      setSupplierInvoices([]);
+      return;
+    }
+
+    // Preview mode: Skip Supabase, use empty array (no mock data needed for invoices)
+    if (isPreviewMode()) {
+      console.log("🎨 Preview mode: Using empty supplier invoices");
+      setSupplierInvoices([]);
+      return;
+    }
+
+    // Guard: Prevent query if ID is not a valid UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(business.id);
+    if (!isUuid) {
+      console.warn("Skipping supplier invoices fetch: Business ID is not a valid UUID:", business.id);
       setSupplierInvoices([]);
       return;
     }

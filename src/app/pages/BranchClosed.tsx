@@ -46,7 +46,7 @@ export function BranchClosed() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
       <Card className="w-full max-w-md shadow-2xl border-red-200">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">

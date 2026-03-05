@@ -136,7 +136,7 @@ export function BusinessRegistration() {
 
   return (
     <div 
-      className={`min-h-screen flex items-center justify-center p-4 text-slate-50 relative ${!assets.authBg ? "bg-[linear-gradient(135deg,#000000_0%,#14213d_60%,#0479A1_100%)]" : "bg-cover bg-center"}`}
+      className={`min-h-screen flex items-center justify-center p-4 text-slate-50 relative ${!assets.authBg ? "bg-[#14213d]" : "bg-cover bg-center"}`}
       style={assets.authBg ? { backgroundImage: `url(${assets.authBg})` } : {}}
     >
       {assets.authBg && <div className="absolute inset-0 bg-black/60 z-0" />}

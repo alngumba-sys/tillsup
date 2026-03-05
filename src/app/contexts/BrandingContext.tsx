@@ -29,14 +29,24 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBranding = async () => {
     try {
-      const { data, error } = await supabase.storage.from('platform-assets').list('', {
+      // Add timeout to prevent hanging (increased to 10 seconds for slow connections)
+      const fetchPromise = supabase.storage.from('platform-assets').list('', {
         limit: 100,
         sortBy: { column: 'created_at', order: 'desc' },
       });
 
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Branding fetch timeout")), 10000)
+      );
+
+      const { data, error } = await Promise.race([
+        fetchPromise,
+        timeoutPromise
+      ]) as any;
+
       if (error) {
-        // If bucket doesn't exist, just ignore
-        console.warn("Could not fetch platform assets:", error.message);
+        // If bucket doesn't exist, just ignore silently
+        console.debug("Could not fetch platform assets:", error.message);
         return;
       }
 
@@ -55,7 +65,8 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
         ogImage: getUrl('platform-og-image'),
       });
     } catch (err) {
-      console.error("Error loading branding assets:", err);
+      // Silent fallback - branding is optional
+      console.debug("Branding assets not loaded (using defaults):", err);
     } finally {
       setLoading(false);
     }

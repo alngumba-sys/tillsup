@@ -92,6 +92,7 @@ export function SalesProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   const refreshSales = async () => {
     if (!business) {
+      console.log("📊 SalesContext: No business context - setting sales to empty");
       setSales([]);
       setLoading(false);
       return;
@@ -100,12 +101,15 @@ export function SalesProvider({ children }: { children: ReactNode }) {
     // Guard: Prevent query if ID is not a valid UUID
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(business.id);
     if (!isUuid) {
+      console.log("📊 SalesContext: Business ID is not UUID - setting sales to empty");
       setSales([]);
       setLoading(false);
       return;
     }
 
     setError(null);
+    
+    console.log("🔵 Fetching sales from Supabase database...", { businessId: business.id });
 
     try {
       // 1. Fetch Sales Header
@@ -116,7 +120,12 @@ export function SalesProvider({ children }: { children: ReactNode }) {
         .eq('business_id', business.id)
         .order('created_at', { ascending: false });
 
-      if (salesError) throw salesError;
+      if (salesError) {
+        console.error("❌ Error fetching sales:", salesError);
+        throw salesError;
+      }
+      
+      console.log(`📊 Fetched ${salesData?.length || 0} sales records from database`);
 
       // 2. Fetch Sales Items
       // Optimization: In a real app, we might use a join query or load items on demand, 
@@ -126,7 +135,12 @@ export function SalesProvider({ children }: { children: ReactNode }) {
         .select('*')
         .eq('business_id', business.id);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error("❌ Error fetching sales items:", itemsError);
+        throw itemsError;
+      }
+      
+      console.log(`📊 Fetched ${itemsData?.length || 0} sales items from database`);
 
       if (salesData && itemsData) {
         // Map items by sale_id for faster lookup
@@ -170,10 +184,17 @@ export function SalesProvider({ children }: { children: ReactNode }) {
           readableId: s.readable_id
         }));
 
+        console.log(`✅ Successfully loaded ${mappedSales.length} sales from database`);
+        if (mappedSales.length === 0) {
+          console.log("ℹ️  No sales data found - this is normal if you haven't made any sales yet");
+        }
+        
         setSales(mappedSales);
       }
     } catch (err: any) {
-      console.error("Error fetching sales:", err);
+      console.error("❌ Error fetching sales:", err);
+      console.error("   Error code:", err.code);
+      console.error("   Error message:", err.message);
       setError(err);
     } finally {
       setLoading(false);

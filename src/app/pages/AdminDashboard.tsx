@@ -495,7 +495,7 @@ export function AdminDashboard() {
   };
 
   // Styles reused from Landing.tsx for consistency
-  const bgClass = "bg-[linear-gradient(135deg,#000000_0%,#14213d_60%,#0479A1_100%)]";
+  const bgClass = "bg-[#14213d]";
   const glassClass = "backdrop-blur-xl bg-slate-950/40 border border-white/10";
   const glassHeaderClass = "backdrop-blur-xl bg-slate-950/60 border-b border-white/10";
 

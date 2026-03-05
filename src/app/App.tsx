@@ -1,68 +1,38 @@
+/**
+ * Tillsup POS Application - Main Entry Point
+ * Enterprise POS SaaS with Supabase integration
+ */
+
 import { RouterProvider } from "react-router";
 import { router } from "./AppRoutes";
 import { AuthProvider } from "./contexts/AuthContext";
-import { BranchProvider } from "./contexts/BranchContext";
-import { AttendanceProvider } from "./contexts/AttendanceContext";
-import { CategoryProvider } from "./contexts/CategoryContext";
-import { ExpenseProvider } from "./contexts/ExpenseContext";
-import { ForecastingProvider } from "./contexts/ForecastingContext";
-import { GoodsReceivedProvider } from "./contexts/GoodsReceivedContext";
-import { InventoryAuditProvider } from "./contexts/InventoryAuditContext";
-import { InventoryProvider } from "./contexts/InventoryContext";
-import { KPIProvider } from "./contexts/KPIContext";
-import { PurchaseOrderProvider } from "./contexts/PurchaseOrderContext";
-import { RoleProvider } from "./contexts/RoleContext";
-import { SalesProvider } from "./contexts/SalesContext";
-import { SupplierProvider } from "./contexts/SupplierContext";
-import { SupplierInvoiceProvider } from "./contexts/SupplierInvoiceContext";
-import { SupplierManagementProvider } from "./contexts/SupplierManagementContext";
-import { SupplierRequestProvider } from "./contexts/SupplierRequestContext";
-import { Toaster } from "sonner";
-
 import { BrandingProvider } from "./contexts/BrandingContext";
+import { Toaster } from "./components/ui/sonner";
+import { isPreviewMode } from "./utils/previewMode";
+import { useEffect } from "react";
 
-// Main App Component - Entry point for the POS System
+console.log("📦 App.tsx loaded - Initializing Tillsup POS");
+
 export default function App() {
+  console.log("✅ App() component rendering");
+
+  // Log preview mode status
+  useEffect(() => {
+    if (isPreviewMode()) {
+      console.log("🎨 PREVIEW MODE ACTIVE - Using mock data, Supabase calls disabled");
+    } else {
+      console.log("🚀 PRODUCTION MODE - Using real Supabase connection");
+    }
+  }, []);
+
   return (
-    <BrandingProvider>
+    <>
       <AuthProvider>
-        <BranchProvider>
-        <RoleProvider>
-          <CategoryProvider>
-            <SalesProvider>
-              <SupplierProvider>
-                <SupplierManagementProvider>
-                  <SupplierRequestProvider>
-                    <InventoryProvider>
-                      <InventoryAuditProvider>
-                        <ExpenseProvider>
-                          <PurchaseOrderProvider>
-                            <GoodsReceivedProvider>
-                              <SupplierInvoiceProvider>
-                                <ForecastingProvider>
-                                  <AttendanceProvider>
-                                    <KPIProvider>
-                                      <>
-                                        <RouterProvider router={router} />
-                                        <Toaster position="top-right" richColors />
-                                      </>
-                                    </KPIProvider>
-                                  </AttendanceProvider>
-                                </ForecastingProvider>
-                              </SupplierInvoiceProvider>
-                            </GoodsReceivedProvider>
-                          </PurchaseOrderProvider>
-                        </ExpenseProvider>
-                      </InventoryAuditProvider>
-                    </InventoryProvider>
-                  </SupplierRequestProvider>
-                </SupplierManagementProvider>
-              </SupplierProvider>
-            </SalesProvider>
-          </CategoryProvider>
-        </RoleProvider>
-      </BranchProvider>
-    </AuthProvider>
-    </BrandingProvider>
+        <BrandingProvider>
+          <RouterProvider router={router} />
+          <Toaster position="top-right" />
+        </BrandingProvider>
+      </AuthProvider>
+    </>
   );
 }

@@ -18,6 +18,7 @@ import { Badge } from "../components/ui/badge";
 import { Package } from "lucide-react";
 import { Building2 } from "lucide-react";
 import { SchemaError } from "../components/inventory/SchemaError";
+import { isPreviewMode } from "../utils/previewMode";
 
 const salesData = [
   { name: "Mon", sales: 4200 },
@@ -106,7 +107,7 @@ export function Dashboard() {
       return total + sale.items.reduce((sum, item) => sum + item.quantity, 0);
     }, 0);
 
-    // ══════════════════════════════════════════════════════════════════
+    // ════════════════════��═════════════════════════════════════════════
     // EXPENSE & PROFIT CALCULATIONS (Business Owner & Manager only)
     // ═══════════════════════════════════════════════════════════════════
     let todayExpenses = 0;
@@ -273,7 +274,7 @@ export function Dashboard() {
     };
   }, [sales, businessId, staffId, branchId]);
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════��══════════════════════════════
   // ROLE-BASED RECENT TRANSACTIONS
   // ══════════════════════════════════════════════════════════════════
   const recentTransactions = useMemo(() => {
@@ -317,20 +318,22 @@ export function Dashboard() {
   // ═══════════════════════════════════════════════════════════════════
   // ROLE-BASED SALES CHART DATA
   // ═══════════════════════════════════════════════════════════════════
+  // Prepare chart data - use single data source with absolutely minimal structure
   const weekSalesData = useMemo(() => {
     const dailySales = getDailySales(7, businessId, staffId, branchId);
-    // Filter out days with zero sales and map to chart format
-    const chartData = dailySales
-      .filter(day => day.revenue > 0) // Only include days with actual sales
-      .map(day => ({
-        name: day.dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
-        date: day.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        sales: day.revenue
-      }));
-    
-    console.log('📈 Chart Data:', chartData);
-    
-    return chartData;
+    return dailySales.map((day, idx) => {
+      const weekdayShort = day.dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+      const dateShort = day.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      return {
+        // Use simple index-based name to avoid any duplicate key issues
+        name: `Day ${idx}`,
+        // Display label for X-axis  
+        label: `${weekdayShort} ${dateShort}`,
+        // Sales value
+        sales: day.revenue || 0,
+      };
+    });
   }, [getDailySales, businessId, staffId, branchId]);
 
   // Helper function to calculate time ago
@@ -405,6 +408,17 @@ export function Dashboard() {
     <div className="p-4 lg:p-6 space-y-6">
       {/* Schema Error Display */}
       {(branchError || schemaError) && <SchemaError error={branchError || schemaError} />}
+
+      {/* Preview Mode Banner */}
+      {isPreviewMode() && (
+        <Alert className="border-[#0891b2] bg-[#0891b2]/10">
+          <Info className="h-5 w-5 text-[#0891b2]" />
+          <AlertDescription className="text-sm">
+            <span className="font-semibold">Preview Mode Active</span> - You're viewing this app with demo data in Figma Make. 
+            All features are functional with mock data. Deploy to Vercel or run locally for full Supabase integration.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Page Header */}
       <div>
@@ -565,71 +579,44 @@ export function Dashboard() {
           </CardHeader>
           <CardContent style={{ minHeight: '350px' }}>
             <div className="h-[300px] min-h-[300px] w-full" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
-              <ResponsiveContainer width="100%" height={300} minHeight={300}>
-                <LineChart data={weekSalesData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis 
-                    dataKey="name" 
-                    className="text-xs"
-                    label={{ value: 'Day of Week', position: 'insideBottom', offset: -5, style: { fontSize: 12 } }}
+              <ResponsiveContainer width="100%" height={300} minHeight={300} key="sales-chart-container">
+                <LineChart 
+                  data={weekSalesData} 
+                  margin={{ bottom: 20 }}
+                  id="weekly-sales-chart"
+                  key="weekly-sales-line-chart"
+                >
+                  <CartesianGrid 
+                    key="grid" 
+                    strokeDasharray="3 3" 
+                    className="stroke-muted" 
                   />
-                  <YAxis className="text-xs" />
+                  <XAxis 
+                    key="x-axis"
+                    dataKey="label"
+                    className="text-xs"
+                    tick={{ fontSize: 11 }}
+                    angle={-20}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    key="y-axis"
+                    className="text-xs" 
+                  />
                   <Tooltip 
+                    key="tooltip"
                     formatter={(value: number) => [formatCurrency(value), 'Sales']}
-                    labelFormatter={(label, payload) => {
-                      if (payload && payload.length > 0) {
-                        return `${payload[0].payload.name} (${payload[0].payload.date})`;
-                      }
-                      return label;
-                    }}
+                    contentStyle={{ fontSize: '12px' }}
                   />
                   <Line 
-                    type="natural" 
+                    key="sales-line"
+                    type="monotone" 
                     dataKey="sales" 
                     stroke="hsl(var(--primary))" 
                     strokeWidth={3}
-                    dot={{ fill: "hsl(var(--primary))", r: 5, strokeWidth: 2, stroke: "#fff" }}
-                    activeDot={{ r: 7 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Trend Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Sales Trend</CardTitle>
-            <CardDescription>Daily sales trend analysis</CardDescription>
-          </CardHeader>
-          <CardContent style={{ minHeight: '350px' }}>
-            <div className="h-[300px] min-h-[300px] w-full" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
-              <ResponsiveContainer width="100%" height={300} minHeight={300}>
-                <LineChart data={weekSalesData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis 
-                    dataKey="name" 
-                    className="text-xs"
-                    label={{ value: 'Day of Week', position: 'insideBottom', offset: -5, style: { fontSize: 12 } }}
-                  />
-                  <YAxis className="text-xs" />
-                  <Tooltip 
-                    formatter={(value: number) => [formatCurrency(value), 'Sales']}
-                    labelFormatter={(label, payload) => {
-                      if (payload && payload.length > 0) {
-                        return `${payload[0].payload.name} (${payload[0].payload.date})`;
-                      }
-                      return label;
-                    }}
-                  />
-                  <Line 
-                    type="natural" 
-                    dataKey="sales" 
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={3}
-                    dot={{ fill: "hsl(var(--primary))", r: 5, strokeWidth: 2, stroke: "#fff" }}
-                    activeDot={{ r: 7 }}
+                    dot={false}
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -656,7 +643,7 @@ export function Dashboard() {
                   <p className="text-sm text-muted-foreground">{transaction.displayId} • {transaction.time}</p>
                   {/* ═══════════════════════════════════════════════════════════════════
                       SOLD BY (STAFF/CASHIER) - Display who processed the transaction
-                      ═══════════════════════════════════════════════════════════════════ */}
+                      ══════════════════════════════════════���════════════════════════════ */}
                   <p className="text-xs text-muted-foreground mt-0.5">Sold by: {transaction.staffName}</p>
                 </div>
                 <div className="text-right">

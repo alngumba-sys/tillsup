@@ -5,8 +5,9 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Lock, AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { Lock, AlertCircle, CheckCircle2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import tillsupLogo from "figma:asset/d8ccfcda27bd287c53c65bd6331fc0ce5f63d0aa.png";
 
 export function ChangePassword() {
   const navigate = useNavigate();
@@ -52,7 +53,18 @@ export function ChangePassword() {
         navigate("/app/dashboard");
       } else {
         console.error("❌ Password change failed:", result.error);
-        setError(result.error || "Failed to change password. Please try again or contact support.");
+        
+        // Provide user-friendly error messages
+        let errorMessage = result.error || "Failed to change password. Please try again or contact support.";
+        
+        // Check for specific error types
+        if (result.error?.includes("should be different from the old password")) {
+          errorMessage = "Your new password must be different from your current password. Please choose a different password.";
+        } else if (result.error?.includes("Network") || result.error?.includes("fetch")) {
+          errorMessage = "Network connection issue. Please check your internet connection and try again.";
+        }
+        
+        setError(errorMessage);
       }
     } catch (err: any) {
       console.error("❌ Password change exception:", err);
@@ -62,17 +74,37 @@ export function ChangePassword() {
     }
   };
 
+  const handleBack = () => {
+    // Go back to previous page (likely dashboard)
+    navigate(-1);
+  };
+
   // Early return if no user (shouldn't happen due to AuthGuard)
   if (!user) return null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-4">
+          {/* Back Button */}
+          <div className="flex justify-start -mb-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBack}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+          </div>
+          
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center">
-              <Lock className="w-8 h-8 text-white" />
-            </div>
+            <img 
+              src={tillsupLogo} 
+              alt="Tillsup" 
+              className="h-16 w-auto object-contain" 
+            />
           </div>
           <div>
             <CardTitle className="text-3xl">Change Password</CardTitle>
@@ -156,9 +188,15 @@ export function ChangePassword() {
             {/* Password Requirements */}
             <div className="bg-slate-50 rounded-lg p-4 space-y-2">
               <p className="text-sm font-medium">Password Requirements:</p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span>At least 6 characters long</span>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span>At least 6 characters long</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span>Must be different from your current password</span>
+                </div>
               </div>
             </div>
 

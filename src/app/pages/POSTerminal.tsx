@@ -42,7 +42,7 @@ interface CartItem extends Product {
   quantity: number;
   // ═══════════════════════════════════════════════════════════════════
   // PRICING EXTENSION - Track selected price tier
-  // ══════════════════════════════════════════════════════════════════��
+  // ══════════════════════════════════════════════════════════════════
   selectedPrice: number; // The actual price being used for this cart item
   priceType: "retail" | "wholesale"; // Which price tier was selected
 }
@@ -74,9 +74,9 @@ export function POSTerminal() {
   const { hasFeature, plan } = useSubscription();
   const navigate = useNavigate();
   
-  // ═══════════════������═════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
   // STEP 2.1: BRANCH CONTEXT LOADING
-  // ═══════════════════════════════════════���═══════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   // Determine active branch ID based on user role
   const getActiveBranchId = (): string | null => {
     // Staff, Manager, and Cashier: auto-locked to assigned branch
@@ -303,7 +303,7 @@ export function POSTerminal() {
     // Capture cart data before clearing (for fiscal receipt)
     // ══════════════════════════════════════════════════════════════════
     // PRICING EXTENSION: Use selectedPrice and include priceType
-    // ════════════════════════════════════════���══════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     const saleItems = cart.map(item => ({
       productId: item.id,
       productName: item.name,
@@ -392,7 +392,7 @@ export function POSTerminal() {
           - Business Owner: Non-blocking warning (can switch branches)
           - Staff/Manager: Full screen block (should never reach here due to login blocking)
           
-          ═════════════��═════════════════════════════════════════════════════ */}
+          ══════════════════════════════════════════════════════════════════ */}
       {isBranchDeactivated && user?.role !== "Business Owner" && (
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="max-w-md w-full shadow-2xl border-red-200">
@@ -549,7 +549,7 @@ export function POSTerminal() {
               STEP 4: UI CONFIRMATION - Active Branch Badge Near Product Grid
               ══════════════════════════════════════════════════════════════════ */}
           {isPOSReady && activeBranch && (
-            <div className="mb-4 flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+            <div className="mb-4 flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                   <Building2 className="w-5 h-5 text-blue-600" />

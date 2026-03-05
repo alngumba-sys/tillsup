@@ -1,59 +1,48 @@
 -- ═══════════════════════════════════════════════════════════════════
--- EMERGENCY FIX - DISABLE RLS ON PROFILES COMPLETELY
+-- 🚨 EMERGENCY FIX - RUN THIS NOW!
 -- ═══════════════════════════════════════════════════════════════════
--- This is a temporary fix to get you unblocked immediately
--- Run this first, then we'll add proper policies back
+-- This disables RLS and removes all problematic policies
 -- ═══════════════════════════════════════════════════════════════════
 
--- STEP 1: DISABLE RLS COMPLETELY (no policies will be checked)
-ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
+-- STEP 1: DISABLE RLS ON PROFILES
+ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 
--- STEP 2: Force drop ALL policies (even if they error)
+-- STEP 2: DROP ALL POLICIES ON PROFILES
 DO $$ 
 DECLARE
-    policy_record RECORD;
+    pol RECORD;
 BEGIN
-    FOR policy_record IN 
+    FOR pol IN 
         SELECT policyname 
         FROM pg_policies 
-        WHERE tablename = 'profiles' AND schemaname = 'public'
+        WHERE tablename = 'profiles'
     LOOP
-        BEGIN
-            EXECUTE format('DROP POLICY IF EXISTS %I ON public.profiles', policy_record.policyname);
-        EXCEPTION WHEN OTHERS THEN
-            RAISE NOTICE 'Could not drop policy %', policy_record.policyname;
-        END;
+        EXECUTE format('DROP POLICY IF EXISTS %I ON profiles', pol.policyname);
     END LOOP;
 END $$;
 
--- STEP 3: Drop any helper functions
-DROP FUNCTION IF EXISTS public.get_my_business_id() CASCADE;
-DROP FUNCTION IF EXISTS public.get_my_role() CASCADE;
-
--- STEP 4: Grant full permissions to authenticated users
-GRANT ALL ON public.profiles TO authenticated;
-GRANT ALL ON public.profiles TO anon;
-
--- ═══════════════════════════════════════════════════════════════════
--- VERIFICATION - Should show RLS is DISABLED
--- ═══════════════════════════════════════════════════════════════════
-
+-- STEP 3: VERIFY RLS IS DISABLED
 SELECT 
-    tablename,
-    rowsecurity as rls_enabled
-FROM pg_tables 
-WHERE tablename = 'profiles' AND schemaname = 'public';
+    CASE 
+        WHEN relrowsecurity THEN '❌ STILL ENABLED - Something went wrong!'
+        ELSE '✅ RLS DISABLED - You can login now!'
+    END as "RLS Status on profiles table"
+FROM pg_class
+WHERE relname = 'profiles';
 
--- Should return: rls_enabled = false
-
--- Check no policies exist
-SELECT COUNT(*) as policy_count
-FROM pg_policies 
-WHERE tablename = 'profiles' AND schemaname = 'public';
-
--- Should return: policy_count = 0
-
--- Test query - should work now
-SELECT id, email, role, business_id 
-FROM public.profiles 
-LIMIT 5;
+-- STEP 4: SHOW ALL USERS
+SELECT 
+    u.email as "Email",
+    CASE 
+        WHEN u.email_confirmed_at IS NOT NULL THEN '✅ Confirmed'
+        ELSE '❌ NOT CONFIRMED - Cannot login!'
+    END as "Status",
+    CASE 
+        WHEN p.id IS NOT NULL THEN '✅ Has Profile'
+        ELSE '❌ NO PROFILE'
+    END as "Profile",
+    p.full_name as "Name",
+    p.role as "Role"
+FROM auth.users u
+LEFT JOIN profiles p ON p.id = u.id
+ORDER BY u.created_at DESC;

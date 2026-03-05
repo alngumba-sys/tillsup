@@ -40,7 +40,7 @@ export function SuccessCard({ total, itemCount, onDismiss }: SuccessCardProps) {
         <div className="flex items-start gap-4">
           {/* Success Icon */}
           <div className="flex-shrink-0">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-50 rounded-full flex items-center justify-center ring-4 ring-green-100 animate-success-pulse">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center ring-4 ring-green-100 animate-success-pulse">
               <CheckCircle className="w-7 h-7 text-green-600" />
             </div>
           </div>
@@ -55,7 +55,7 @@ export function SuccessCard({ total, itemCount, onDismiss }: SuccessCardProps) {
             </p>
 
             {/* Sale Details */}
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-3 space-y-2 border border-green-100">
+            <div className="bg-green-50 rounded-lg p-3 space-y-2 border border-green-100">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-700 flex items-center gap-1.5">
                   <ShoppingBag className="w-4 h-4 text-green-600" />
@@ -79,7 +79,7 @@ export function SuccessCard({ total, itemCount, onDismiss }: SuccessCardProps) {
         <div className="mt-4 h-1.5 bg-gray-200 rounded-full overflow-hidden">
           <div
             className={cn(
-              "h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all ease-linear",
+              "h-full bg-green-600 rounded-full transition-all ease-linear",
               isVisible && !isExiting ? "w-0" : "w-full"
             )}
             style={{ transitionDuration: isVisible && !isExiting ? "4000ms" : "0ms" }}

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect } from "react
 import { useAuth } from "./AuthContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
+import { isPreviewMode } from "../utils/previewMode";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -259,6 +260,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   };
 
   const seedDefaultRoles = async (businessId: string) => {
+    // Preview mode: Skip seeding
+    if (isPreviewMode()) {
+      console.log("🎨 Preview mode: Skipping role seeding");
+      return;
+    }
+
+    // Guard: Don't seed roles if business ID is not a valid UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessId);
+    if (!isUuid) {
+      console.warn("Skipping role seeding: Business ID is not a valid UUID:", businessId);
+      return;
+    }
+
     const defaultRoles = getDefaultSystemRoles(businessId);
     
     try {

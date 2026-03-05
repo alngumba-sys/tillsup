@@ -6,13 +6,18 @@ import { useKPI } from "../contexts/KPIContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrency } from "../hooks/useCurrency";
 import { useBranding } from "../contexts/BrandingContext";
-import { Store, Users, DollarSign } from "lucide-react";
+import { Store, Users, DollarSign, HelpCircle } from "lucide-react";
+import { useState } from "react";
+import { WalkthroughModal } from "./WalkthroughModal";
+import { isPreviewMode } from "../utils/previewMode";
+import { Badge } from "./ui/badge";
 
 export function TopNavbar() {
   const { kpiData, kpiUpdated } = useKPI();
   const { business } = useAuth();
   const { currencySymbol } = useCurrency();
   const { assets } = useBranding();
+  const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(false);
 
   return (
     <div className="h-16 border-b border-border flex items-center justify-between px-4 lg:px-6 fixed top-0 left-0 right-0 z-50 bg-[#f3f7ff]">
@@ -30,6 +35,12 @@ export function TopNavbar() {
             </span>
           </>
         )}
+        {/* Preview Mode Badge */}
+        {isPreviewMode() && (
+          <Badge variant="outline" className="bg-[#0891b2]/10 text-[#0891b2] border-[#0891b2] text-xs px-2 py-0.5">
+            Preview Mode
+          </Badge>
+        )}
       </div>
 
       {/* Right Section: KPI Cards + Profile */}
@@ -44,7 +55,7 @@ export function TopNavbar() {
           {/* Glow effect overlay */}
           <div
             className={cn(
-              "absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/30 to-blue-400/0 transition-opacity duration-700",
+              "absolute inset-0 bg-blue-400/20 transition-opacity duration-700",
               kpiUpdated ? "opacity-100 animate-shimmer" : "opacity-0"
             )}
           />
@@ -76,7 +87,7 @@ export function TopNavbar() {
           {/* Glow effect overlay */}
           <div
             className={cn(
-              "absolute inset-0 bg-gradient-to-r from-green-400/0 via-green-400/30 to-green-400/0 transition-opacity duration-700",
+              "absolute inset-0 bg-green-400/20 transition-opacity duration-700",
               kpiUpdated ? "opacity-100 animate-shimmer" : "opacity-0"
             )}
           />
@@ -105,9 +116,24 @@ export function TopNavbar() {
         {/* Clock In/Out */}
         <ClockInOut />
 
+        {/* Walkthrough Help Button */}
+        <button
+          onClick={() => setIsWalkthroughOpen(true)}
+          className="group relative flex items-center justify-center w-10 h-8 bg-white hover:bg-gray-100 rounded-lg transition-all hover:scale-105 active:scale-95"
+          aria-label="Start tutorial walkthrough"
+        >
+          <HelpCircle className="w-5 h-5 text-[#0891b2]" strokeWidth={2.5} />
+        </button>
+
         {/* Profile Dropdown */}
         <ProfileDropdown />
       </div>
+
+      {/* Walkthrough Modal */}
+      <WalkthroughModal
+        isOpen={isWalkthroughOpen}
+        onClose={() => setIsWalkthroughOpen(false)}
+      />
     </div>
   );
 }

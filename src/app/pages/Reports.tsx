@@ -19,12 +19,13 @@ import {
   Legend,
   ResponsiveContainer 
 } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, ShoppingBag, Users, Package, AlertTriangle, Info, Search, ArrowUpDown, Download } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ShoppingBag, Users, Package, AlertTriangle, Info, Search, ArrowUpDown, Download, Receipt } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { useSales } from "../contexts/SalesContext";
 import { useInventory } from "../contexts/InventoryContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useCategory } from "../contexts/CategoryContext";
+import { useExpense } from "../contexts/ExpenseContext";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { formatCurrency } from "../utils/currency";
@@ -51,6 +52,7 @@ export function Reports() {
   const { inventory } = useInventory();
   const { user, business } = useAuth();
   const { categories } = useCategory(); // Get categories to force re-render when they load
+  const { expenses } = useExpense();
   const currencyCode = business?.currency || "KES";
 
   // ═══════════════════════════════════════════════════════════════════
@@ -276,6 +278,61 @@ export function Reports() {
       };
     });
 
+    // ══════════════════════════════════════════════════════════════════
+    // EXPENSES - Filter by time period
+    // ═══════════════════════════════════════════════════════════════════
+    let filteredExpenses = expenses.filter(expense => {
+      if (businessId && expense.businessId !== businessId) return false;
+      if (branchId && expense.branchId !== branchId) return false;
+      return true;
+    });
+
+    // Apply time filter to expenses
+    const now = new Date();
+    filteredExpenses = filteredExpenses.filter(expense => {
+      const expenseDate = new Date(expense.createdAt);
+      
+      switch (timeFilter) {
+        case "today":
+          return expenseDate.toDateString() === now.toDateString();
+        
+        case "this-week":
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - now.getDay());
+          weekStart.setHours(0, 0, 0, 0);
+          return expenseDate >= weekStart;
+        
+        case "this-month":
+          return (
+            expenseDate.getMonth() === now.getMonth() &&
+            expenseDate.getFullYear() === now.getFullYear()
+          );
+        
+        case "all-time":
+        default:
+          return true;
+      }
+    });
+
+    // Calculate total expenses
+    const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+    // Calculate net profit (Gross Profit - Total Expenses)
+    const netProfit = totalGrossProfit - totalExpenses;
+    const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    // Expense breakdown by category
+    const expensesByCategory = filteredExpenses.reduce((acc, expense) => {
+      const existing = acc.get(expense.category) || 0;
+      acc.set(expense.category, existing + expense.amount);
+      return acc;
+    }, new Map<string, number>());
+
+    const expenseCategoryData = Array.from(expensesByCategory.entries()).map(([category, amount]) => ({
+      name: category,
+      value: amount
+    })).sort((a, b) => b.value - a.value);
+
     return {
       totalRevenue,
       todayRevenue,
@@ -283,6 +340,9 @@ export function Reports() {
       totalCOGS,
       totalGrossProfit,
       grossProfitMargin,
+      totalExpenses,
+      netProfit,
+      netProfitMargin,
       totalOrders,
       todayOrders,
       avgOrderValue,
@@ -291,11 +351,13 @@ export function Reports() {
       bestSellers,
       categoryData,
       filteredSales,
+      filteredExpenses,
+      expenseCategoryData,
       lowStockItems,
       outOfStockItems,
       inventoryWithSold
     };
-  }, [sales, inventory, categories, businessId, staffId, branchId, timeFilter]);
+  }, [sales, inventory, categories, expenses, businessId, staffId, branchId, timeFilter]);
 
   // ═══════════════════════════════════════════════════════════════════
   // EMPTY STATE - Show when no sales data exists
@@ -359,7 +421,7 @@ export function Reports() {
       )}
 
       {/* Summary KPIs - All in one row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
@@ -418,6 +480,46 @@ export function Reports() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Total Expenses</p>
+                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalExpenses, currencyCode)}</p>
+                <div className="flex items-center gap-1 text-sm text-orange-600">
+                  <span className="font-medium text-[12px]">{analytics.filteredExpenses.length} items</span>
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-orange-50 flex items-center justify-center">
+                <Receipt className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Net Profit</p>
+                <p className={`font-semibold text-[24px] ${analytics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatCurrency(analytics.netProfit, currencyCode)}
+                </p>
+                <div className={`flex items-center gap-1 text-sm ${analytics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <span className="font-medium text-[12px]">{analytics.netProfitMargin.toFixed(1)}% margin</span>
+                </div>
+              </div>
+              <div className={`w-12 h-12 rounded-lg ${analytics.netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50'} flex items-center justify-center`}>
+                {analytics.netProfit >= 0 ? (
+                  <TrendingUp className="w-6 h-6 text-emerald-600" />
+                ) : (
+                  <TrendingDown className="w-6 h-6 text-red-600" />
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Total Orders</p>
                 <p className="font-semibold text-[24px]">{analytics.totalOrders}</p>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -458,8 +560,8 @@ export function Reports() {
                   <span>Per transaction</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-orange-50 flex items-center justify-center">
-                <Package className="w-6 h-6 text-orange-600" />
+              <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center">
+                <Package className="w-6 h-6 text-indigo-600" />
               </div>
             </div>
           </CardContent>
@@ -468,10 +570,11 @@ export function Reports() {
 
       {/* Tabs */}
       <Tabs defaultValue="sales" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
           <TabsTrigger value="sales">Sales</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="products">Products</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="inventory">Inventory</TabsTrigger>
         </TabsList>
 
@@ -792,6 +895,115 @@ export function Reports() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Expenses Tab */}
+        <TabsContent value="expenses" className="space-y-4">
+          {analytics.expenseCategoryData.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Expenses by Category</CardTitle>
+                    <CardDescription>Expense distribution by category</CardDescription>
+                  </CardHeader>
+                  <CardContent style={{ minHeight: '350px' }}>
+                    <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
+                      <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                        <PieChart>
+                          <Pie
+                            data={analytics.expenseCategoryData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {analytics.expenseCategoryData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Expense Breakdown</CardTitle>
+                    <CardDescription>Amount spent per category</CardDescription>
+                  </CardHeader>
+                  <CardContent style={{ minHeight: '350px' }}>
+                    <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
+                      <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                        <BarChart data={analytics.expenseCategoryData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis type="number" className="text-xs" />
+                          <YAxis dataKey="name" type="category" className="text-xs" width={100} />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#FF8042" radius={[0, 8, 8, 0]} name={`Amount (${currencyCode})`} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detailed Expense List</CardTitle>
+                  <CardDescription>All expenses within the selected time period</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[500px] border rounded-lg">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-background z-10">
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {analytics.filteredExpenses
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                          .map((expense) => (
+                          <TableRow key={expense.id}>
+                            <TableCell className="text-sm">
+                              {new Date(expense.createdAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{expense.category}</Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">{expense.description}</TableCell>
+                            <TableCell className="text-right font-semibold text-red-600">
+                              {formatCurrency(expense.amount, currencyCode)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {analytics.filteredExpenses.length === 0 && (
+                      <p className="text-center text-muted-foreground py-8">No expenses found</p>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>No Expense Data</AlertTitle>
+              <AlertDescription>
+                Record expenses to see expense analytics and reports here.
+              </AlertDescription>
+            </Alert>
+          )}
         </TabsContent>
 
         {/* Inventory Tab */}

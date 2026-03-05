@@ -1,20 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router";
-import { AuthGuard } from "./components/AuthGuardComponent";
-import { BranchGuard } from "./components/BranchGuard";
-import { Layout } from "./components/Layout";
-import { ErrorBoundary } from "./components/ErrorBoundary";
 
-// Public Pages
-import { Landing } from "./pages/Landing";
-import { SimpleLanding } from "./pages/SimpleLanding";
-import { LandingSafe } from "./pages/LandingSafe";
-import { TestPage } from "./pages/TestPage";
-import { Login } from "./pages/Login";
-import { BusinessRegistration } from "./pages/BusinessRegistration";
-import { WhoWeAre } from "./pages/WhoWeAre";
-import { BranchClosed } from "./pages/BranchClosed";
-import { ChangePassword } from "./pages/ChangePassword";
-import { DiagnosticPage } from "./pages/DiagnosticPage";
+console.log("🗺️ AppRoutes.tsx loaded - Router configuration starting...");
 
 // App Pages
 import { Dashboard } from "./pages/Dashboard";
@@ -37,35 +23,60 @@ import { ReorderForecasting } from "./pages/ReorderForecasting";
 import { AIInsights } from "./pages/AIInsights";
 import { AdminDashboard } from "./pages/AdminDashboard";
 
+// Auth Pages
+import { Login } from "./pages/Login";
+import { BusinessRegistration } from "./pages/BusinessRegistration";
+import RecoveryRegistration from "./pages/RecoveryRegistration";
+import { ChangePassword } from "./pages/ChangePassword";
+import { DebugAuth } from "./pages/DebugAuth";
+
+// Public Pages
+import { Landing } from "./pages/Landing";
+import { LandingSimple } from "./pages/LandingSimple";
+import { DiagnosticLanding } from "./pages/DiagnosticLanding";
+import { PublicRouteTest } from "./pages/PublicRouteTest";
+import { WhoWeAre } from "./pages/WhoWeAre";
+import { BranchClosed } from "./pages/BranchClosed";
+import { SimpleTest } from "./pages/SimpleTest";
+import { SimpleTestBasic } from "./pages/SimpleTestBasic";
+
+// Components
+import { BranchGuard } from "./components/BranchGuard";
+import { Layout } from "./components/Layout";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { BusinessProviders } from "./components/BusinessProviders";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AuthenticatedLayout } from "./components/AuthenticatedLayout";
+
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <LandingSafe />,
+    element: <LandingSimple />,
     errorElement: <ErrorBoundary />,
   },
   {
-    path: "/test",
-    element: <TestPage />,
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: "/simple",
-    element: <SimpleLanding />,
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: "/landing-full",
+    path: "/landing-original",
     element: <Landing />,
     errorElement: <ErrorBoundary />,
   },
   {
-    path: "/admin-hidden",
-    element: <AdminDashboard />,
+    path: "/simple-test",
+    element: <SimpleTest />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/test",
+    element: <SimpleTestBasic />,
     errorElement: <ErrorBoundary />,
   },
   {
     path: "/diagnostic",
-    element: <DiagnosticPage />,
+    element: <DiagnosticLanding />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/public-test",
+    element: <PublicRouteTest />,
     errorElement: <ErrorBoundary />,
   },
   {
@@ -84,6 +95,11 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
+    path: "/recovery",
+    element: <RecoveryRegistration />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: "/branch-closed",
     element: <BranchClosed />,
     errorElement: <ErrorBoundary />,
@@ -91,23 +107,25 @@ export const router = createBrowserRouter([
   {
     path: "/change-password",
     element: (
-      <AuthGuard requireAuth={true}>
+      <ProtectedRoute>
         <ChangePassword />
-      </AuthGuard>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
   {
+    path: "/admin-hidden",
+    element: <AdminDashboard />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/debug-auth",
+    element: <DebugAuth />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: "/app",
-    element: (
-      <AuthGuard requireAuth={true}>
-        <Layout>
-          <BranchGuard>
-            <Outlet />
-          </BranchGuard>
-        </Layout>
-      </AuthGuard>
-    ),
+    element: <AuthenticatedLayout />,
     errorElement: <ErrorBoundary />,
     children: [
       {
@@ -193,3 +211,5 @@ export const router = createBrowserRouter([
     element: <Navigate to="/" replace />,
   },
 ]);
+
+console.log("✅ Router configured successfully with", router.routes.length, "routes");

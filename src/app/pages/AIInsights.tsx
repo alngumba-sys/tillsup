@@ -47,6 +47,7 @@ interface Insight {
 }
 
 interface ChartData {
+  id: string;
   name: string;
   actual: number;
   predicted: number;
@@ -159,9 +160,10 @@ export function AIInsights() {
       });
 
       // Prepare Chart Data
-      const chart: ChartData[] = Object.keys(dailySales).sort().map(dateStr => {
+      const chart: ChartData[] = Object.keys(dailySales).sort().map((dateStr, index) => {
         const date = new Date(dateStr);
         return {
+          id: `historical-${dateStr}-${index}`, // Unique ID
           name: days[date.getDay()],
           actual: dailySales[dateStr],
           predicted: dailySales[dateStr] * 1.1 // Simple AI projection: +10%
@@ -174,6 +176,7 @@ export function AIInsights() {
           const futureDate = new Date();
           futureDate.setDate(today.getDate() + i);
           chart.push({
+              id: `future-${i}-${futureDate.getTime()}`, // Unique ID
               name: days[futureDate.getDay()] + "*", // * for predicted
               actual: 0,
               predicted: Math.max(0, avgDaily * (1 + (Math.random() * 0.3 - 0.1))) // Random fluctuation ±10%
@@ -351,7 +354,7 @@ export function AIInsights() {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/20 dark:to-background border-indigo-100 dark:border-indigo-900 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Predicted Revenue (Next 7 Days)</CardTitle>
           </CardHeader>
@@ -372,7 +375,7 @@ export function AIInsights() {
           </CardContent>
         </Card>
         
-        <Card className="bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/20 dark:to-background border-emerald-100 dark:border-emerald-900 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Efficiency Score</CardTitle>
           </CardHeader>
@@ -391,7 +394,7 @@ export function AIInsights() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/20 dark:to-background border-amber-100 dark:border-amber-900 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">At-Risk Customers</CardTitle>
           </CardHeader>
@@ -410,7 +413,7 @@ export function AIInsights() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-violet-50/50 to-white dark:from-violet-950/20 dark:to-background border-violet-100 dark:border-violet-900 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="bg-violet-50/50 dark:bg-violet-950/20 border-violet-100 dark:border-violet-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">AI Recommendations</CardTitle>
           </CardHeader>
@@ -449,12 +452,6 @@ export function AIInsights() {
             <div className="h-[400px] w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis 
                     dataKey="name" 
@@ -491,7 +488,8 @@ export function AIInsights() {
                     dataKey="predicted" 
                     stroke="#6366f1" 
                     strokeWidth={3} 
-                    fill="url(#colorPredicted)" 
+                    fill="#6366f1" 
+                    fillOpacity={0.1}
                     name="AI Prediction" 
                     dot={{ r: 4, fill: "#6366f1", strokeWidth: 2, stroke: "#fff" }}
                   />

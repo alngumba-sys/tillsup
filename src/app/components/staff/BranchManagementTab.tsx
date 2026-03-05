@@ -67,7 +67,17 @@ export function BranchManagementTab() {
       setIsAddDialogOpen(false);
       resetForm();
     } else {
-      toast.error(result.error || "Failed to create branch");
+      console.error("Error creating branch:", result);
+      
+      // Show specific error message for RLS policy violation
+      if (result.errorCode === '42501') {
+        toast.error("Permission Denied", {
+          description: "Database permission error. Please run the FIX_BRANCHES_RLS.sql script in your Supabase SQL Editor.",
+          duration: 8000
+        });
+      } else {
+        toast.error(result.error || "Failed to create branch");
+      }
     }
   };
 

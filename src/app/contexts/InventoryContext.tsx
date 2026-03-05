@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useMemo, useEffect } fr
 import { useAuth } from "./AuthContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
+import { isPreviewMode, mockPreviewInventory } from "../utils/previewMode";
 
 /**
  * ══════════════════════════════════════════════════════════════════════════
@@ -89,6 +90,30 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const refreshInventory = async () => {
     if (!business) return;
 
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Use mock inventory data
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      console.log('🎨 Preview Mode: Using mock inventory');
+      const mockData = mockPreviewInventory.map(item => ({
+        id: item.id,
+        name: item.name,
+        category: 'General',
+        price: item.unit_price,
+        stock: item.stock,
+        sku: item.sku,
+        supplier: 'Demo Supplier',
+        businessId: item.business_id,
+        branchId: item.branch_id,
+        lowStockThreshold: item.reorder_level,
+        costPrice: item.cost_price,
+        retailPrice: item.unit_price,
+        wholesalePrice: item.unit_price * 0.9
+      }));
+      setAllInventory(mockData);
+      return;
+    }
+
     setError(null);
 
     try {
@@ -163,6 +188,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (!business) {
       console.error("Cannot add product: No business context");
       toast.error("Authentication Error: Business context missing. Please refresh.");
+      return;
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Mock add product
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      console.log('🎨 Preview Mode: Mock add product', product);
+      const newProduct: InventoryItem = {
+        id: `preview-item-${Date.now()}`,
+        businessId: business.id,
+        branchId: branchId || 'preview-branch-001',
+        ...product
+      };
+      setAllInventory(prev => [...prev, newProduct]);
+      toast.success('Product added (Preview Mode)');
       return;
     }
     

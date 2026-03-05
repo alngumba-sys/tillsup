@@ -1,6 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
+import { isPreviewMode } from "../utils/previewMode";
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -12,11 +13,19 @@ interface AuthGuardProps {
  * 
  * Wraps route components to enforce authentication requirements.
  * Handles redirects for first-login password changes.
+ * 
+ * In Preview Mode: Bypasses all authentication checks
  */
 export function AuthGuard({ children, requireAuth = true }: AuthGuardProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, loading } = useAuth();
+
+  // Preview mode: Bypass all authentication
+  if (isPreviewMode()) {
+    console.log('🎨 Preview mode - bypassing auth guard');
+    return <>{children}</>;
+  }
 
   useEffect(() => {
     // Do not redirect while loading

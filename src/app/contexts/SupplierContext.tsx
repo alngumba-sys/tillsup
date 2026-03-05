@@ -47,6 +47,8 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
 
     setError(null);
 
+    console.log("🔵 Fetching suppliers from Supabase database...", { businessId: business.id });
+
     try {
       const { data, error: fetchError } = await supabase
         .from('suppliers')
@@ -54,7 +56,10 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
         .eq('business_id', business.id);
 
       if (fetchError) {
-        console.error("Error fetching suppliers:", fetchError);
+        console.error("❌ Error fetching suppliers from database:", fetchError);
+        console.error("   Error code:", fetchError.code);
+        console.error("   Error message:", fetchError.message);
+        
         // Check for schema errors to show fix UI
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(fetchError.code)) {
             setError(fetchError);
@@ -78,10 +83,22 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
           createdAt: item.created_at,
           updatedAt: item.updated_at || item.created_at,
         }));
+        
+        console.log(`✅ Loaded ${data.length} suppliers from database:`, {
+          total: data.length,
+          withContact: mappedSuppliers.filter(s => s.contactPerson).length,
+          withEmail: mappedSuppliers.filter(s => s.email).length,
+          withNotes: mappedSuppliers.filter(s => s.notes).length,
+          suppliers: mappedSuppliers.map(s => ({ name: s.name, contact: s.contactPerson }))
+        });
+        
         setAllSuppliers(mappedSuppliers);
+      } else {
+        console.log("ℹ️  No suppliers found in database");
+        setAllSuppliers([]);
       }
     } catch (err: any) {
-      console.error("Unexpected error fetching suppliers:", err);
+      console.error("❌ Unexpected error fetching suppliers:", err);
       setError({ message: err.message || "Unexpected error" });
     }
   };
@@ -102,7 +119,7 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
     if (!business) {
         console.error("❌ Cannot add supplier: No business context");
         toast.error("Authentication Error: Business context missing");
-        return;
+        throw new Error("No business context");
     }
 
     const newSupplier = {
@@ -116,49 +133,97 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
       pin_number: supplier.pinNumber,
     };
 
-    console.log("🟢 Adding supplier to Supabase:", newSupplier);
+    console.log("🟢 Adding supplier to Supabase database:", newSupplier);
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('suppliers')
         .insert(newSupplier)
         .select()
         .single();
 
       if (error) {
-        console.error("Error adding supplier:", error);
-        console.error("Error code:", error.code);
-        console.error("Error details:", error.details);
-        console.error("Error hint:", error.hint);
+        console.error("❌ Error adding supplier to database:", error);
+        console.error("   Error code:", error.code);
+        console.error("   Error message:", error.message);
+        console.error("   Error details:", error.details);
+        console.error("   Error hint:", error.hint);
+        
+        // Network/Connection errors
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+            toast.error("Network Error", {
+              description: "Cannot connect to database. Check your internet connection and try again."
+            });
+            throw new Error("Network error: " + error.message);
+        }
+        
+        // Auth/Session errors
+        if (error.code === 'PGRST301' || error.message?.includes('JWT')) {
+            toast.error("Session Expired", {
+              description: "Your session has expired. Please logout and login again.",
+              action: {
+                label: "Logout",
+                onClick: () => { localStorage.clear(); window.location.href = '/'; }
+              }
+            });
+            throw new Error("Session expired");
+        }
         
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
             setError(error);
             toast.error("Database Schema Error", {
               description: "The suppliers table is not properly set up. Please run the database setup SQL."
             });
+            throw error;
         } else if (error.code === 'PGRST116' || error.message.includes('violates row-level security')) {
             toast.error("Permission Error", {
-              description: "You don't have permission to add suppliers. Please check RLS policies."
+              description: "You don't have permission to add suppliers. Try logging out and back in.",
+              action: {
+                label: "Logout",
+                onClick: () => { localStorage.clear(); window.location.href = '/'; }
+              }
             });
+            throw new Error("Permission denied");
         } else if (error.code === '23505') {
             toast.error("Duplicate Entry", {
               description: "A supplier with this name already exists."
             });
+            throw new Error("Duplicate supplier");
         } else {
             toast.error("Failed to add supplier", {
               description: error.message || "Unknown error. Check console for details."
             });
+            throw error;
         }
-        return;
       }
 
+      console.log("✅ Supplier added to database successfully:", data);
+
       await refreshSuppliers();
-      toast.success("Supplier added successfully");
-    } catch (err: any) {
-      console.error("Unexpected error adding supplier:", err);
-      toast.error("Unexpected Error", {
-        description: err instanceof Error ? err.message : "Failed to add supplier"
+      
+      toast.success("Supplier added successfully!", {
+        description: `"${supplier.name}" has been added to the database`
       });
+    } catch (err: any) {
+      console.error("❌ Unexpected error adding supplier:", err);
+      
+      // Handle network errors from fetch
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('ERR_')) {
+        toast.error("Network Connection Error", {
+          description: "Cannot reach the database. Please check your internet connection and try again."
+        });
+        throw new Error("Network connection error");
+      }
+      
+      // Re-throw if already an Error object
+      if (err instanceof Error) {
+        throw err;
+      }
+      
+      toast.error("Unexpected Error", {
+        description: "Failed to add supplier"
+      });
+      throw new Error("Unexpected error");
     }
   };
 

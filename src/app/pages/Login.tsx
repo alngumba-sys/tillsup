@@ -5,15 +5,27 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Store, Mail, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Store, Mail, Lock, AlertCircle, Eye, EyeOff, Info } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
+import { ConnectionChecker } from "../components/ConnectionChecker";
+import { isPreviewMode } from "../utils/previewMode";
+import { toast } from "sonner";
+import tillsupLogo from "figma:asset/d8ccfcda27bd287c53c65bd6331fc0ce5f63d0aa.png";
 
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { assets } = useBranding();
-  const { login, isAuthenticated } = useAuth();
+  const authContext = useAuth();
+  const { login, isAuthenticated, logout } = authContext;
+  
+  // Debug: Check if auth context is valid
+  console.debug("🔍 Login component - Auth context status:", {
+    hasLogin: typeof login === 'function',
+    isAuthenticated,
+    hasLogout: typeof logout === 'function'
+  });
   
   const [formData, setFormData] = useState({
     email: "",
@@ -28,6 +40,7 @@ export function Login() {
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated) {
+      console.log("✅ User already authenticated - redirecting to dashboard");
       navigate("/app/dashboard", { replace: true });
     }
   }, [isAuthenticated, navigate]);
@@ -36,6 +49,9 @@ export function Login() {
   useEffect(() => {
     if (location.state?.message) {
       setSuccessMessage(location.state.message);
+      toast.success(location.state.message, {
+        duration: 5000,
+      });
     }
   }, [location]);
 
@@ -44,37 +60,43 @@ export function Login() {
     setError("");
     setSuccessMessage("");
 
-    // Validation
+    console.log("🔍 Login form submitted with:", { 
+      email: formData.email, 
+      hasPassword: !!formData.password,
+      emailLength: formData.email.length,
+      passwordLength: formData.password.length 
+    });
+
+    // CRITICAL: Validation - MUST have email and password
     if (!formData.email.trim() || !formData.email.includes("@")) {
-      setError("Valid email is required");
+      console.error("❌ Validation failed: Invalid email");
+      const errorMsg = "Valid email is required";
+      setError(errorMsg);
+      toast.error(errorMsg);
       return;
     }
 
-    if (!formData.password) {
-      setError("Password is required");
+    if (!formData.password || formData.password.length === 0) {
+      console.error("❌ Validation failed: Password is empty");
+      const errorMsg = "Password is required";
+      setError(errorMsg);
+      toast.error(errorMsg);
       return;
     }
 
     setLoading(true);
+    setError("");
 
     try {
-      // Basic safeguard: timeout if login takes > 30 seconds (increased from 15s)
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Login timed out. Please check your connection and try again.")), 30000)
-      );
-
-      // Attempt login with race against timeout
+      console.log("🔐 Login attempt:", { email: formData.email });
+      
       // Ensure login is a function before calling
       if (typeof login !== 'function') {
          throw new Error("Authentication service is not ready. Please try again.");
       }
 
-      const loginPromise = login(formData.email, formData.password);
-      
-      const result: any = await Promise.race([
-        loginPromise,
-        timeoutPromise
-      ]);
+      // Call login directly - AuthContext handles all timeouts internally
+      const result = await login(formData.email, formData.password);
 
       setLoading(false);
 
@@ -82,6 +104,8 @@ export function Login() {
         // Redirect based on mustChangePassword flag
         console.log("✅ Login successful!");
         console.log("   mustChangePassword:", result.mustChangePassword);
+        
+        toast.success("Login successful!");
         
         if (result.mustChangePassword) {
           console.log("🔐 User must change password - redirecting to /change-password");
@@ -96,27 +120,57 @@ export function Login() {
         // ═══════════════════════════════════════════════════════════════════
         if (result?.branchDeactivated) {
           console.log("🚫 Branch deactivated - redirecting to branch-closed page");
+          toast.error("Your branch has been deactivated");
           navigate("/branch-closed", { replace: true });
           return;
         }
         
         console.error("❌ Login failed:", result?.error);
-        setError(result?.error || "Login failed. Please check your credentials and try again.");
+        const errorMsg = result?.error || "Login failed. Please check your credentials and try again.";
+        setError(errorMsg);
+        
+        // Show toast notification for wrong credentials
+        if (errorMsg.toLowerCase().includes("invalid") || errorMsg.toLowerCase().includes("password") || errorMsg.toLowerCase().includes("credentials")) {
+          toast.error("Invalid username or password", {
+            description: "Please check your credentials and try again.",
+            duration: 4000,
+          });
+        } else {
+          toast.error(errorMsg);
+        }
+        
         // Clear password on error
         setFormData(prev => ({ ...prev, password: "" }));
       }
     } catch (err: any) {
       setLoading(false);
-      console.error("Login error:", err);
-      setError(err.message || "An unexpected error occurred during login");
+      console.error("❌ Unexpected login error:", err);
+      
+      // Provide helpful error messages
+      let errorMessage = "An unexpected error occurred during login";
+      
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('fetch')) {
+        errorMessage = "Cannot connect to server. Please check your internet connection and try again.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
+      
+      // Clear password on error
+      setFormData(prev => ({ ...prev, password: "" }));
     }
   };
 
   return (
     <div 
-      className={`min-h-screen flex items-center justify-center p-4 text-slate-50 relative ${!assets.authBg ? "bg-[linear-gradient(135deg,#000000_0%,#14213d_60%,#0479A1_100%)]" : "bg-cover bg-center"}`}
+      className={`min-h-screen flex items-center justify-center p-4 text-slate-50 relative ${!assets.authBg ? "bg-[#14213d]" : "bg-cover bg-center"}`}
       style={assets.authBg ? { backgroundImage: `url(${assets.authBg})` } : {}}
     >
+      {/* Connection Checker */}
+      <ConnectionChecker />
+      
       {assets.authBg && <div className="absolute inset-0 bg-black/60 z-0" />}
       
       {/* Back to Home Link */}
@@ -132,18 +186,11 @@ export function Login() {
       <Card className="w-full max-w-md shadow-lg relative z-10 bg-card">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center items-center gap-3">
-            {assets.logoMain ? (
-               <img src={assets.logoMain} alt="Tillsup" className="h-12 w-auto object-contain" />
-            ) : (
-              <>
-                <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
-                  <Store className="w-6 h-6" strokeWidth={2.5} />
-                </div>
-                <span className="text-2xl font-bold font-['Outfit'] tracking-tight text-card-foreground">
-                  Tillsup
-                </span>
-              </>
-            )}
+            <img 
+              src={assets.logoMain || tillsupLogo} 
+              alt="Tillsup" 
+              className="h-12 w-auto object-contain" 
+            />
           </div>
           <div>
             <CardTitle className="text-3xl font-['Outfit'] text-[#0479a1]">POS System</CardTitle>
@@ -155,6 +202,16 @@ export function Login() {
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Preview Mode Notice */}
+            {isPreviewMode() && (
+              <Alert className="border-[#0891b2] bg-[#0891b2]/10">
+                <Info className="h-4 w-4 text-[#0891b2]" />
+                <AlertDescription className="text-sm">
+                  <span className="font-semibold">Preview Mode</span> - Use any email/password to login with demo data
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Success Message */}
             {successMessage && (
               <Alert className="border-green-200 bg-green-50">

@@ -4,7 +4,51 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Tillsup - Modern POS System</title>
+    <style>
+      /* Ensure body and html have proper sizing */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100vh;
+      }
+      
+      /* Loading fallback - NO GRADIENTS, solid Tillsup blue */
+      #root:empty::before {
+        content: '';
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        width: 100%;
+        background: #0891b2;
+        color: white;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 24px;
+        font-weight: bold;
+      }
+      
+      #root:empty::after {
+        content: '🏪 Loading Tillsup...';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 32px;
+        color: white;
+        text-align: center;
+        animation: pulse 2s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

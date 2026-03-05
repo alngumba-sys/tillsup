@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect, useMemo } fr
 import { useAuth } from "./AuthContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
+import { isPreviewMode } from "../utils/previewMode";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -81,11 +82,19 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [error, setError] = useState<any>(null);
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ════════��═════════════════════════════════════════════════════════
   // FETCH CATEGORIES FROM SUPABASE
   // ═══════════════════════════════════════════════════════════════════
   const refreshCategories = async () => {
     if (!business) return;
+    
+    // Preview mode: Use mock data from previewMode.ts
+    if (isPreviewMode()) {
+      console.log("🎨 Preview mode: Using mock categories");
+      const { mockPreviewCategories } = await import("../utils/previewMode");
+      setAllCategories(mockPreviewCategories as any[]);
+      return;
+    }
     
     // Guard: Prevent query if ID is not a valid UUID (prevents 22P02 error)
     // This handles legacy/test data with "BIZ-..." IDs
@@ -98,6 +107,8 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
 
     setError(null);
 
+    console.log("🔵 Fetching categories from Supabase database...", { businessId: business.id });
+
     try {
       const { data, error: fetchError } = await supabase
         .from('categories')
@@ -106,7 +117,10 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
         .order('name');
 
       if (fetchError) {
-        console.error("Error fetching categories:", fetchError);
+        console.error("❌ Error fetching categories from database:", fetchError);
+        console.error("   Error code:", fetchError.code);
+        console.error("   Error message:", fetchError.message);
+        
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(fetchError.code)) {
             setError(fetchError);
         } else {
@@ -125,10 +139,21 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
           createdAt: item.created_at,
           updatedAt: item.updated_at || item.created_at,
         }));
+        
+        console.log(`✅ Loaded ${data.length} categories from database:`, {
+          total: data.length,
+          active: mappedCategories.filter(c => c.status === 'active').length,
+          disabled: mappedCategories.filter(c => c.status === 'disabled').length,
+          categories: mappedCategories.map(c => c.name)
+        });
+        
         setAllCategories(mappedCategories);
+      } else {
+        console.log("ℹ️  No categories found in database");
+        setAllCategories([]);
       }
     } catch (err: any) {
-      console.error("Unexpected error fetching categories:", err);
+      console.error("❌ Unexpected error fetching categories:", err);
       // Ensure error object structure is consistent for SchemaError
       setError({
         message: err.message || "Unexpected error",
@@ -159,7 +184,7 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
   const addCategory = async (category: Omit<Category, "id" | "businessId" | "createdAt" | "updatedAt" | "status">): Promise<{ success: boolean; error?: string }> => {
     if (!business) {
       console.error("Cannot add category: No business context");
-      return { success: false, error: "Authentication Error: Business context missing." };
+      throw new Error("Authentication Error: Business context missing.");
     }
 
     const newCategory = {
@@ -169,6 +194,8 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
       status: "active",
     };
 
+    console.log("🟢 Adding category to Supabase database:", newCategory);
+
     try {
       const { data, error } = await supabase
         .from('categories')
@@ -177,19 +204,88 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
-        console.error("Error adding category:", error);
+        console.error("❌ Error adding category to database:", error);
+        console.error("   Error code:", error.code);
+        console.error("   Error message:", error.message);
+        console.error("   Error details:", error.details);
+        
+        // Network/Connection errors
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+            toast.error("Network Error", {
+              description: "Cannot connect to database. Check your internet connection and try again."
+            });
+            throw new Error("Network error: " + error.message);
+        }
+        
+        // Auth/Session errors
+        if (error.code === 'PGRST301' || error.message?.includes('JWT')) {
+            toast.error("Session Expired", {
+              description: "Your session has expired. Please logout and login again.",
+              action: {
+                label: "Logout",
+                onClick: () => { localStorage.clear(); window.location.href = '/'; }
+              }
+            });
+            throw new Error("Session expired");
+        }
+        
         // Check for schema errors to show fix UI
         if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
             setError(error);
+            toast.error("Database Schema Error", {
+              description: "The categories table is not properly set up."
+            });
+            throw error;
         }
-        return { success: false, error: error.message };
+        
+        // Permission errors
+        if (error.code === 'PGRST116' || error.message.includes('violates row-level security')) {
+            toast.error("Permission Error", {
+              description: "You don't have permission to add categories. Try logging out and back in.",
+              action: {
+                label: "Logout",
+                onClick: () => { localStorage.clear(); window.location.href = '/'; }
+              }
+            });
+            throw new Error("Permission denied");
+        }
+        
+        toast.error("Failed to add category", {
+          description: error.message || "Unknown database error"
+        });
+        
+        throw error;
       }
 
+      console.log("✅ Category added to database successfully:", data);
+      
       await refreshCategories();
+      
+      toast.success("Category added successfully!", {
+        description: `"${category.name}" has been added to the database`
+      });
+      
       return { success: true };
     } catch (err: any) {
-      console.error("Unexpected error adding category:", err);
-      return { success: false, error: "Unexpected error occurred" };
+      console.error("❌ Unexpected error adding category:", err);
+      
+      // Handle network errors from fetch
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('ERR_')) {
+        toast.error("Network Connection Error", {
+          description: "Cannot reach the database. Please check your internet connection and try again."
+        });
+        throw new Error("Network connection error");
+      }
+      
+      // Re-throw if already an Error object
+      if (err instanceof Error) {
+        throw err;
+      }
+      
+      toast.error("Unexpected error occurred", {
+        description: "Failed to add category"
+      });
+      throw new Error("Unexpected error");
     }
   };
 

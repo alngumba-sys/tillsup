@@ -1,11 +1,12 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Users, Calendar, Settings, Shield } from "lucide-react";
+import { Users, Calendar, Settings, Shield, Activity } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { StaffManagementTab } from "../components/staff/StaffManagementTab";
 import { WorkScheduleTab } from "../components/staff/WorkScheduleTab";
 import { AttendanceTab } from "../components/staff/AttendanceTab";
 import { RolesPermissionsTab } from "../components/staff/RolesPermissionsTab";
+import { SupabaseConnectionTest } from "../components/SupabaseConnectionTest";
 
 export function Staff() {
   const { user } = useAuth();
@@ -66,6 +67,12 @@ export function Staff() {
               Roles & Permissions
             </TabsTrigger>
           )}
+          {isOwner && (
+            <TabsTrigger value="diagnostic" className="gap-2">
+              <Activity className="w-4 h-4" />
+              Connection Test
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {isManagerOrOwner && (
@@ -87,6 +94,12 @@ export function Staff() {
         {isOwner && (
           <TabsContent value="roles">
             <RolesPermissionsTab />
+          </TabsContent>
+        )}
+
+        {isOwner && (
+          <TabsContent value="diagnostic">
+            <SupabaseConnectionTest />
           </TabsContent>
         )}
       </Tabs>

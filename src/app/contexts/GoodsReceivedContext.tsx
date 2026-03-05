@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect } from "react
 import { useAuth } from "./AuthContext";
 import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
+import { isPreviewMode } from "../utils/previewMode";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -77,6 +78,21 @@ export function GoodsReceivedProvider({ children }: { children: ReactNode }) {
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!business) {
+      setGoodsReceivedNotes([]);
+      return;
+    }
+
+    // Preview mode: Skip Supabase, use empty array
+    if (isPreviewMode()) {
+      console.log("🎨 Preview mode: Using empty goods received notes");
+      setGoodsReceivedNotes([]);
+      return;
+    }
+
+    // Guard: Prevent query if ID is not a valid UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(business.id);
+    if (!isUuid) {
+      console.warn("Skipping GRNs fetch: Business ID is not a valid UUID:", business.id);
       setGoodsReceivedNotes([]);
       return;
     }

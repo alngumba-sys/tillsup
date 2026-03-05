@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useMemo } from "react";
 import { useAuth } from "./AuthContext";
 import { supabase } from "../../lib/supabase";
+import { isPreviewMode } from "../utils/previewMode";
 
 console.log("BranchContext module loaded - v3.0 - Supabase Persistence Only");
 
@@ -23,8 +24,8 @@ export interface Branch {
 
 interface BranchContextType {
   branches: Branch[];
-  createBranch: (name: string, location: string) => Promise<{ success: boolean; error?: string; branchId?: string }>;
-  updateBranch: (branchId: string, updates: Partial<Omit<Branch, "id" | "businessId" | "createdAt">>) => Promise<{ success: boolean; error?: string }>;
+  createBranch: (name: string, location: string) => Promise<{ success: boolean; error?: string; branchId?: string; errorCode?: string }>;
+  updateBranch: (branchId: string, updates: Partial<Omit<Branch, "id" | "businessId" | "createdAt">>) => Promise<{ success: boolean; error?: string; errorCode?: string }>;
   deleteBranch: (branchId: string) => Promise<{ success: boolean; error?: string }>;
   getBranchById: (branchId: string) => Branch | undefined;
   getBranchesForBusiness: (businessId: string) => Branch[];
@@ -109,6 +110,15 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const refreshBranches = async () => {
     if (!business) {
       setAllBranches([]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Preview mode: Use mock data
+    if (isPreviewMode()) {
+      console.log("🎨 Preview mode: Using mock branches");
+      const { mockPreviewBranches } = await import("../utils/previewMode");
+      setAllBranches(mockPreviewBranches as any[]);
       setIsLoading(false);
       return;
     }
@@ -235,11 +245,29 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
-        console.error("Error creating branch:", error);
-        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02'].includes(error.code)) {
-            setError(error);
+        console.error("Error creating branch:", JSON.stringify({
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        }));
+        
+        // Handle RLS policy error (42501)
+        if (error.code === '42501') {
+          setError(error);
+          return { 
+            success: false, 
+            error: "Permission denied. Please run the FIX_BRANCHES_RLS.sql script in your Supabase SQL Editor to fix database permissions.",
+            errorCode: error.code
+          };
         }
-        return { success: false, error: error.message };
+        
+        // Handle other schema errors
+        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02'].includes(error.code)) {
+          setError(error);
+        }
+        
+        return { success: false, error: error.message, errorCode: error.code };
       }
 
       await refreshBranches();
@@ -256,7 +284,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const updateBranch = async (
     branchId: string,
     updates: Partial<Omit<Branch, "id" | "businessId" | "createdAt">>
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
     if (!business || !user) return { success: false, error: "Not authenticated" };
     if (user.role !== "Business Owner") return { success: false, error: "Permission denied" };
 
@@ -276,11 +304,26 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         .eq('business_id', business.id);
 
       if (error) {
-        console.error("Error updating branch:", error);
-        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02'].includes(error.code)) {
-            setError(error);
+        console.error("Error updating branch:", JSON.stringify({
+          code: error.code,
+          message: error.message,
+          details: error.details
+        }));
+        
+        // Handle RLS policy error
+        if (error.code === '42501') {
+          setError(error);
+          return { 
+            success: false, 
+            error: "Permission denied. Please run the FIX_BRANCHES_RLS.sql script to fix database permissions.",
+            errorCode: error.code
+          };
         }
-        return { success: false, error: error.message };
+        
+        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02'].includes(error.code)) {
+          setError(error);
+        }
+        return { success: false, error: error.message, errorCode: error.code };
       }
 
       await refreshBranches();

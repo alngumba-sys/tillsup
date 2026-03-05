@@ -40,8 +40,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
     price: 0,
     period: "14 days",
     limits: {
-      maxBranches: 1,
-      maxStaff: 5
+      maxBranches: 3,
+      maxStaff: 10
     },
     features: {
       basicPOS: true,

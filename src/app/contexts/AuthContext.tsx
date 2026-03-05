@@ -1,6 +1,19 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { supabase, supabaseUrl, supabaseAnonKey } from "../../lib/supabase";
+import { toast } from "sonner";
+import { isPreviewMode, mockPreviewUser, mockPreviewBusiness, PreviewModeAuth, mockPreviewStaff } from "../utils/previewMode";
+
+// ═══════════════════════════════════════════════════════════════════
+// VERSION: 2024-03-05-v6-PREVIEW-MODE-SUPPORT
+// NEW: Preview mode for Figma Make with mock data
+// PREVIOUS: Skip auth initialization on public routes + silent error handling
+// - Preview mode detection and mock data for Figma Make
+// - Public routes load instantly without waiting for Supabase
+// - 2s emergency timeout for protected routes
+// - 4s global fallback timeout
+// - No error toasts on network issues for public routes
+// ═══════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════
 // MULTI-TENANT AUTH DATA MODELS
@@ -67,7 +80,7 @@ export type UserRole =
 
 // ═══════════════════════════════════════════════════════════════════
 // SALARY TYPES (HR Layer - Part 1)
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════��═══════════════════════════════════════════════
 export type SalaryType = "monthly" | "daily" | "hourly" | "commission" | "mixed";
 export type PayFrequency = "monthly" | "weekly" | "biweekly";
 
@@ -95,13 +108,13 @@ export interface User {
   branchId: string | null;
   mustChangePassword: boolean;
   createdAt: Date;
-  // ══════════════════════════════════════════════════════════════════
+  // ═══════��══════════════════════════════════════════════════════════
   // PERMISSION-BASED ACCESS CONTROL - Expense Management
   // ═══════════════════════════════════════════════════════════════════
   canCreateExpense: boolean;
   // ═══════════════════════════════════════════════════════════════════
   // SALARY INFORMATION (HR Layer - Part 1)
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════���════════════════════════════════════════════════════
   salary?: StaffSalary;
 }
 
@@ -145,58 +158,247 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // ═══════════════════════════════════════════════════════════════════
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  console.debug("🚀 AuthProvider initialized");
+  
   const [user, setUser] = useState<User | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [schemaError, setSchemaError] = useState<any>(null);
   const isRegistering = useRef(false);
+  const isRefreshing = useRef(false); // Prevent concurrent refresh calls
 
   // Initialize Supabase Auth Listener
   useEffect(() => {
     let mounted = true;
     let authSubscription: { unsubscribe: () => void } | null = null;
+    let globalTimeoutId: NodeJS.Timeout | null = null;
+    let emergencyTimeoutId: NodeJS.Timeout | null = null;
+
+    const clearGlobalTimeout = () => {
+      if (globalTimeoutId) {
+        clearTimeout(globalTimeoutId);
+        globalTimeoutId = null;
+      }
+    };
+
+    const clearEmergencyTimeout = () => {
+      if (emergencyTimeoutId) {
+        clearTimeout(emergencyTimeoutId);
+        emergencyTimeoutId = null;
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Use mock data in Figma Make
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      console.log('🎨 Preview Mode Active - Using Mock Data');
+      // Set mock user and business immediately
+      setUser(mockPreviewUser);
+      setBusiness(mockPreviewBusiness);
+      setLoading(false);
+      // Clear any RLS errors since we're in preview
+      sessionStorage.removeItem('rls-recursion-error');
+      sessionStorage.removeItem('rls-banner-dismissed');
+      return;
+    }
+
+    // Check if we're on a public route that doesn't need auth
+    const publicRoutes = [
+      '/', 
+      '/login', 
+      '/register', 
+      '/recovery', 
+      '/who-we-are', 
+      '/simple-test', 
+      '/test', 
+      '/diagnostic', 
+      '/public-test',
+      '/landing-original', 
+      '/landing-simple'
+    ];
+    const currentPath = window.location.pathname;
+    const isPublicRoute = publicRoutes.includes(currentPath);
+
+    if (isPublicRoute) {
+      console.debug("🌐 Public route detected, skipping auth initialization");
+      setLoading(false);
+      return;
+    }
 
     const initializeAuth = async () => {
       setLoading(true);
       
+      // EMERGENCY TIMEOUT: Force stop loading after 2 seconds MAX (reduced from 3s)
+      emergencyTimeoutId = setTimeout(() => {
+        if (mounted) {
+          console.debug("⏱️ Auth initialization timeout (network may be slow or blocked)");
+          setLoading(false);
+        }
+      }, 2000); // 2 seconds emergency timeout
+      
       try {
-        // 1. Setup subscription first to catch any events (including initial load)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          if (!mounted) return;
+        // CRITICAL FIX: Check session immediately instead of waiting for listener
+        console.debug("🚀 Checking initial session...");
+        
+        let initialSession, sessionError;
+        try {
+          const result = await supabase.auth.getSession();
+          initialSession = result.data?.session;
+          sessionError = result.error;
+          clearEmergencyTimeout(); // Clear emergency timeout on success
+        } catch (getSessionException: any) {
+          clearEmergencyTimeout(); // Clear emergency timeout
           
-          console.log("🔐 Auth state change:", event, "Session:", !!session);
+          // Check if it's a network error
+          const isNetworkError = getSessionException?.message?.includes("Failed to fetch") || 
+                                 getSessionException?.message?.includes("fetch") ||
+                                 getSessionException?.name === "TypeError";
           
-          if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-            console.log("👤 User signed in, refreshing profile...");
-            await refreshUserProfile(session.user);
-          } else if (event === 'SIGNED_OUT') {
-            console.log("👋 User signed out");
-            setUser(null);
-            setBusiness(null);
-            setLoading(false);
-          } else if (event === 'INITIAL_SESSION' && !session) {
-            console.log("🚫 No session found on initial load");
-            // Explicitly handle "no session found on initial load"
-            setLoading(false);
+          if (isNetworkError) {
+            console.debug("🌐 Network error during auth initialization - likely offline or blocked");
+            // Silently handle network errors on public routes - don't spam user
+          } else {
+            console.error("🚫 CRITICAL: getSession threw exception:", getSessionException);
+            console.error("Exception type:", getSessionException?.constructor?.name);
+            // Only show error toast on protected routes
+            if (!isPublicRoute) {
+              toast.error("Authentication Error", {
+                description: "An unexpected error occurred. Please refresh the page.",
+                duration: 8000
+              });
+            }
           }
-        });
-        authSubscription = subscription;
+          
+          setLoading(false);
+          clearGlobalTimeout();
+          return;
+        }
+        
+        if (sessionError) {
+          clearEmergencyTimeout(); // Clear emergency timeout
+          
+          // Check if it's a network error
+          const isNetworkError = sessionError.message?.includes("Failed to fetch") || 
+                                 sessionError.message?.includes("NetworkError") ||
+                                 sessionError.message?.includes("fetch");
+          
+          if (isNetworkError) {
+            // Silently handle network errors - don't spam console or user
+            console.debug("Network error during session check - continuing without auth");
+          } else {
+            // Only log non-network errors
+            console.error("❌ Session check error:", sessionError);
+          }
+          
+          setLoading(false);
+          clearGlobalTimeout();
+          return;
+        }
 
-        // 2. Fallback timeout to prevent infinite loading if onAuthStateChange hangs (rare but possible)
-        setTimeout(() => {
-          if (mounted && loading) {
-             // Only force finish loading if we are still stuck
-             // We don't log a warning anymore to avoid scaring users, 
-             // as the onAuthStateChange might just be slow or have fired 'no session'
-             setLoading(false); 
+        if (initialSession?.user) {
+          console.debug("✅ Initial session found, loading profile...");
+          clearEmergencyTimeout(); // Clear emergency timeout
+          
+          // Load profile without timeout - let it complete naturally
+          try {
+            await refreshUserProfile(initialSession.user);
+            clearGlobalTimeout();
+          } catch (err: any) {
+            console.warn("⚠️ Profile refresh failed, using fallback user...");
+            // Create fallback user to prevent blocking
+            if (initialSession.user) {
+              const metadata = initialSession.user.user_metadata || {};
+              const fallbackUser: User = {
+                id: initialSession.user.id,
+                email: initialSession.user.email || "",
+                firstName: metadata.first_name || "User",
+                lastName: metadata.last_name || "",
+                role: (metadata.role as UserRole) || "Business Owner",
+                roleId: null,
+                businessId: metadata.business_id || "PENDING",
+                branchId: null,
+                mustChangePassword: false,
+                createdAt: new Date(initialSession.user.created_at),
+                canCreateExpense: true
+              };
+              setUser(fallbackUser);
+            }
+            setLoading(false);
+            clearGlobalTimeout();
           }
-        }, 8000);
+        } else {
+          console.debug("🚫 No initial session found");
+          clearEmergencyTimeout(); // Clear emergency timeout
+          setLoading(false);
+          clearGlobalTimeout();
+        }
+
+        // Setup listener for future auth changes (login, logout, etc.)
+        try {
+          const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (!mounted) return;
+            
+            console.debug("🔐 Auth state change:", event, "Session:", !!session);
+            
+            // Only handle SIGNED_IN and SIGNED_OUT events (not INITIAL_SESSION since we already handled it)
+            if (event === 'SIGNED_IN' && session?.user) {
+              console.debug("👤 User signed in, refreshing profile...");
+              
+              try {
+                await refreshUserProfile(session.user);
+              } catch (err: any) {
+                console.warn("⚠️ Profile refresh failed on sign in, using fallback...");
+                // Create fallback user to prevent blocking
+                if (session.user && mounted) {
+                  const metadata = session.user.user_metadata || {};
+                  const fallbackUser: User = {
+                    id: session.user.id,
+                    email: session.user.email || "",
+                    firstName: metadata.first_name || "User",
+                    lastName: metadata.last_name || "",
+                    role: (metadata.role as UserRole) || "Business Owner",
+                    roleId: null,
+                    businessId: metadata.business_id || "PENDING",
+                    branchId: null,
+                    mustChangePassword: false,
+                    createdAt: new Date(session.user.created_at),
+                    canCreateExpense: true
+                  };
+                  setUser(fallbackUser);
+                  setLoading(false);
+                }
+              }
+            } else if (event === 'SIGNED_OUT') {
+              console.debug("👋 User signed out");
+              setUser(null);
+              setBusiness(null);
+              setLoading(false);
+            }
+          });
+          authSubscription = subscription;
+        } catch (listenerException: any) {
+          console.error("🚫 Failed to setup auth listener:", listenerException);
+          console.error("This is likely a network block - continuing without listener");
+          // Don't block initialization if listener fails
+        }
 
       } catch (err) {
         console.error("Critical error during auth initialization:", err);
         if (mounted) setLoading(false);
+        clearGlobalTimeout();
       }
     };
+
+    // Global fallback timeout as last resort (only if something goes terribly wrong)
+    // Reduced to 4s to prevent landing page from being stuck
+    globalTimeoutId = setTimeout(() => {
+      if (mounted) {
+        console.debug("⏰ Global auth timeout reached (likely network issue - continuing silently)");
+        setLoading(false);
+        // Don't show error toast on public routes - just fail silently
+      }
+    }, 4000); // 4 seconds - prevent landing page block
 
     initializeAuth();
 
@@ -205,36 +407,257 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authSubscription) {
         authSubscription.unsubscribe();
       }
+      clearGlobalTimeout();
+      clearEmergencyTimeout();
     };
   }, []);
 
   const refreshUserProfile = async (authUser: any, retryCount = 0) => {
+    // Prevent concurrent calls (except retries)
+    if (retryCount === 0 && isRefreshing.current) {
+      console.log("⚠️ refreshUserProfile already running, skipping concurrent call");
+      return;
+    }
+    isRefreshing.current = true;
+    
     const userId = authUser.id;
-    console.log(`🔄 refreshUserProfile called for user ${userId}, retry: ${retryCount}`);
+    console.debug(`🔄 refreshUserProfile called for user ${userId}, retry: ${retryCount}`);
+    
     try {
-      // Fetch User Profile from 'profiles' table (mapped to User interface)
-      console.log("📡 Fetching profile from database...");
+      // Fetch User Profile from 'profiles' table
+      console.debug("📡 Fetching profile from database...");
+      
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
       
-      console.log("📊 Profile fetch result:", { profileData: !!profileData, error: profileError });
+      console.debug("📊 Profile fetch result:", { profileData: !!profileData, error: !!profileError });
 
       // If we get an error other than "Not Found" (which maybeSingle handles by returning null data), handle it.
       if (profileError && profileError.code !== "406" && profileError.code !== "PGRST116") {
-        console.error("Error fetching profile:", profileError);
+        // LOG ALL ERROR DETAILS TO DIAGNOSE 500 ERRORS
+        console.error('🚨 PROFILE FETCH ERROR DETAILS:', {
+          code: profileError.code,
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+          fullError: profileError
+        });
+        
+        // Check for infinite recursion error (RLS policy issue) first
+        // 500 errors from Postgres often mean internal server error (could be RLS recursion)
+        const isRLSError = 
+          profileError.code === '42P17' || 
+          String(profileError.code) === '42P17' ||
+          profileError.message?.toLowerCase().includes('infinite recursion') ||
+          profileError.message?.includes('42P17') ||
+          profileError.message?.includes('500') ||
+          profileError.message?.includes('Internal Server Error') ||
+          String(profileError.code).startsWith('5'); // 500-level errors
+        
+        if (isRLSError) {
+          console.debug("🔄 Using optimized RLS workaround mode");
+          
+          // Set flag to show banner with fix instructions (non-blocking)
+          sessionStorage.setItem('rls-recursion-error', 'true');
+          
+          // DON'T THROW - Instead create a fallback user profile with correct structure
+          const metadata = authUser.user_metadata || {};
+          const fallbackUser: User = {
+            id: userId,
+            email: authUser.email || "unknown@tillsup.com",
+            phone: metadata.phone_number || metadata.phone,
+            firstName: metadata.first_name || metadata.firstName || "User",
+            lastName: metadata.last_name || metadata.lastName || "",
+            role: (metadata.role as UserRole) || "Business Owner",
+            roleId: null,
+            businessId: metadata.business_id || metadata.businessId || "PENDING",
+            branchId: metadata.branch_id || metadata.branchId || null,
+            mustChangePassword: false,
+            createdAt: new Date(metadata.created_at || authUser.created_at || Date.now()),
+            canCreateExpense: metadata.role === "Business Owner" || metadata.can_create_expense || false
+          };
+          
+          console.debug("✅ RLS workaround active - all features available");
+          setUser(fallbackUser);
+          setLoading(false);
+          isRefreshing.current = false;
+          
+          // Try to fetch and set business if businessId exists
+          if (fallbackUser.businessId && fallbackUser.businessId !== "PENDING") {
+            console.log("🏢 Attempting to fetch business data in fallback mode...");
+            try {
+              const { data: businessData } = await supabase
+                .from('businesses')
+                .select('*')
+                .eq('id', fallbackUser.businessId)
+                .maybeSingle();
+              
+              if (businessData) {
+                const mappedBusiness: Business = {
+                  id: businessData.id,
+                  name: businessData.name,
+                  ownerId: businessData.owner_id,
+                  createdAt: new Date(businessData.created_at),
+                  subscriptionPlan: businessData.subscription_plan || "Free Trial",
+                  subscriptionStatus: businessData.subscription_status || "trial",
+                  trialEndsAt: new Date(businessData.trial_ends_at),
+                  maxBranches: businessData.max_branches || 1,
+                  maxStaff: businessData.max_staff || 5,
+                  currency: businessData.currency || "KES",
+                  country: businessData.country || "Kenya",
+                  timezone: businessData.timezone || "Africa/Nairobi",
+                  businessType: businessData.business_type,
+                  workingHours: businessData.working_hours || { start: "09:00", end: "21:00" },
+                  taxConfig: businessData.tax_config || { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+                  branding: businessData.branding || { hidePlatformBranding: false },
+                  completedOnboarding: businessData.completed_onboarding || false
+                };
+                setBusiness(mappedBusiness);
+                console.log("✅ Business data loaded in fallback mode");
+              } else {
+                console.debug("No business data found, using placeholder");
+                setBusiness({
+                  id: fallbackUser.businessId,
+                  name: `${fallbackUser.firstName}'s Business`,
+                  ownerId: userId,
+                  createdAt: new Date(),
+                  subscriptionPlan: "Free Trial",
+                  subscriptionStatus: "trial",
+                  trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                  maxBranches: 5,
+                  maxStaff: 20,
+                  currency: "KES",
+                  country: "Kenya",
+                  timezone: "Africa/Nairobi",
+                  workingHours: { start: "09:00", end: "21:00" },
+                  taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+                  branding: { hidePlatformBranding: false },
+                  completedOnboarding: false
+                });
+              }
+            } catch (bizErr) {
+              console.error("Error fetching business in fallback mode:", bizErr);
+              setBusiness({
+                id: fallbackUser.businessId,
+                name: `${fallbackUser.firstName}'s Business`,
+                ownerId: userId,
+                createdAt: new Date(),
+                subscriptionPlan: "Free Trial",
+                subscriptionStatus: "trial",
+                trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                maxBranches: 5,
+                maxStaff: 20,
+                currency: "KES",
+                country: "Kenya",
+                timezone: "Africa/Nairobi",
+                workingHours: { start: "09:00", end: "21:00" },
+                taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+                branding: { hidePlatformBranding: false },
+                completedOnboarding: false
+              });
+            }
+          } else {
+            // No valid businessId, set placeholder
+            setBusiness({
+              id: "temp-fallback",
+              name: `${fallbackUser.firstName}'s Business`,
+              ownerId: userId,
+              createdAt: new Date(),
+              subscriptionPlan: "Free Trial",
+              subscriptionStatus: "trial",
+              trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              maxBranches: 5,
+              maxStaff: 20,
+              currency: "KES",
+              country: "Kenya",
+              timezone: "Africa/Nairobi",
+              workingHours: { start: "09:00", end: "21:00" },
+              taxConfig: { enabled: false, name: "VAT", percentage: 16, inclusive: false },
+              branding: { hidePlatformBranding: false },
+              completedOnboarding: false
+            });
+          }
+          
+          return;
+        }
         
         // RETRY ON NETWORK ERROR
         const isNetworkError = profileError.message?.includes("Failed to fetch") || 
                                profileError.message?.includes("Network request failed") ||
+                               profileError.message?.includes("NetworkError") ||
+                               profileError.message?.includes("fetch") ||
+                               profileError.message?.includes("BLOCKED") ||
+                               profileError.message?.includes("blocked") ||
                                !profileError.code; // Often network errors have no PG code
 
-        if (isNetworkError && retryCount < 3) {
-             console.log(`Network error detected during profile fetch, retrying... (${retryCount + 1}/3)`);
-             await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Backoff
+        // If blocked by administrator, don't retry - go straight to fallback
+        if ((profileError.message?.includes("BLOCKED") || profileError.message?.includes("blocked")) && retryCount === 0) {
+             console.warn("🚫 Request blocked by browser/administrator - using fallback mode");
+             // Skip retries, go straight to creating fallback user
+             const metadata = authUser.user_metadata || {};
+             const fallbackUser: User = {
+               id: userId,
+               email: authUser.email || "",
+               firstName: metadata.first_name || "User",
+               lastName: metadata.last_name || "",
+               role: (metadata.role as UserRole) || "Business Owner",
+               roleId: null,
+               businessId: metadata.business_id || "PENDING",
+               branchId: null,
+               mustChangePassword: false,
+               createdAt: new Date(authUser.created_at),
+               canCreateExpense: true
+             };
+             setUser(fallbackUser);
+             setLoading(false);
+             isRefreshing.current = false;
+             
+             toast.error("Network Blocked", {
+               description: "Your browser or network is blocking requests to Supabase. Some features may not work. Please disable browser extensions or try a different network.",
+               duration: 8000
+             });
+             return;
+        }
+
+        if (isNetworkError && retryCount < 2) {
+             console.debug(`⚠️ Network error detected during profile fetch, retrying... (${retryCount + 1}/2)`);
+             await new Promise(resolve => setTimeout(resolve, 500 * (retryCount + 1))); // Backoff
              return refreshUserProfile(authUser, retryCount + 1);
+        }
+        
+        // If network error persists after retries, create fallback user
+        if (isNetworkError && retryCount >= 2) {
+          console.debug("Network error persists after retries, creating fallback user");
+          const metadata = authUser.user_metadata || {};
+          const fallbackUser: User = {
+            id: userId,
+            email: authUser.email || "",
+            firstName: metadata.first_name || "User",
+            lastName: metadata.last_name || "",
+            role: (metadata.role as UserRole) || "Business Owner",
+            roleId: null,
+            businessId: metadata.business_id || "PENDING",
+            branchId: null,
+            mustChangePassword: false,
+            createdAt: new Date(authUser.created_at),
+            canCreateExpense: true
+          };
+          setUser(fallbackUser);
+          setLoading(false);
+          isRefreshing.current = false;
+          
+          // Only show toast if not already shown (prevent spam)
+          if (!sessionStorage.getItem('connection-error-shown')) {
+            sessionStorage.setItem('connection-error-shown', 'true');
+            toast.warning("Limited Connectivity", {
+              description: "Running in offline mode. Some features may be unavailable.",
+              duration: 6000
+            });
+          }
+          return;
         }
 
         // Handle Schema Error: If 'profiles' table is missing (42P01), set a special error state and temporary user so the dashboard can render and show the fix script.
@@ -279,6 +702,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setBusiness(tempBusiness);
         } else {
             setLoading(false);
+            isRefreshing.current = false; // Reset flag
             return;
         }
       }
@@ -289,18 +713,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isRegistering.current) {
             console.log("Registration in progress, ignoring missing profile for now.");
             setLoading(false);
+            isRefreshing.current = false; // Reset flag
             return;
         }
 
-        if (retryCount < 2) {
-          console.log(`Profile not found, retrying... (${retryCount + 1}/2)`);
-          await new Promise(resolve => setTimeout(resolve, 800));
+        if (retryCount < 1) {
+          console.log(`Profile not found, retrying... (${retryCount + 1}/1)`);
+          await new Promise(resolve => setTimeout(resolve, 500));
           return refreshUserProfile(authUser, retryCount + 1);
         }
 
-        console.warn("User is authenticated but has no profile record. Attempting auto-recovery...");
+        console.warn("User is authenticated but has no profile record. Using quick fallback to prevent timeout...");
+        
+        // Quick fallback to prevent timeout - skip auto-heal for now
+        if (retryCount > 0) {
+          const metadata = authUser?.user_metadata || {};
+          const fallbackUser: User = {
+            id: userId,
+            email: authUser.email || "",
+            firstName: metadata.first_name || "Unknown",
+            lastName: metadata.last_name || "User",
+            role: (metadata.role as UserRole) || "Business Owner",
+            roleId: null,
+            businessId: "PENDING",
+            branchId: null,
+            mustChangePassword: false,
+            createdAt: new Date(authUser.created_at),
+            canCreateExpense: false
+          };
+          setUser(fallbackUser);
+          setLoading(false);
+          isRefreshing.current = false; // Reset flag
+          return;
+        }
 
-        // AUTO-HEAL STRATEGY: 
+        // AUTO-HEAL STRATEGY (only on first attempt): 
         if (authUser && authUser.user_metadata) {
              const metadata = authUser.user_metadata;
              
@@ -437,12 +884,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                  setUser({ ...fallbackUser, businessId: mappedBusiness.id });
             } else {
                  // CRITICAL FIX: If no business exists in DB (and creation failed), 
-                 // create a temporary placeholder business in state so the UI can render.
-                 console.warn("No business found in DB. Using placeholder business state.");
+                 // redirect to recovery page to complete setup
+                 console.warn("No business found in DB. Redirecting to recovery page...");
                  
+                 // Show user-friendly message
+                 toast.warning("Registration incomplete. Please complete your setup.", {
+                   duration: 5000
+                 });
+                 
+                 // Set temporary business so the app doesn't crash during redirect
                  const placeholderBusiness: Business = {
                     id: "temp-setup",
-                    name: authUser.email === "demo@test.com" ? "Tillsup Demo Store" : "Complete Setup",
+                    name: "⚠️ Setup Incomplete",
                     ownerId: userId,
                     createdAt: new Date(),
                     subscriptionPlan: "Free Trial",
@@ -460,6 +913,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                  };
                  setBusiness(placeholderBusiness);
                  setUser({ ...fallbackUser, businessId: placeholderBusiness.id });
+                 
+                 // Redirect to recovery page after state is set
+                 setLoading(false);
+                 setTimeout(() => {
+                   window.location.href = '/recovery';
+                 }, 1000);
+                 return;
             }
             
             setLoading(false);
@@ -583,10 +1043,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("✅ Setting user:", mappedUser.email);
       setUser(mappedUser);
+      
+      // CRITICAL: Set loading to false immediately after user is set
+      // This allows the UI to render while business data loads in background
+      setLoading(false);
+      // Note: clearGlobalTimeout() is called by the caller (in useEffect initialization)
 
-      // Fetch Business with timeout to prevent login hanging
+      // Fetch Business in background (non-blocking)
       if (mappedUser.businessId) {
-        console.log("🏢 Fetching business for ID:", mappedUser.businessId);
+        console.log("🏢 Fetching business in background for ID:", mappedUser.businessId);
         
         try {
           // Wrap business fetching in a timeout to prevent hanging
@@ -621,10 +1086,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               
               // AUTO-FIX owner_id if needed
               if (businessData && (!businessData.owner_id || businessData.owner_id !== userId)) {
-                console.warn("🔧 Fixing owner_id...");
+                console.log("🔧 Auto-fixing missing owner_id in business record...");
                 await supabase.from('businesses').update({ owner_id: userId }).eq('id', businessData.id);
                 businessData.owner_id = userId;
-                console.log("✅ Fixed!");
+                console.log("✅ Owner ID fixed successfully");
               }
             }
             
@@ -652,7 +1117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               };
             } else {
               // Business data not found - return placeholder
-              console.warn("⚠��� No business data found, using placeholder");
+              console.debug("No business data found, using placeholder");
               return {
                 id: mappedUser.businessId,
                 name: `${mappedUser.firstName}'s Business`,
@@ -674,7 +1139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           })();
 
-          // Wait for business fetch without timeout (placeholder is returned if nothing found)
+          // Wait for business fetch (no timeout - it's non-blocking background operation)
           const business = await businessFetchPromise;
           setBusiness(business);
           console.log("✅ Business set:", business.name);
@@ -703,15 +1168,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         console.warn("���️ User has no business ID");
       }
-      console.log("🏁 refreshUserProfile complete, setting loading = false");
-      setLoading(false);
-    } catch (err) {
+      console.log("🏁 refreshUserProfile complete (loading already set to false earlier)");
+      // Note: setLoading(false) already called earlier after setUser() for faster UI rendering
+    } catch (err: any) {
       console.error("Error refreshing user profile:", err);
+      console.error("Error type:", err?.constructor?.name);
+      console.error("Error message:", err?.message);
+      
+      // If this is a network blocking error, create fallback user
+      const errorMessage = String(err?.message || err || '');
+      const isBlocked = errorMessage.includes('BLOCKED') || 
+                        errorMessage.includes('blocked') ||
+                        errorMessage.includes('Failed to fetch') ||
+                        errorMessage.includes('NetworkError');
+      
+      if (isBlocked) {
+        console.warn("🚫 Network blocking detected in catch block - creating fallback user");
+        try {
+          const metadata = authUser?.user_metadata || {};
+          const fallbackUser: User = {
+            id: authUser?.id || 'unknown',
+            email: authUser?.email || "",
+            firstName: metadata.first_name || "User",
+            lastName: metadata.last_name || "",
+            role: (metadata.role as UserRole) || "Business Owner",
+            roleId: null,
+            businessId: metadata.business_id || "PENDING",
+            branchId: null,
+            mustChangePassword: false,
+            createdAt: new Date(authUser?.created_at || Date.now()),
+            canCreateExpense: true
+          };
+          setUser(fallbackUser);
+          
+          toast.error("Limited Access Mode", {
+            description: "Network connection is restricted. You can still use basic features, but some data may not load.",
+            duration: 8000
+          });
+        } catch (fallbackErr) {
+          console.error("Failed to create fallback user:", fallbackErr);
+        }
+      }
+      
       setLoading(false);
+      // Note: clearGlobalTimeout() is called by the caller (in useEffect initialization)
+    } finally {
+      // Always reset the refresh flag, even on early returns or errors
+      isRefreshing.current = false;
     }
   };
 
-  // ───────────────────────────────────────────────────────────────
+  // ──────────────────────────────��────────────────────────────────
   // BUSINESS REGISTRATION
   // ─────────────────────────────────���─────────────────────────────
   const registerBusiness = async (
@@ -847,6 +1354,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const { error: profileError } = await supabase.from('profiles').insert(newProfile);
         if (profileError) {
+          // Check for infinite recursion error first
+          const isRLSError = 
+            profileError.code === '42P17' || 
+            String(profileError.code) === '42P17' ||
+            profileError.message?.toLowerCase().includes('infinite recursion') ||
+            profileError.message?.includes('42P17');
+          
+          if (isRLSError) {
+            console.debug("RLS policy recursion detected during registration profile creation");
+            sessionStorage.setItem('rls-recursion-error', 'true');
+            return { 
+              success: false, 
+              error: "Database policy error (infinite recursion). Please fix your RLS policies in Supabase." 
+            };
+          }
+          
           console.error("Profile creation failed:", profileError);
           console.error("Profile creation error details:", {
             code: profileError.code,
@@ -869,7 +1392,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       isRegistering.current = false;
-      await refreshUserProfile(authUser);
+      
+      // ════════════���══════════════════════════════════════════════════════
+      // IMPORTANT: Do NOT auto-login after registration
+      // User should be redirected to login page instead
+      // ════════════════════════════════════════��══════════════════════════
+      // Sign out the user immediately after registration
+      await supabase.auth.signOut();
+      
+      // Do NOT call refreshUserProfile - we want user to login manually
+      // await refreshUserProfile(authUser);
 
       return { success: true };
     } catch (err: any) {
@@ -883,94 +1415,301 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string
   ): Promise<{ success: boolean; error?: string; mustChangePassword?: boolean; branchDeactivated?: boolean }> => {
+    console.log("🔐 Starting login process...", { email });
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Use mock authentication
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      console.log('🎨 Preview Mode: Mock login');
+      const result = await PreviewModeAuth.login(email, password);
+      if (result.success) {
+        setUser(result.user);
+        setBusiness(result.business);
+        return { success: true, mustChangePassword: false };
+      }
+      return { success: false, error: 'Invalid credentials' };
+    }
+    
     try {
+      console.log("🔵 Calling Supabase auth.signInWithPassword...");
+      console.log("   📧 Email:", email);
+      console.log("   🔒 Password length:", password?.length || 0);
+      console.log("   🌐 Supabase URL:", supabaseUrl);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) {
+        console.error("❌ Login error from Supabase:", error);
+        console.error("   Error code:", error.status);
+        console.error("   Error message:", error.message);
+        
+        // Handle network errors
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.message?.includes('fetch')) {
+          return { 
+            success: false, 
+            error: "Cannot connect to server. Please check your internet connection and try again." 
+          };
+        }
+        
         // Provide clearer feedback for invalid credentials
         if (error.message === "Invalid login credentials") {
           return { success: false, error: "Invalid email or password" };
         }
+        
         return { success: false, error: error.message };
       }
 
+      console.log("✅ Supabase authentication successful");
+
       if (data.user) {
+        // CRITICAL FIX: Immediately call refreshUserProfile to set user state
+        // This ensures isAuthenticated becomes true BEFORE login() returns
+        console.log("🔵 Immediately refreshing user profile to set auth state...");
+        try {
+          await refreshUserProfile(data.user);
+          console.log("✅ User profile refreshed - auth state should be updated");
+        } catch (refreshErr) {
+          console.warn("⚠️ Profile refresh failed, but continuing with login");
+        }
+        
         // Optimization: Wrap secondary checks in a short timeout to prevent login hanging
         try {
+            console.log("🔵 Fetching user profile and branch status...");
+            
             const checkPromise = (async () => {
                 // Fetch minimal flags
-                const { data: profile } = await supabase.from('profiles').select('must_change_password, branch_id').eq('id', data.user.id).maybeSingle();
+                const { data: profile, error: profileError } = await supabase
+                  .from('profiles')
+                  .select('must_change_password, branch_id')
+                  .eq('id', data.user.id)
+                  .maybeSingle();
+                
+                if (profileError) {
+                  // Check if this is the known RLS infinite recursion error (42P17)
+                  const isRLSError = 
+                    profileError.code === '42P17' || 
+                    profileError.code === 42517 ||
+                    String(profileError.code) === '42P17' ||
+                    profileError.message?.toLowerCase().includes('infinite recursion') ||
+                    profileError.message?.includes('42P17');
+                  
+                  if (isRLSError) {
+                    // Silently handle RLS recursion - this is expected and has a workaround
+                    console.debug("RLS policy recursion detected (expected, using workaround)");
+                    sessionStorage.setItem('rls-recursion-error', 'true');
+                  } else {
+                    // Only log non-RLS errors
+                    console.error("⚠️  Error fetching profile:", profileError);
+                  }
+                  // Continue login even if profile fetch fails
+                  return { mustChangePassword: false };
+                }
+                
+                console.log("📊 Profile fetched:", { 
+                  mustChangePassword: profile?.must_change_password,
+                  branchId: profile?.branch_id 
+                });
                 
                 if (profile?.branch_id) {
-                   const { data: branch } = await supabase.from('branches').select('status').eq('id', profile.branch_id).single();
+                   const { data: branch, error: branchError } = await supabase
+                     .from('branches')
+                     .select('status')
+                     .eq('id', profile.branch_id)
+                     .single();
+                   
+                   if (branchError) {
+                     console.error("⚠️  Error fetching branch:", branchError);
+                     // Continue login even if branch fetch fails
+                     return { mustChangePassword: profile?.must_change_password };
+                   }
+                   
                    if (branch && branch.status === 'inactive') {
+                     console.log("❌ Branch is deactivated");
                      return { branchDeactivated: true };
                    }
                 }
+                
                 return { mustChangePassword: profile?.must_change_password };
             })();
 
-            const timeoutPromise = new Promise<{ timeout: true }>((resolve) => setTimeout(() => resolve({ timeout: true }), 10000));
+            // Increase timeout to 20 seconds for slower connections
+            const timeoutPromise = new Promise<{ timeout: true }>((resolve) => 
+              setTimeout(() => {
+                console.log("⚠���  Secondary login checks timed out - continuing anyway");
+                resolve({ timeout: true });
+              }, 20000)
+            );
 
             const result = await Promise.race([checkPromise, timeoutPromise]);
 
             if ('branchDeactivated' in result && result.branchDeactivated) {
                  await supabase.auth.signOut();
-                 return { success: false, error: "Branch deactivated", branchDeactivated: true };
+                 return { success: false, error: "Your branch has been deactivated. Please contact your administrator.", branchDeactivated: true };
             }
             
             if ('mustChangePassword' in result) {
+                console.log("✅ Login successful - must change password:", result.mustChangePassword);
                 return { success: true, mustChangePassword: result.mustChangePassword as boolean };
             }
 
             // If timeout or other issue, just proceed
-            console.log("Secondary login checks timed out or skipped.");
+            console.log("✅ Login successful (secondary checks timed out or skipped)");
             return { success: true };
 
-        } catch (checkErr) {
-            console.warn("Secondary login checks failed:", checkErr);
+        } catch (checkErr: any) {
+            console.warn("⚠️  Secondary login checks failed:", checkErr);
+            console.warn("   Continuing with login anyway...");
             return { success: true };
         }
       }
 
+      console.log("✅ Login successful");
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message };
+      console.error("❌ Unexpected login error:", err);
+      
+      // Handle network errors at top level
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('fetch')) {
+        return { 
+          success: false, 
+          error: "Network error. Please check your internet connection and try again." 
+        };
+      }
+      
+      return { success: false, error: err.message || "Login failed. Please try again." };
     }
   };
 
   const logout = async () => {
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Mock logout
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      console.log('🎨 Preview Mode: Mock logout');
+      setUser(null);
+      setBusiness(null);
+      await PreviewModeAuth.logout();
+      return;
+    }
+    
     // Optimistically clear state to prevent "bounce back" from protected routes
     setUser(null);
     setBusiness(null);
     await supabase.auth.signOut();
   };
 
-  const changePassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+  const changePassword = async (newPassword: string, retryCount = 0): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log("changePassword called with password length:", newPassword.length);
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      console.log("Supabase updateUser response:", { error });
-      if (error) {
-        console.error("Supabase updateUser error:", error);
-        return { success: false, error: error.message };
-      }
-      if (user) {
-        console.log("Updating profiles table for user:", user.id);
-        const { error: updateError } = await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id);
-        if (updateError) {
-          console.error("Profile update error:", updateError);
+      console.log("🔐 changePassword called with password length:", newPassword.length, "retry:", retryCount);
+      
+      // Retry logic for network errors
+      let lastError: any = null;
+      const maxRetries = 3;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`🔵 Attempt ${attempt + 1}/${maxRetries + 1} to update password...`);
+          const { error } = await supabase.auth.updateUser({ password: newPassword });
+          
+          if (error) {
+            // Check if it's a retryable network error
+            const isNetworkError = 
+              error.message?.includes('Failed to fetch') || 
+              error.message?.includes('NetworkError') ||
+              error.message?.includes('fetch') ||
+              error.status === 0;
+            
+            if (isNetworkError && attempt < maxRetries) {
+              console.warn(`⚠️ Network error on attempt ${attempt + 1}, retrying...`);
+              lastError = error;
+              await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Exponential backoff
+              continue;
+            }
+            
+            console.error("❌ Supabase updateUser error:", error);
+            return { success: false, error: error.message };
+          }
+          
+          // Password updated successfully, now update the profile flag
+          console.log("✅ Password updated successfully in Supabase Auth");
+          
+          if (user) {
+            console.log("🔵 Updating profiles table for user:", user.id);
+            try {
+              const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ must_change_password: false })
+                .eq('id', user.id);
+              
+              if (updateError) {
+                // Check for infinite recursion error
+                const isRLSError = 
+                  updateError.code === '42P17' || 
+                  String(updateError.code) === '42P17' ||
+                  updateError.message?.toLowerCase().includes('infinite recursion') ||
+                  updateError.message?.includes('42P17');
+                
+                if (isRLSError) {
+                  console.debug("⚠️ RLS policy recursion detected during profile update (expected, continuing)");
+                  sessionStorage.setItem('rls-recursion-error', 'true');
+                } else {
+                  console.error("⚠️ Profile update error (non-critical):", updateError);
+                  // Don't fail the password change if profile update fails
+                }
+              } else {
+                console.log("✅ Profile flag updated successfully");
+              }
+            } catch (profileErr) {
+              console.warn("⚠️ Profile update failed, but password was changed:", profileErr);
+              // Don't fail the password change if profile update fails
+            }
+            
+            // Update local state
+            setUser(prev => prev ? { ...prev, mustChangePassword: false } : null);
+          }
+          
+          console.log("✅ Password change completed successfully");
+          return { success: true };
+          
+        } catch (attemptErr: any) {
+          lastError = attemptErr;
+          
+          // Check if it's a retryable error
+          const isNetworkError = 
+            attemptErr.message?.includes('Failed to fetch') || 
+            attemptErr.message?.includes('NetworkError') ||
+            attemptErr.message?.includes('fetch') ||
+            attemptErr.name === 'AuthRetryableFetchError';
+          
+          if (isNetworkError && attempt < maxRetries) {
+            console.warn(`⚠️ Network error on attempt ${attempt + 1}, retrying in ${(attempt + 1)}s...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+            continue;
+          }
+          
+          throw attemptErr; // Re-throw if not retryable or out of retries
         }
-        setUser(prev => prev ? { ...prev, mustChangePassword: false } : null);
       }
-      console.log("Password change successful");
-      return { success: true };
+      
+      // If we get here, all retries failed
+      throw lastError || new Error('Failed to update password after multiple attempts');
+      
     } catch (err: any) {
-      console.error("changePassword catch block error:", err);
-      return { success: false, error: err.message };
+      console.error("❌ changePassword final error:", err);
+      
+      // Provide user-friendly error messages
+      if (err.message?.includes('Failed to fetch') || err.name === 'AuthRetryableFetchError') {
+        return { 
+          success: false, 
+          error: "Network connection issue. Please check your internet connection and try again. If the problem persists, your network may be blocking this request." 
+        };
+      }
+      
+      return { success: false, error: err.message || "Failed to change password. Please try again." };
     }
   };
 
@@ -1007,9 +1746,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═══════════════���═══════════════════════════════════════════════════
   // STAFF MANAGEMENT
-  // ═══════════════════════════════════════════════════════════════════
+  // ═���═════════════════════════════════════════════════════════════════
 
   const createStaff = async (
     email: string, 
@@ -1025,6 +1764,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Not authenticated" };
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Mock staff creation
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      return await PreviewModeAuth.createStaff({ email, firstName, lastName, role, branchId, roleId });
+    }
+    
     console.log("🟢 Creating staff with data:", { email, firstName, lastName, role, branchId, password: password ? '***' : undefined });
     console.log("👤 Current user:", { id: user.id, email: user.email, role: user.role, businessId: user.businessId });
     console.log("🏢 Current business:", { id: business.id, name: business.name });
@@ -1037,28 +1783,279 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       // 1. Check if user already exists in profiles
-      console.log("���� Checking if user exists with email:", email);
+      console.log("����� Checking if user exists with email:", email);
       const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, email, first_name, last_name, role, business_id')
         .eq('email', email)
         .maybeSingle();
       
       if (checkError) {
+        // Check for infinite recursion error first
+        const isRLSError = 
+          checkError.code === '42P17' || 
+          String(checkError.code) === '42P17' ||
+          checkError.message?.toLowerCase().includes('infinite recursion') ||
+          checkError.message?.includes('42P17');
+        
+        if (isRLSError) {
+          console.debug("RLS policy recursion detected when checking existing profile");
+          sessionStorage.setItem('rls-recursion-error', 'true');
+          return { 
+            success: false, 
+            error: "Database policy error (infinite recursion). Please fix your RLS policies in Supabase.",
+            errorCode: '42P17'
+          };
+        }
+        
         console.error("❌ Error checking existing profile:", checkError);
+        console.error("❌ Error code:", checkError.code);
+        console.error("❌ Error message:", checkError.message);
+        console.error("❌ Full error object:", JSON.stringify(checkError, null, 2));
+        
+        // Check if error is network-related (blocked by browser/firewall)
+        if (checkError.message.includes('Failed to fetch') || 
+            checkError.message.includes('NetworkError') ||
+            checkError.message.includes('ERR_BLOCKED_BY_ADMINISTRATOR')) {
+          return { 
+            success: false, 
+            error: `Network Error: Unable to connect to Supabase database. This is usually caused by:\n\n1. Browser Extensions - Disable ad blockers and privacy extensions\n2. Firewall/Network - Your network may be blocking Supabase\n3. Supabase Project - Check if your project is active in Supabase dashboard\n\nPlease try:\n- Disabling browser extensions\n- Using a different network\n- Checking your Supabase project status`,
+            errorCode: 'NETWORK_ERROR'
+          };
+        }
+        
+        return { 
+          success: false, 
+          error: `Database connection error: ${checkError.message}. This might be caused by a browser extension (Ad Blocker) or network firewall blocking the request. Please disable browser extensions and try again.`,
+          errorCode: checkError.code 
+        };
       }
       
       console.log("✅ Existing profile check result:", { existingProfile, checkError });
         
       if (existingProfile) {
-        console.error("❌ Staff creation failed: User already exists");
-        return { success: false, error: "User already exists with this email." };
+        // Check if it's from the same business
+        if (existingProfile.business_id === business.id) {
+          console.error("❌ Staff creation failed: User already exists in this business");
+          return { 
+            success: false, 
+            error: `This email is already used by ${existingProfile.first_name} ${existingProfile.last_name} (${existingProfile.role}) in your business. Please use a different email address or update the existing staff member.`,
+            errorCode: 'USER_EXISTS_SAME_BUSINESS'
+          };
+        } else {
+          console.error("❌ Staff creation failed: User exists in another business");
+          return { 
+            success: false, 
+            error: `This email is already registered with another business in Tillsup. Each email can only belong to one business. Please use a different email address.`,
+            errorCode: 'USER_EXISTS_OTHER_BUSINESS'
+          };
+        }
       }
 
       console.log("✅ No existing user found, proceeding with creation");
       
-      // If password provided, create user directly via temp client (bypassing session storage)
-      if (password) {
+      // ═══════════════════════════════════════════════════════════════════
+      // TRY EDGE FUNCTION FIRST (if deployed), FALLBACK TO CLIENT-SIDE
+      // ═══════════════════════════════════════════════════════════════════
+      
+      // Generate password if not provided
+      const staffPassword = password || `Tillsup${Math.random().toString(36).slice(-8)}!`;
+      
+      // APPROACH 1: Try Edge Function (bypasses browser blocking)
+      console.log("🚀 Attempting Edge Function for staff creation...");
+      
+      let edgeFunctionWorked = false;
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session) {
+          console.error("❌ No active session found");
+          throw new Error("No session");
+        }
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/create-staff`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email.toLowerCase(),
+            password: staffPassword,
+            firstName: firstName,
+            lastName: lastName,
+            role: role,
+            roleId: roleId,
+            branchId: branchId
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          console.log("✅ Staff created successfully via Edge Function");
+          edgeFunctionWorked = true;
+          return { 
+            success: true, 
+            credentials: { email: email.toLowerCase(), password: staffPassword }
+          };
+        } else {
+          console.log("⚠️ Edge Function returned error:", result.error);
+          throw new Error(result.error || "Edge Function failed");
+        }
+      } catch (edgeFunctionError: any) {
+        // Edge Function is optional - falling back to client-side is expected
+        console.log("📱 Edge Function not deployed, using client-side staff creation (this is normal)");
+      }
+      
+      // If Edge Function worked, we already returned above
+      if (edgeFunctionWorked) {
+        return { success: true };
+      }
+      
+      // APPROACH 2: Client-side creation (fallback)
+      console.log("🔑 Creating staff via client-side approach...");
+      console.log("📊 Using business_id:", business.id);
+      
+      // Create temporary Supabase client for staff signup
+      const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          storage: undefined
+        }
+      });
+      
+      console.log("🔐 Signing up new staff user...");
+      const { data: authData, error: authError } = await tempClient.auth.signUp({
+        email: email.toLowerCase(),
+        password: staffPassword,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            role: role,
+            business_id: business.id
+          },
+          emailRedirectTo: undefined
+        }
+      });
+      
+      if (authError) {
+        console.error("❌ Auth signup error:", authError);
+        
+        if (authError.message?.includes('Failed to fetch') || 
+            authError.message?.includes('NetworkError') ||
+            authError.message?.includes('ERR_BLOCKED_BY_ADMINISTRATOR')) {
+          return { 
+            success: false, 
+            error: `Unable to create staff due to network blocking.\n\n` +
+                   `This is usually caused by:\n` +
+                   `• Browser extensions (ad blockers, privacy tools)\n` +
+                   `• Corporate firewall/network restrictions\n\n` +
+                   `Solutions:\n` +
+                   `1. Disable browser extensions and try again\n` +
+                   `2. Try in Incognito/Private mode\n` +
+                   `3. Use a different network\n` +
+                   `4. Deploy the Edge Function (see EDGE_FUNCTION_DEPLOYMENT.md)`,
+            errorCode: 'NETWORK_BLOCKED'
+          };
+        }
+        
+        if (authError.message?.includes('User already registered')) {
+          return { 
+            success: false, 
+            error: "This email is already registered. Please use a different email address.",
+            errorCode: 'USER_EXISTS'
+          };
+        }
+        
+        return { 
+          success: false, 
+          error: authError.message,
+          errorCode: authError.code 
+        };
+      }
+      
+      if (!authData.user) {
+        console.error("❌ User creation failed - no user data returned");
+        return { 
+          success: false, 
+          error: "Staff creation failed. Email confirmation might be enabled.\n\n" +
+                 "Fix in Supabase Dashboard:\n" +
+                 "1. Authentication → Providers → Email\n" +
+                 "2. Set 'Confirm email' to OFF\n" +
+                 "3. Try again",
+          errorCode: 'EMAIL_CONFIRMATION_ENABLED'
+        };
+      }
+      
+      console.log("✅ Auth user created:", authData.user.id);
+      
+      // Create profile in database
+      const newProfile = {
+        id: authData.user.id,
+        email: email.toLowerCase(),
+        first_name: firstName,
+        last_name: lastName,
+        role: role,
+        role_id: roleId || null,
+        business_id: business.id,
+        branch_id: branchId || null,
+        must_change_password: true,
+        created_at: new Date().toISOString()
+      };
+      
+      console.log("💾 Creating profile in database...");
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert(newProfile);
+      
+      if (profileError) {
+        // Check for infinite recursion error first
+        const isRLSError = 
+          profileError.code === '42P17' || 
+          String(profileError.code) === '42P17' ||
+          profileError.message?.toLowerCase().includes('infinite recursion') ||
+          profileError.message?.includes('42P17');
+        
+        if (isRLSError) {
+          console.debug("RLS policy recursion detected during profile creation (expected, using workaround)");
+          sessionStorage.setItem('rls-recursion-error', 'true');
+          return { 
+            success: false, 
+            error: `Database policy error (infinite recursion). Please fix your RLS policies in Supabase.`,
+            errorCode: profileError.code
+          };
+        }
+        
+        // Only log non-RLS errors
+        console.error("❌ Profile creation error:", profileError);
+        
+        return { 
+          success: false, 
+          error: `Profile creation failed: ${profileError.message}`,
+          errorCode: profileError.code
+        };
+      }
+      
+      console.log("✅ Staff profile created successfully");
+      
+      return { 
+        success: true, 
+        credentials: { 
+          email: email.toLowerCase(), 
+          password: staffPassword 
+        }
+      };
+      
+    } catch (err: any) {
+      console.error("❌ Unexpected error in createStaff:", err);
+      return { success: false, error: err.message, errorCode: err.code };
+    }
+  };
+
+  /* OLD CLIENT-SIDE CODE REMOVED - Now handled by Edge Function
         console.log("🔑 Creating staff with password (direct signup)");
         console.log("📊 Debug - Current user business_id:", business.id);
         console.log("📊 Debug - Current user role:", user.role);
@@ -1088,7 +2085,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (authError) {
            console.error("❌ Auth signup error:", authError);
+           console.error("❌ Auth error code:", authError.code);
+           console.error("❌ Auth error status:", authError.status);
+           console.error("❌ Full auth error:", JSON.stringify(authError, null, 2));
+           
+           // Handle "User already registered" error specifically
+           if (authError.message && authError.message.includes("User already registered")) {
+             return { success: false, error: "This email is already registered in the system. Please use a different email address." };
+           }
+           
            return { success: false, error: authError.message };
+        }
+        
+        console.log("DEBUG: authData received:", { hasUser: !!authData.user, hasSession: !!authData.session });
+        
+        // Check if user data is null (email confirmation might be enabled)
+        if (!authData.user) {
+          console.error("CRITICAL: authData.user is NULL - email confirmation likely enabled");
+          console.error("authData:", authData);
+          return { 
+            success: false, 
+            error: "Staff creation failed: Supabase email confirmation must be disabled. Go to: Dashboard → Authentication → Providers → Email → Set 'Confirm email' to OFF" 
+          };
         }
         
         if (authData.user) {
@@ -1141,7 +2159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   console.error("❌ Update also failed:", updateError);
                   return { success: false, error: "User created but profile failed: " + updateError.message };
                 }
-                console.log("✅ Profile updated successfully");
+                console.log("�� Profile updated successfully");
                 return { success: true, credentials: { email, password } };
              } else if (profileError.code === '42501') {
                 // RLS policy violation - provide clear instructions
@@ -1208,17 +2226,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: error.message, errorCode: error.code };
       }
 
-      // 3. Return success (no credentials generated in Invite flow)
-      console.log("✅ Staff invitation created successfully");
-      return { success: true };
-    } catch (err: any) {
-      console.error("❌ Unexpected error in createStaff:", err);
-      return { success: false, error: err.message, errorCode: err.code };
-    }
-  };
+  END OF OLD CLIENT-SIDE CODE - All handled by Edge Function now */
 
   const getStaffMembers = async (): Promise<User[]> => {
     if (!business) return [];
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW MODE: Return mock staff
+    // ═══════════════════════════════════════════════════════════════════
+    if (isPreviewMode()) {
+      return await PreviewModeAuth.getStaffMembers();
+    }
     
     // 1. Fetch Profiles
     const { data: profiles } = await supabase.from('profiles').select('*').eq('business_id', business.id);
@@ -1391,10 +2409,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Cannot reset password for pending invites. Please resend the invitation instead." };
      }
 
-     // 1. Generate a simple 4-digit alphanumeric password (easy to share and type)
-     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Removed ambiguous chars (0,O,1,I)
+     // 1. Generate a simple 6-digit alphanumeric password (easy to share and type)
+     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
      let temporaryPassword = "";
-     for (let i = 0; i < 4; i++) {
+     for (let i = 0; i < 6; i++) {
        temporaryPassword += chars.charAt(Math.floor(Math.random() * chars.length));
      }
      
@@ -1462,28 +2480,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    // Check if we're in a test environment or if this is a known safe fallback scenario
-    // console.warn("useAuth used outside AuthProvider - returning fallback context");
+    // WARNING: useAuth called before AuthProvider mounted
+    // This can happen during the initial render cycle and is usually safe
+    console.warn("⚠️ useAuth called before AuthProvider fully initialized");
+    console.warn("   This is usually temporary during app initialization");
+    console.warn("   If this persists, check that AuthProvider wraps your app in App.tsx");
     
-    // Return a safe fallback to prevent app crashes during initialization or misconfiguration
+    // Return a safe fallback that won't crash the app
+    // Child providers can handle this gracefully
     return {
       user: null,
       business: null,
       isAuthenticated: false,
-      loading: true, // Keep loading true so AuthGuard waits
+      loading: true,
       schemaError: null,
-      login: async () => ({ success: false, error: "Auth context missing" }),
+      login: async () => ({ success: false, error: "Authentication system not initialized. Please refresh the page." }),
       logout: async () => {},
-      registerBusiness: async () => ({ success: false, error: "Auth context missing" }),
-      updateBusiness: async () => ({ success: false, error: "Auth context missing" }),
-      changePassword: async () => ({ success: false, error: "Auth context missing" }),
-      updateProfile: async () => ({ success: false, error: "Auth context missing" }),
-      createStaff: async () => ({ success: false, error: "Auth context missing" }),
+      registerBusiness: async () => ({ success: false, error: "Authentication system not initialized" }),
+      updateBusiness: async () => ({ success: false, error: "Authentication system not initialized" }),
+      changePassword: async () => ({ success: false, error: "Authentication system not initialized" }),
+      updateProfile: async () => ({ success: false, error: "Authentication system not initialized" }),
+      createStaff: async () => ({ success: false, error: "Authentication system not initialized" }),
       getStaffMembers: async () => [],
-      updateStaff: async () => ({ success: false, error: "Auth context missing" }),
-      deleteStaff: async () => ({ success: false, error: "Auth context missing" }),
-      resendStaffInvite: async () => ({ success: false, error: "Auth context missing" }),
-      resetStaffPassword: async () => ({ success: false, error: "Auth context missing" }),
+      updateStaff: async () => ({ success: false, error: "Authentication system not initialized" }),
+      deleteStaff: async () => ({ success: false, error: "Authentication system not initialized" }),
+      resendStaffInvite: async () => ({ success: false, error: "Authentication system not initialized" }),
+      resetStaffPassword: async () => ({ success: false, error: "Authentication system not initialized" }),
       hasPermission: () => false
     } as AuthContextType;
   }

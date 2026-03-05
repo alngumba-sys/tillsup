@@ -298,10 +298,10 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
   };
   
   return (
-    <div className="grid gap-2.5 py-2">
+    <div className="grid gap-2 py-1">
       {/* Branch Selection - REQUIRED */}
-      <div className="grid gap-1.5">
-        <Label htmlFor="branchId">
+      <div className="grid gap-1">
+        <Label htmlFor="branchId" className="text-xs">
           Branch <span className="text-destructive">*</span>
         </Label>
         {activeBranches.length > 0 ? (
@@ -310,14 +310,14 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             onValueChange={(value) => onFormChange({ ...formData, branchId: value })}
             disabled={isBranchDisabled}
           >
-            <SelectTrigger id="branchId" className={isBranchDisabled ? "bg-muted" : ""}>
+            <SelectTrigger id="branchId" className={isBranchDisabled ? "bg-muted h-8 text-xs" : "h-8 text-xs"}>
               <SelectValue placeholder="Select branch" />
             </SelectTrigger>
             <SelectContent>
               {activeBranches.map((branch) => (
                 <SelectItem key={branch.id} value={branch.id}>
                   <div className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Building2 className="w-3 h-3 text-muted-foreground" />
                     {branch.name}
                   </div>
                 </SelectItem>
@@ -325,8 +325,8 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed bg-muted/30">
-            <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-2 p-1.5 rounded-md border border-dashed bg-muted/30">
+            <Building2 className="w-3 h-3 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
               No active branches available.
             </p>
@@ -334,44 +334,44 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
         )}
       </div>
 
-      <div className="grid gap-1.5">
-        <Label htmlFor="image" className="text-sm">Product Image <span className="text-xs text-muted-foreground">(Max 2MB)</span></Label>
-        <div className="flex items-start gap-3">
+      <div className="grid gap-1">
+        <Label htmlFor="image" className="text-xs">Product Image <span className="text-[10px] text-muted-foreground">(Max 2MB)</span></Label>
+        <div className="flex items-start gap-2">
           <div className="shrink-0 relative">
             {formData.image ? (
               <div className="relative group">
-                <div className="w-14 h-14 rounded-md border overflow-hidden">
+                <div className="w-12 h-12 rounded-md border overflow-hidden">
                   <img src={formData.image} alt="Product" className="w-full h-full object-cover" />
                 </div>
                 <Button
                   type="button"
                   variant="destructive"
                   size="icon"
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={() => onFormChange({ ...formData, image: undefined })}
                 >
-                  <XCircle className="w-3 h-3" />
+                  <XCircle className="w-2.5 h-2.5" />
                 </Button>
               </div>
             ) : (
-              <div className="w-14 h-14 rounded-md border border-dashed flex items-center justify-center bg-muted/30">
-                <ImageIcon className="w-6 h-6 text-muted-foreground/50" />
+              <div className="w-12 h-12 rounded-md border border-dashed flex items-center justify-center bg-muted/30">
+                <ImageIcon className="w-5 h-5 text-muted-foreground/50" />
               </div>
             )}
           </div>
           
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-0.5">
             <Input
               id="image"
               type="file"
               accept="image/*"
-              className="cursor-pointer text-sm"
+              className="cursor-pointer text-xs h-8"
               onChange={handleImageUpload}
               disabled={isUploading}
             />
             {isUploading && (
-              <div className="flex items-center gap-1.5 text-xs text-blue-600 animate-pulse">
-                <Loader2 className="w-3 h-3 animate-spin" />
+              <div className="flex items-center gap-1 text-[10px] text-blue-600 animate-pulse">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
                 Uploading...
               </div>
             )}
@@ -379,28 +379,29 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
         </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor="name" className="text-sm">Product Name <span className="text-destructive">*</span></Label>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-1">
+          <Label htmlFor="name" className="text-xs">Product Name <span className="text-destructive">*</span></Label>
           <Input
             id="name"
             value={formData.name}
             onChange={(e) => onFormChange({ ...formData, name: e.target.value })}
             placeholder="Enter product name"
+            className="h-8 text-xs"
           />
         </div>
         
         {/* Category Selection - Uses CategoryContext */}
-        <div className="grid gap-1.5">
-        <Label htmlFor="category" className="text-sm">Category <span className="text-destructive">*</span></Label>
+        <div className="grid gap-1">
+        <Label htmlFor="category" className="text-xs">Category <span className="text-destructive">*</span></Label>
         
         {/* ═══════════════════════════════════════════════════════════════════
             EDGE CASE: Product with deactivated category (Edit Mode)
             ═══════════════════════════════════════════════════════════����══════ */}
         {isEditMode && isCategoryDeactivated && (
-          <Alert className="border-amber-200 bg-amber-50 py-1.5">
-            <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-            <AlertDescription className="text-amber-900 text-xs">
+          <Alert className="border-amber-200 bg-amber-50 py-1">
+            <AlertCircle className="h-3 w-3 text-amber-600" />
+            <AlertDescription className="text-amber-900 text-[10px]">
               Deactivated category. Please select an active one.
             </AlertDescription>
           </Alert>
@@ -414,7 +415,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
           >
             <SelectTrigger 
               id="category"
-              className={isCategoryDeactivated ? "border-amber-300 bg-amber-50" : ""}
+              className={isCategoryDeactivated ? "border-amber-300 bg-amber-50 h-8 text-xs" : "h-8 text-xs"}
             >
               <SelectValue placeholder="Select a category" />
             </SelectTrigger>
@@ -422,7 +423,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               {activeCategories.map((cat) => (
                 <SelectItem key={cat.id} value={cat.id}>
                   <div className="flex items-center gap-2">
-                    <Tag className="w-3.5 h-3.5 text-green-600" />
+                    <Tag className="w-3 h-3 text-green-600" />
                     {cat.name}
                   </div>
                 </SelectItem>
@@ -430,7 +431,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               {disabledCategories.length > 0 && (
                 <>
                   {activeCategories.length > 0 && (
-                    <div className="px-2 py-1.5">
+                    <div className="px-2 py-1">
                       <div className="h-px bg-border" />
                     </div>
                   )}
@@ -442,7 +443,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
                       className="opacity-50 cursor-not-allowed"
                     >
                       <div className="flex items-center gap-2 text-muted-foreground">
-                        <XCircle className="w-3.5 h-3.5 text-red-500" />
+                        <XCircle className="w-3 h-3 text-red-500" />
                         {cat.name} <span className="text-xs">(Deactivated)</span>
                       </div>
                     </SelectItem>
@@ -452,8 +453,8 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed bg-destructive/10">
-            <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+          <div className="flex items-center gap-2 p-1.5 rounded-md border border-dashed bg-destructive/10">
+            <AlertCircle className="w-3 h-3 text-destructive" />
             <p className="text-xs text-destructive">
               No categories. Create one first.
             </p>
@@ -465,15 +466,15 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       {/* ═══════════════════════════════════════════════════════════════════
           PRICING SECTION - Grouped for clarity
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="space-y-2 pt-1">
-        <div className="flex items-center gap-1.5 pb-0.5 border-b">
-          <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-medium">Pricing</h3>
+      <div className="space-y-1.5 pt-0.5">
+        <div className="flex items-center gap-1 pb-0.5 border-b">
+          <DollarSign className="w-3 h-3 text-muted-foreground" />
+          <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Pricing</h3>
         </div>
         
-        <div className="grid grid-cols-3 gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="costPrice" className="text-xs">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="grid gap-1">
+            <Label htmlFor="costPrice" className="text-[10px]">
               Cost ({currencySymbol})
             </Label>
             <Input
@@ -483,12 +484,12 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               value={formData.costPrice || ""}
               onChange={(e) => onFormChange({ ...formData, costPrice: e.target.value })}
               placeholder="0.00"
+              className="h-8 text-xs"
             />
-            <p className="text-[10px] text-muted-foreground leading-tight">What you pay</p>
           </div>
           
-          <div className="grid gap-1.5">
-            <Label htmlFor="price" className="text-xs">Retail ({currencySymbol}) <span className="text-destructive">*</span></Label>
+          <div className="grid gap-1">
+            <Label htmlFor="price" className="text-[10px]">Retail ({currencySymbol}) <span className="text-destructive">*</span></Label>
             <Input
               id="price"
               type="number"
@@ -496,12 +497,12 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               value={formData.price}
               onChange={(e) => onFormChange({ ...formData, price: e.target.value })}
               placeholder="0.00"
+              className="h-8 text-xs"
             />
-            <p className="text-[10px] text-muted-foreground leading-tight">Single items</p>
           </div>
           
-          <div className="grid gap-1.5">
-            <Label htmlFor="wholesalePrice" className="text-xs">
+          <div className="grid gap-1">
+            <Label htmlFor="wholesalePrice" className="text-[10px]">
               Wholesale ({currencySymbol})
             </Label>
             <Input
@@ -511,8 +512,8 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               value={formData.wholesalePrice || ""}
               onChange={(e) => onFormChange({ ...formData, wholesalePrice: e.target.value })}
               placeholder="0.00"
+              className="h-8 text-xs"
             />
-            <p className="text-[10px] text-muted-foreground leading-tight">Bulk orders</p>
           </div>
         </div>
       </div>
@@ -520,26 +521,27 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
       {/* ═══════════════════════════════════════════════════════════════════
           STOCK MANAGEMENT SECTION
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="space-y-2 pt-1">
-        <div className="flex items-center gap-1.5 pb-0.5 border-b">
-          <Package className="w-3.5 h-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-medium">Stock Management</h3>
+      <div className="space-y-1.5 pt-0.5">
+        <div className="flex items-center gap-1 pb-0.5 border-b">
+          <Package className="w-3 h-3 text-muted-foreground" />
+          <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Stock</h3>
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="stock" className="text-sm">Stock Quantity <span className="text-destructive">*</span></Label>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-1">
+            <Label htmlFor="stock" className="text-xs">Quantity <span className="text-destructive">*</span></Label>
             <Input
               id="stock"
               type="number"
               value={formData.stock}
               onChange={(e) => onFormChange({ ...formData, stock: e.target.value })}
               placeholder="0"
+              className="h-8 text-xs"
             />
           </div>
           
-          <div className="grid gap-1.5">
-            <Label htmlFor="lowStockThreshold" className="text-sm">
+          <div className="grid gap-1">
+            <Label htmlFor="lowStockThreshold" className="text-xs">
               Reorder Level
             </Label>
             <Input
@@ -548,20 +550,22 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               value={formData.lowStockThreshold || "10"}
               onChange={(e) => onFormChange({ ...formData, lowStockThreshold: e.target.value })}
               placeholder="10"
+              className="h-8 text-xs"
             />
           </div>
         </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-3">
-      <div className="grid gap-1.5">
-        <Label htmlFor="sku" className="text-sm">SKU/Size</Label>
-        <div className="flex gap-2">
+      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-1">
+        <Label htmlFor="sku" className="text-xs">SKU/Size</Label>
+        <div className="flex gap-1.5">
           <Input
             id="sku"
             value={formData.sku}
             onChange={(e) => onFormChange({ ...formData, sku: e.target.value })}
             placeholder="Enter SKU or size"
+            className="h-8 text-xs"
           />
           <Button 
             type="button"
@@ -569,8 +573,9 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             size="icon" 
             onClick={() => setIsScanning(true)}
             title="Scan Barcode"
+            className="h-8 w-8 shrink-0"
           >
-            <ScanBarcode className="h-4 w-4" />
+            <ScanBarcode className="h-3.5 w-3.5" />
           </Button>
         </div>
         
@@ -595,16 +600,16 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
           </DialogContent>
         </Dialog>
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="supplier" className="text-sm">
-          Supplier <span className="text-xs text-muted-foreground">(Optional)</span>
+      <div className="grid gap-1">
+        <Label htmlFor="supplier" className="text-xs">
+          Supplier <span className="text-[10px] text-muted-foreground">(Optional)</span>
         </Label>
         {suppliers.length > 0 ? (
           <Select 
             value={formData.supplier || "__none__"} 
             onValueChange={(value) => onFormChange({ ...formData, supplier: value === "__none__" ? "" : value })}
           >
-            <SelectTrigger id="supplier">
+            <SelectTrigger id="supplier" className="h-8 text-xs">
               <SelectValue placeholder="Select supplier (optional)" />
             </SelectTrigger>
             <SelectContent>
@@ -614,7 +619,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
               {suppliers.map((supplier) => (
                 <SelectItem key={supplier.id} value={supplier.name}>
                   <div className="flex items-center gap-2">
-                    <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Truck className="w-3 h-3 text-muted-foreground" />
                     {supplier.name}
                   </div>
                 </SelectItem>
@@ -622,8 +627,8 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed bg-muted/30">
-            <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-2 p-1.5 rounded-md border border-dashed bg-muted/30">
+            <Truck className="w-3 h-3 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
               No suppliers available.
             </p>
@@ -1401,11 +1406,11 @@ export function Inventory() {
               Add Product
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add New Product</DialogTitle>
-              <DialogDescription>
-                Add a new product to your inventory.
+              <DialogTitle className="text-base">Add New Product</DialogTitle>
+              <DialogDescription className="text-[11px]">
+                Fill in the product details below.
               </DialogDescription>
             </DialogHeader>
             <ProductForm 
@@ -1417,8 +1422,8 @@ export function Inventory() {
               userBranchId={user?.branchId || undefined}
               allCategories={categoryList}
             />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+            <DialogFooter className="pt-3">
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="h-9 text-xs">Cancel</Button>
               <Button onClick={async () => {
                 console.log('🔵 Create Product button clicked');
                 console.log('📊 Current formData:', JSON.stringify(formData, null, 2));
@@ -1430,7 +1435,7 @@ export function Inventory() {
                     description: error instanceof Error ? error.message : 'Unknown error'
                   });
                 }
-              }}>Create Product</Button>
+              }} className="h-9 text-xs">Create Product</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1629,10 +1634,10 @@ export function Inventory() {
           setEditingItem(null);
         }
       }}>
-        <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Product</DialogTitle>
-            <DialogDescription>Update product details.</DialogDescription>
+            <DialogTitle className="text-base">Edit Product</DialogTitle>
+            <DialogDescription className="text-[11px]">Update product details below.</DialogDescription>
           </DialogHeader>
           <ProductForm 
             formData={formData} 
@@ -1644,9 +1649,9 @@ export function Inventory() {
             allCategories={categoryList}
             isEditMode={true}
           />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleEditProduct}>
+          <DialogFooter className="pt-3">
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="h-9 text-xs">Cancel</Button>
+            <Button onClick={handleEditProduct} className="h-9 text-xs">
               Save Changes
             </Button>
           </DialogFooter>

@@ -96,6 +96,7 @@ export function StaffManagementTab() {
   const [manualPassword, setManualPassword] = useState("");
   const [autoGeneratePassword, setAutoGeneratePassword] = useState(true);
   const [username, setUsername] = useState("");
+  const [isDebugging, setIsDebugging] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -132,7 +133,7 @@ export function StaffManagementTab() {
   });
 
   const handleAddStaff = async () => {
-    // ═══════════════════════════════════════════════════════���═══════════
+    // ══════════════════════��════════════════════════════════���═══════════
     // BRANCH VALIDATION
     // ═══════════════════════════════════════════════════════════════════
     let finalEmail = formData.email;
@@ -153,9 +154,9 @@ export function StaffManagementTab() {
        }
 
        if (autoGeneratePassword) {
-          const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+          const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
           let retVal = "";
-          for (let i = 0, n = charset.length; i < 12; ++i) {
+          for (let i = 0, n = charset.length; i < 6; ++i) {
               retVal += charset.charAt(Math.floor(Math.random() * n));
           }
           finalPassword = retVal;
@@ -190,6 +191,13 @@ export function StaffManagementTab() {
 
     setIsLoadingStaff(true);
     try {
+      console.log("🚀 Starting staff creation process...");
+      console.log("📧 Email:", finalEmail);
+      console.log("👤 Name:", formData.firstName, formData.lastName);
+      console.log("🎭 Role:", formData.role);
+      console.log("🏢 Branch ID:", formData.branchId);
+      console.log("🔐 Password mode:", finalPassword ? "YES" : "NO (invite)");
+      
       const result = await createStaff(
         finalEmail,
         formData.firstName,
@@ -200,7 +208,20 @@ export function StaffManagementTab() {
         finalPassword
       );
 
+      console.log("📊 createStaff result:", result);
+      
+      // Handle undefined result (should never happen, but added for safety)
+      if (!result) {
+        console.error("❌ createStaff returned undefined result");
+        toast.error("Staff creation failed", {
+          description: "No response from server. Please try again.",
+          duration: 5000
+        });
+        return;
+      }
+
       if (result.success) {
+        console.log("✅ Staff creation successful!");
         if (result.credentials) {
            // ═══════════════════════════════════════════════════════════════════
            // CREDENTIALS FLOW (Admin API)
@@ -249,24 +270,300 @@ export function StaffManagementTab() {
            setStaffMembers(updatedStaffMembers);
         }
       } else {
-        // Handle Schema Error
-        if (result.errorCode || result.error?.includes("staff_invites")) {
+        // Handle error cases - only log if there's actual content
+        if (result.error) {
+          console.error("❌ Staff creation failed");
+          console.error("❌ Error:", result.error);
+        }
+        if (result.errorCode) {
+          console.error("❌ Error code:", result.errorCode);
+        }
+        
+        // Handle specific error codes
+        if (result.errorCode === 'NETWORK_ERROR' || result.errorCode === 'NETWORK_BLOCKED') {
+            // Network/Connection Error (includes proxy/WebSocket issues)
+            toast.error("Network Connection Error", {
+              description: "Unable to connect to Supabase. This may be caused by browser extensions, firewall, or network restrictions. Please check the 'Connection Test' tab for troubleshooting steps.",
+              duration: 10000
+            });
+        } else if (result.errorCode === 'USER_EXISTS_SAME_BUSINESS') {
+            // User already exists in this business
+            toast.error("Email Already in Use", {
+              description: result.error,
+              duration: 6000
+            });
+        } else if (result.errorCode === 'USER_EXISTS_OTHER_BUSINESS' || result.errorCode === 'USER_EXISTS') {
+            // User exists in another business
+            toast.error("Email Already Registered", {
+              description: result.error,
+              duration: 6000
+            });
+        } else if (result.errorCode || result.error?.includes("staff_invites")) {
+            // Schema Error
             setSchemaError({ code: result.errorCode || 'PGRST204', message: result.error });
             toast.error("Database Schema Error: Missing Table");
+        } else if (result.errorCode === '42501') {
+            // RLS Policy Error
+            toast.error("Permission Error", {
+              description: result.error || "Please run the FIX_RLS_FINAL.sql script to fix database permissions."
+            });
+        } else if (result.error?.includes('infinite recursion')) {
+            // Infinite Recursion Error
+            toast.error("RLS Policy Error: Infinite Recursion", {
+              description: "Your Supabase profiles table has circular dependencies in RLS policies. Please run the FIX_INFINITE_RECURSION.sql script in your Supabase SQL Editor."
+            });
+        } else if (result.error?.includes('Failed to fetch') || result.error?.includes('NetworkError')) {
+            // Catch additional network errors that might not have specific error codes
+            toast.error("Connection Failed", {
+              description: "Unable to reach Supabase. Please check your internet connection and disable browser extensions that might block requests.",
+              duration: 10000
+            });
         } else {
-            toast.error(result.error || "Failed to create staff member");
+            // Generic error - always show something to the user
+            toast.error("Failed to Create Staff", {
+              description: result.error || "An unknown error occurred. Please try again or check the console for details.",
+              duration: 6000
+            });
         }
       }
     } catch (error: any) {
-       toast.error("An unexpected error occurred");
+       console.error("💥 Unexpected error in handleAddStaff:", error);
+       
+       // Provide detailed error message
+       const errorMessage = error?.message || String(error) || "Unknown error";
+       toast.error("Unexpected Error", {
+         description: errorMessage.includes('fetch') || errorMessage.includes('network')
+           ? "Network error occurred. Please check your connection and try again."
+           : errorMessage.substring(0, 200), // Limit error message length
+         duration: 8000
+       });
     } finally {
        setIsLoadingStaff(false);
     }
   };
 
+  // ═══════════════════════════════════════════════════════════════════
+  // DEBUG VERSION - Logs timing and errors for each step
+  // ═══════════════════════════════════════════════════════════════════
+  const handleAddStaffDebug = async () => {
+    console.clear(); // Clear console for clean debug output
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🐛 DEBUG: Starting staff creation flow");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.time("⏱️  TOTAL_STAFF_CREATION_TIME");
+    
+    const debugLog = (step: string, data?: any) => {
+      console.log(`\n${"═".repeat(60)}`);
+      console.log(`📍 STEP: ${step}`);
+      if (data) console.log("📊 Data:", data);
+      console.log(`${"═".repeat(60)}\n`);
+    };
+
+    try {
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 1: Validation & State Preparation
+      // ═══════════════════════════════════════════════════════════════════
+      console.time("⏱️  1_VALIDATION");
+      debugLog("1. VALIDATION & STATE CHECKS", {
+        createMode,
+        noEmail,
+        autoGeneratePassword,
+        username,
+        formData: { ...formData, email: formData.email || '(empty)' }
+      });
+
+      let finalEmail = formData.email;
+      let finalPassword: string | undefined = undefined;
+
+      if (createMode === 'password') {
+         if (noEmail) {
+           if (!username.trim()) {
+              console.error("❌ Validation failed: Username is required");
+              toast.error("Username is required");
+              console.timeEnd("⏱️  1_VALIDATION");
+              console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+              return;
+           }
+           finalEmail = `${username.trim().toLowerCase().replace(/[^a-z0-9]/g, '')}@no-email.tillsup.com`;
+           console.log("✅ Generated no-email address:", finalEmail);
+         } else {
+           if (!formData.email.trim() || !formData.email.includes("@")) {
+              console.error("❌ Validation failed: Valid email is required");
+              toast.error("Valid email is required");
+              console.timeEnd("⏱️  1_VALIDATION");
+              console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+              return;
+           }
+         }
+
+         if (autoGeneratePassword) {
+            const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let retVal = "";
+            for (let i = 0, n = charset.length; i < 6; ++i) {
+                retVal += charset.charAt(Math.floor(Math.random() * n));
+            }
+            finalPassword = retVal;
+            console.log("✅ Auto-generated password (6 chars, alphanumeric)");
+         } else {
+            if (!manualPassword || manualPassword.length < 6) {
+               console.error("❌ Validation failed: Password must be at least 6 characters");
+               toast.error("Password must be at least 6 characters");
+               console.timeEnd("⏱️  1_VALIDATION");
+               console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+               return;
+            }
+            finalPassword = manualPassword;
+            console.log("✅ Using manual password");
+         }
+      } else {
+         if (!formData.email.trim() || !formData.email.includes("@")) {
+            console.error("❌ Validation failed: Valid email is required for invite mode");
+            toast.error("Valid email is required");
+            console.timeEnd("⏱️  1_VALIDATION");
+            console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+            return;
+         }
+      }
+
+      if (!formData.branchId) {
+        console.error("❌ Validation failed: Branch assignment is required");
+        toast.error("Branch assignment is required");
+        console.timeEnd("⏱️  1_VALIDATION");
+        console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+        return;
+      }
+
+      if (formData.salaryEnabled) {
+        if (!formData.baseSalary || parseFloat(formData.baseSalary) <= 0) {
+          console.error("❌ Validation failed: Base salary must be greater than 0");
+          toast.error("Base salary must be greater than 0");
+          console.timeEnd("⏱️  1_VALIDATION");
+          console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+          return;
+        }
+      }
+
+      console.log("✅ All validations passed");
+      console.timeEnd("⏱️  1_VALIDATION");
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 2: Set Loading State
+      // ═══════════════════════════════════════════════════════════════════
+      console.time("⏱️  2_SET_LOADING");
+      debugLog("2. SETTING LOADING STATE");
+      setIsLoadingStaff(true);
+      console.log("✅ Loading state set to true");
+      console.timeEnd("⏱️  2_SET_LOADING");
+
+      // ═══════════════════════════════════════════════════════════════════
+      // STEP 3: Call createStaff API
+      // ═══════════════════════════════════════════════════════════════════
+      console.time("⏱️  3_CREATE_STAFF_API");
+      debugLog("3. CALLING createStaff API", {
+        email: finalEmail,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        role: formData.role,
+        branchId: formData.branchId,
+        hasPassword: !!finalPassword
+      });
+
+      const result = await createStaff(
+        finalEmail,
+        formData.firstName,
+        formData.lastName,
+        formData.role,
+        formData.branchId,
+        undefined,
+        finalPassword
+      );
+
+      console.timeEnd("⏱️  3_CREATE_STAFF_API");
+      debugLog("4. createStaff RESULT", result);
+
+      // Handle result (same logic as original handleAddStaff)
+      if (!result) {
+        console.error("❌ createStaff returned undefined");
+        toast.error("Staff creation failed - No response");
+        return;
+      }
+
+      if (result.success) {
+        console.log("✅ SUCCESS!");
+        if (result.credentials) {
+          console.time("⏱️  5_POST_SUCCESS_CREDENTIALS");
+          if (formData.salaryEnabled) {
+            const updatedStaffMembers = await getStaffMembers();
+            setStaffMembers(updatedStaffMembers);
+            const newStaff = updatedStaffMembers.find(s => s.email === finalEmail);
+            if (newStaff) {
+              const salary: StaffSalary = {
+                salaryType: formData.salaryType,
+                baseSalary: parseFloat(formData.baseSalary),
+                currency: currencyCode,
+                payFrequency: formData.payFrequency,
+                effectiveFrom: new Date(formData.effectiveFrom),
+                lastUpdated: new Date(),
+                updatedBy: user?.id,
+              };
+              await updateStaff(newStaff.id, { salary });
+            }
+          } else {
+            const updatedStaffMembers = await getStaffMembers();
+            setStaffMembers(updatedStaffMembers);
+          }
+          setGeneratedCredentials(result.credentials);
+          toast.success("Staff member created successfully!");
+          console.timeEnd("⏱️  5_POST_SUCCESS_CREDENTIALS");
+        } else {
+          console.time("⏱️  5_POST_SUCCESS_INVITE");
+          setIsAddDialogOpen(false);
+          resetForm();
+          toast.success("Staff invitation sent successfully!");
+          const updatedStaffMembers = await getStaffMembers();
+          setStaffMembers(updatedStaffMembers);
+          console.timeEnd("⏱️  5_POST_SUCCESS_INVITE");
+        }
+      } else {
+        console.error("❌ FAILED:", result.error, result.errorCode);
+        // Show same errors as original
+        if (result.errorCode === 'NETWORK_ERROR' || result.errorCode === 'NETWORK_BLOCKED') {
+          toast.error("Network Connection Error", {
+            description: "Unable to connect to Supabase.",
+            duration: 10000
+          });
+        } else {
+          toast.error("Failed to Create Staff", {
+            description: result.error || "Unknown error",
+            duration: 6000
+          });
+        }
+      }
+
+    } catch (error: any) {
+      console.error("💥 EXCEPTION:");
+      console.error("Type:", error?.constructor?.name);
+      console.error("Message:", error?.message);
+      console.error("Stack:", error?.stack);
+      console.error("Full:", error);
+      
+      toast.error("Unexpected Error (Debug)", {
+        description: error?.message || "Check console",
+        duration: 8000
+      });
+    } finally {
+      setIsLoadingStaff(false);
+      console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      toast.info("Debug Complete - Check console for timing details", {
+        duration: 5000
+      });
+    }
+  };
+
   const handleEditStaff = async () => {
     if (editingMember) {
-      // ══════════════════════════════════════════════════════════════════
+      // ═══════════════════���══════════════════════════════════════════════
       // BRANCH VALIDATION
       // ═══════════════════════════════════════════════════════════════════
       if (!formData.branchId) {
@@ -1098,7 +1395,7 @@ export function StaffManagementTab() {
                                 className="accent-primary w-4 h-4 rounded"
                               />
                               <Label htmlFor="auto-gen" className="text-sm font-normal cursor-pointer">
-                                 Auto-generate secure password
+                                 Auto-generate password (6-digit alphanumeric)
                               </Label>
                            </div>
 
@@ -1154,18 +1451,38 @@ export function StaffManagementTab() {
 
                   <div className="grid gap-2">
                     <Label htmlFor="staff-branch">Branch</Label>
-                    <Select value={formData.branchId} onValueChange={(value) => setFormData({ ...formData, branchId: value })}>
-                      <SelectTrigger id="staff-branch">
-                        <SelectValue placeholder="Select a branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableBranches.map((branch) => (
-                          <SelectItem key={branch.id} value={branch.id}>
-                            {branch.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {availableBranches.length === 0 ? (
+                      <div className="space-y-2">
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            No branches available. Please create a branch first before adding staff.
+                          </AlertDescription>
+                        </Alert>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => navigate('/branches')}
+                          className="w-full"
+                        >
+                          <Building2 className="w-4 h-4 mr-2" />
+                          Go to Branch Management
+                        </Button>
+                      </div>
+                    ) : (
+                      <Select value={formData.branchId} onValueChange={(value) => setFormData({ ...formData, branchId: value })}>
+                        <SelectTrigger id="staff-branch">
+                          <SelectValue placeholder="Select a branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableBranches.map((branch) => (
+                            <SelectItem key={branch.id} value={branch.id}>
+                              {branch.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
 
                   {/* ═══════════════════════════════════════════════════════════════════
@@ -1289,7 +1606,7 @@ export function StaffManagementTab() {
 
             {/* ═══════════════════════════════════════════════════════════════════
                 FIXED FOOTER - Always visible
-                ═══════════���═════════════════════��═════════════════════════════════ */}
+                ═══════════���═════��═══════════════��═════════════════════════════════ */}
             <DialogFooter className="pt-4">
               {generatedCredentials ? (
                 <Button onClick={closeAddDialog} className="w-full">
@@ -1297,11 +1614,21 @@ export function StaffManagementTab() {
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={closeAddDialog}>
+                  <Button variant="outline" onClick={closeAddDialog} disabled={isLoadingStaff}>
                     Cancel
                   </Button>
-                  <Button onClick={editingMember ? handleEditStaff : handleAddStaff}>
-                    {editingMember ? "Save Changes" : "Create Staff"}
+                  <Button 
+                    onClick={editingMember ? handleEditStaff : handleAddStaff}
+                    disabled={isLoadingStaff}
+                  >
+                    {isLoadingStaff ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        {editingMember ? "Saving..." : "Creating..."}
+                      </>
+                    ) : (
+                      editingMember ? "Save Changes" : "Create Staff"
+                    )}
                   </Button>
                 </>
               )}

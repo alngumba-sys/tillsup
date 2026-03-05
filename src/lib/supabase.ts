@@ -26,5 +26,25 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     storageKey: 'sb-tillsup-auth-token', // Unique key for main app session
     lock: debugLock
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'tillsup-web'
+    },
+    fetch: (url, options = {}) => {
+      return fetch(url, {
+        ...options,
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout?.(30000) // 30 second timeout
+      }).catch(err => {
+        console.error('Fetch error:', err);
+        throw err;
+      });
+    }
+  },
+  db: {
+    schema: 'public'
   }
+  // Disable realtime entirely to prevent WebSocket errors
+  // Can be re-enabled if needed: realtime: { params: { eventsPerSecond: 10 } }
 });
