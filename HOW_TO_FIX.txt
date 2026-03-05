@@ -1,0 +1,149 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║                                                                       ║
+║           🚨 TILLSUP DATABASE FIX REQUIRED 🚨                        ║
+║                                                                       ║
+║  Error: Infinite recursion in RLS policies (PostgreSQL Error 42P17)  ║
+║                                                                       ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  ⚠️  IMPORTANT: This CANNOT be fixed from code                       │
+│  You MUST run SQL commands in your Supabase Dashboard                │
+│  ⏱️  Time Required: 2 minutes                                         │
+└───────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         STEP-BY-STEP FIX                              ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌─ STEP 1: OPEN SUPABASE DASHBOARD ────────────────────────────────────┐
+│                                                                       │
+│  1. Open browser to: https://supabase.com/dashboard                  │
+│  2. Log in to your account                                           │
+│  3. Click on your "Tillsup" project                                  │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 2: OPEN SQL EDITOR ────────────────────────────────────────────┐
+│                                                                       │
+│  1. Look at the LEFT SIDEBAR                                         │
+│  2. Find and click: "SQL Editor" (icon looks like <>)               │
+│  3. Click the green "+ New query" button                             │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 3: COPY THE SQL FIX ───────────────────────────────────────────┐
+│                                                                       │
+│  Open ONE of these files in your project:                            │
+│                                                                       │
+│  ✅ QUICK_FIX.sql           (Recommended - short & simple)           │
+│  ✅ FIX_INFINITE_RECURSION.sql  (Complete with all tables)           │
+│                                                                       │
+│  Copy the ENTIRE contents of the file                                │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 4: PASTE AND RUN ──────────────────────────────────────────────┐
+│                                                                       │
+│  1. Go back to Supabase SQL Editor                                   │
+│  2. Delete any existing text in the editor                           │
+│  3. PASTE the SQL you copied                                         │
+│  4. Click the green "RUN" button                                     │
+│     (or press Ctrl+Enter on Windows, Cmd+Enter on Mac)               │
+│  5. Wait for "Success" message (about 2 seconds)                     │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 5: VERIFY IT WORKED ───────────────────────────────────────────┐
+│                                                                       │
+│  You should see at the bottom:                                       │
+│  ✅ Success. No rows returned                                        │
+│                                                                       │
+│  If you see an error, read the error message and:                    │
+│  • Make sure you copied the ENTIRE SQL script                        │
+│  • Make sure you're in the correct project                           │
+│  • Try running QUICK_FIX.sql instead                                 │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 6: REFRESH TILLSUP ────────────────────────────────────────────┐
+│                                                                       │
+│  1. Go back to your Tillsup browser tab                              │
+│  2. Press F5 (or click the refresh button)                           │
+│  3. The error screen should disappear                                │
+│  4. You should see the login page or dashboard                       │
+│                                                                       │
+│  ✅ DONE! The error is fixed permanently!                            │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                        WHAT WENT WRONG?                               ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Your Supabase database has "Row Level Security" (RLS) policies that control
+who can read/write data. One of your policies was checking the "profiles"
+table WHILE inserting into the "profiles" table, creating an infinite loop:
+
+    Insert profile
+       ↓
+    Check RLS policy
+       ↓
+    Query profiles table  ← This triggers policies again!
+       ↓
+    Check RLS policy
+       ↓
+    Query profiles table
+       ↓
+    ∞ INFINITE LOOP!
+
+The SQL fix replaces the problematic policy with a simple one that doesn't
+cause recursion.
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                       STILL HAVING ISSUES?                            ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+If you're still seeing errors after running the SQL:
+
+1. ✅ Make sure you saw "Success" message in SQL Editor
+2. ✅ Try clearing browser cache (Ctrl+Shift+Delete)
+3. ✅ Try hard refresh (Ctrl+F5 or Cmd+Shift+R)
+4. ✅ Check Supabase logs: Dashboard → Logs → Database
+5. ✅ Read URGENT_FIX_REQUIRED.md for detailed troubleshooting
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                          HELPFUL FILES                                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+📄 URGENT_FIX_REQUIRED.md      - Detailed markdown guide
+📄 QUICK_FIX.sql               - Quick SQL fix (recommended)
+📄 FIX_INFINITE_RECURSION.sql  - Complete SQL fix (all tables)
+📄 RLS_FIX_INSTRUCTIONS.md     - Technical documentation
+📄 HOW_TO_FIX.txt             - This file
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         QUICK CHECKLIST                               ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+□ Opened Supabase Dashboard
+□ Clicked SQL Editor
+□ Copied QUICK_FIX.sql
+□ Pasted into SQL Editor
+□ Clicked "Run"
+□ Saw "Success" message
+□ Refreshed Tillsup
+□ Error is gone ✅
+
+
+═══════════════════════════════════════════════════════════════════════
+
+                    This is a ONE-TIME fix!
+              After fixing, you won't see this error again.
+
+═══════════════════════════════════════════════════════════════════════

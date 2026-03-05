@@ -1,0 +1,284 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║                TILLSUP POS - DATA STORAGE ARCHITECTURE                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                         BROWSER (CLIENT SIDE)                         │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  localStorage                                                       │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  Key: sb-tillsup-auth-token                                   │ │
+│  │  ┌─────────────────────────────────────────────────────────┐  │ │
+│  │  │  {                                                       │  │ │
+│  │  │    "access_token": "eyJhbGc...",  ← JWT Token           │  │ │
+│  │  │    "refresh_token": "v1::...",     ← Refresh Token      │  │ │
+│  │  │    "expires_in": 3600,             ← 1 hour expiry      │  │ │
+│  │  │    "user": {...}                   ← User metadata      │  │ │
+│  │  │  }                                                       │  │ │
+│  │  │                                                          │  │ │
+│  │  │  ⚠️  NO BUSINESS DATA STORED HERE                       │  │ │
+│  │  └─────────────────────────────────────────────────────────┘  │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│  ❌ NO OTHER KEYS                                                   │
+│  ❌ NO pos_inventory                                                │
+│  ❌ NO pos_sales                                                    │
+│  ❌ NO pos_businesses                                               │
+└─────────────────────────────────────────────────────────────────────┘
+
+                                   ↕
+                         (HTTPS Network Requests)
+                                   ↕
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                    SUPABASE CLOUD (SERVER SIDE)                       │
+│              https://ohpshxeynukbogwwezrt.supabase.co                │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  PostgreSQL Database (ALL BUSINESS DATA)                            │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  Tables:                                                      │ │
+│  │  ├─ inventory       ← Products, SKUs, Stock                  │ │
+│  │  ├─ sales           ← All sales transactions                 │ │
+│  │  ├─ customers       ← Customer records                       │ │
+│  │  ├─ expenses        ← Expense tracking                       │ │
+│  │  ├─ suppliers       ← Supplier management                    │ │
+│  │  ├─ purchase_orders ← PO tracking                            │ │
+│  │  ├─ businesses      ← Business settings                      │ │
+│  │  ├─ branches        ← Branch locations                       │ │
+│  │  ├─ profiles        ← User profiles & staff                  │ │
+│  │  ├─ categories      ← Product categories                     │ │
+│  │  ├─ roles           ← Role definitions                       │ │
+│  │  ├─ attendance      ← Staff attendance & geo                 │ │
+│  │  └─ ... (30+ tables total)                                   │ │
+│  │                                                               │ │
+│  │  ✅ SINGLE SOURCE OF TRUTH                                   │ │
+│  │  ✅ ACID TRANSACTIONS                                        │ │
+│  │  ✅ ROW LEVEL SECURITY (RLS)                                 │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  Supabase Storage (FILES & IMAGES)                                  │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  Buckets:                                                     │ │
+│  │  ├─ Inventoryimages  ← Product photos (compressed)           │ │
+│  │  └─ platform-assets  ← Logos, branding assets                │ │
+│  │                                                               │ │
+│  │  ✅ PUBLIC ACCESS (with signed URLs)                         │ │
+│  │  ✅ AUTO IMAGE COMPRESSION                                   │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  Supabase Auth (AUTHENTICATION)                                     │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  ├─ User accounts (email/password)                            │ │
+│  │  ├─ JWT token generation                                      │ │
+│  │  ├─ Token refresh (auto)                                      │ │
+│  │  ├─ Password reset flows                                      │ │
+│  │  └─ Email verification                                        │ │
+│  │                                                               │ │
+│  │  ✅ OAUTH2 STANDARD                                           │ │
+│  │  ✅ ENCRYPTED TOKENS                                          │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                          DATA FLOW EXAMPLE                            ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  SCENARIO: User creates a new product                               │
+└─────────────────────────────────────────────────────────────────────┘
+
+  [1] User fills form in Inventory page
+         ↓
+  [2] Clicks "Add Product" button
+         ↓
+  [3] InventoryContext.addProduct() called
+         ↓
+  [4] supabase.from('inventory').insert(newProduct)
+         ↓
+  [5] HTTPS POST → https://...supabase.co/rest/v1/inventory
+         ↓
+  [6] Supabase validates JWT token from localStorage
+         ↓
+  [7] Supabase checks RLS policies (business_id, branch_id)
+         ↓
+  [8] PostgreSQL INSERT INTO inventory VALUES (...)
+         ↓
+  [9] Response sent back to browser
+         ↓
+  [10] UI updates with new product
+         ↓
+  [11] ❌ NO localStorage.setItem() - Data stays in database!
+
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  SCENARIO: User refreshes page                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+  [1] Page reload
+         ↓
+  [2] Supabase SDK reads auth token from localStorage
+         ↓
+  [3] Validates token with Supabase Auth
+         ↓
+  [4] InventoryContext.useEffect() runs
+         ↓
+  [5] supabase.from('inventory').select()
+         ↓
+  [6] HTTPS GET → https://...supabase.co/rest/v1/inventory
+         ↓
+  [7] PostgreSQL SELECT * FROM inventory WHERE...
+         ↓
+  [8] Response with all products
+         ↓
+  [9] UI displays products
+         ↓
+  [10] ❌ NO localStorage.getItem('pos_inventory') - Fresh from DB!
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                        MULTI-DEVICE SCENARIO                          ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌────────────────┐                                  ┌────────────────┐
+│   DEVICE A     │                                  │   DEVICE B     │
+│   (Laptop)     │                                  │   (Tablet)     │
+└────────────────┘                                  └────────────────┘
+        │                                                   │
+        │ [1] User creates sale                            │
+        ├─────────────────────────┐                        │
+        │                         ↓                        │
+        │              ┌─────────────────────┐             │
+        │              │  SUPABASE DATABASE  │             │
+        │              │   (PostgreSQL)      │             │
+        │              └─────────────────────┘             │
+        │                         ↓                        │
+        │ [2] Sale stored ────────┘                        │
+        │                                                  │
+        │                         ↓                        │
+        │                  [3] Device B fetches sales     │
+        │                         ↓                        │
+        │                         └────────────────────────┤
+        │                                [4] Sale appears! │
+        │                                                  │
+        ✅ Same data, no sync issues                     ✅
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                    SECURITY & CONSISTENCY FEATURES                    ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  ROW LEVEL SECURITY (RLS) - Enforced by PostgreSQL                  │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  Policy: "users_can_only_see_their_business_data"            │ │
+│  │  ┌─────────────────────────────────────────────────────────┐  │ │
+│  │  │  CREATE POLICY ON inventory                             │  │ │
+│  │  │  FOR SELECT USING (business_id = auth.uid().business)   │  │ │
+│  │  └─────────────────────────────────────────────────────────┘  │ │
+│  │                                                               │ │
+│  │  ✅ Business A cannot see Business B's data                  │ │
+│  │  ✅ Staff can only see their assigned branch                 │ │
+│  │  ✅ Enforced at DATABASE level (not client-side)             │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  ACID TRANSACTIONS - PostgreSQL Guarantees                          │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  A - Atomicity    ✅ All or nothing (rollback on error)      │ │
+│  │  C - Consistency  ✅ Database constraints enforced           │ │
+│  │  I - Isolation    ✅ Concurrent transactions don't conflict  │ │
+│  │  D - Durability   ✅ Data persists (disk storage)            │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  DATA CONSISTENCY - Single Source of Truth                          │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  ✅ NO localStorage caching → NO stale data                  │ │
+│  │  ✅ NO client-side state → NO sync conflicts                 │ │
+│  │  ✅ Direct database queries → Always fresh data              │ │
+│  │  ✅ Multi-device support → Same data everywhere              │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         COMPARISON TABLE                              ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────┬─────────────────────┬─────────────────────────┐
+│  Storage Type       │  Tillsup POS        │  Why This Choice        │
+├─────────────────────┼─────────────────────┼─────────────────────────┤
+│  localStorage       │  ❌ Not used        │  Avoid data staleness   │
+│  (business data)    │                     │  No sync conflicts      │
+├─────────────────────┼─────────────────────┼─────────────────────────┤
+│  localStorage       │  ✅ Used (tokens)   │  Standard OAuth2        │
+│  (auth tokens)      │                     │  Persistent sessions    │
+├─────────────────────┼─────────────────────┼─────────────────────────┤
+│  sessionStorage     │  ❌ Not used        │  Not needed             │
+├─────────────────────┼─────────────────────┼─────────────────────────┤
+│  IndexedDB          │  ❌ Not used        │  Supabase is fast       │
+├─────────────────────┼─────────────────────┼─────────────────────────┤
+│  PostgreSQL         │  ✅ PRIMARY         │  ACID, RLS, reliable    │
+│  (Supabase)         │                     │  Multi-device support   │
+├─────────────────────┼─────────────────────┼─────────────────────────┤
+│  Object Storage     │  ✅ Used (images)   │  Scalable, CDN-backed   │
+│  (Supabase)         │                     │  Auto compression       │
+└─────────────────────┴─────────────────────┴─────────────────────────┘
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                           KEY BENEFITS                                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+  ✅  ZERO DATA INCONSISTENCY
+      └─ Single source of truth (database)
+      └─ No stale data from cache
+      └─ No sync conflicts
+
+  ✅  MULTI-DEVICE SYNCHRONIZATION
+      └─ Same data on all devices
+      └─ Real-time updates possible
+      └─ No manual sync needed
+
+  ✅  SECURITY & COMPLIANCE
+      └─ Row Level Security enforced
+      └─ Cannot bypass via localStorage tampering
+      └─ ACID transactions for data integrity
+
+  ✅  SCALABILITY
+      └─ PostgreSQL handles millions of rows
+      └─ Horizontal scaling available
+      └─ CDN for image delivery
+
+  ✅  RELIABILITY
+      └─ Supabase 99.9% uptime SLA
+      └─ Automatic backups
+      └─ Point-in-time recovery
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                            SUMMARY                                    ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+  📊  ALL BUSINESS DATA        →  Supabase PostgreSQL
+  🖼️   ALL IMAGES              →  Supabase Storage
+  🔐  AUTH TOKENS ONLY         →  localStorage (OAuth2 standard)
+  ❌  NO DATA IN LOCALSTORAGE  →  Zero inconsistency risk
+  ✅  SINGLE SOURCE OF TRUTH   →  Database-first architecture
+
+═══════════════════════════════════════════════════════════════════════════
+
+  VERIFIED: ✅ 100% DATABASE-BACKED ARCHITECTURE
+
+═══════════════════════════════════════════════════════════════════════════

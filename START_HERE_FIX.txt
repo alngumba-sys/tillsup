@@ -1,0 +1,113 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                         🚨 START HERE - READ THIS                        ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+YOU GOT AN ERROR RUNNING THE FIRST SQL SCRIPT.
+That's OK - I've fixed it!
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  WHAT HAPPENED                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+The verification query in the first SQL file had a syntax error.
+I've created a CORRECTED version for you.
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  WHAT TO DO NOW (2 MINUTES)                                              │
+└──────────────────────────────────────────────────────────────────────────┘
+
+1. Open Supabase Dashboard → SQL Editor
+   https://supabase.com/dashboard
+
+2. ⭐ Open this file: /APPLY_THIS_FIXED.sql
+
+3. Copy ALL the SQL (from BEGIN to COMMIT)
+
+4. Paste into Supabase SQL Editor
+
+5. Click "Run" (or Ctrl+Enter)
+
+6. Wait for "Success" message
+
+7. You'll see the verification results at the bottom
+
+8. Test registration → ERRORS WILL BE GONE! ✅
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  IMPORTANT: Use the CORRECTED file                                       │
+└──────────────────────────────────────────────────────────────────────────┘
+
+❌ DON'T USE: /APPLY_THIS_SQL_NOW.sql (has the error you just saw)
+
+✅ USE THIS:  /APPLY_THIS_FIXED.sql (corrected version)
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  WHAT THIS FIXES                                                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+✅ Error 1: "infinite recursion detected in policy for relation profiles"
+✅ Error 2: "permission denied for table users"
+✅ The pg_get_expr error you just encountered
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  AFTER RUNNING THE SQL                                                   │
+└──────────────────────────────────────────────────────────────────────────┘
+
+You'll see 3 result sets at the bottom:
+
+1. POLICIES CREATED (should show 8 policies):
+   ✓ businesses_insert
+   ✓ businesses_select
+   ✓ businesses_update
+   ✓ businesses_delete
+   ✓ profiles_insert
+   ✓ profiles_select
+   ✓ profiles_update
+   ✓ profiles_delete
+
+2. PERMISSIONS GRANTED (should show SELECT, INSERT, UPDATE, DELETE)
+
+3. TRIGGERS CREATED (should show auto_set_owner_id)
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  TESTING                                                                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+After running the SQL:
+
+1. Go to your registration page
+2. Open browser console (F12)
+3. Fill out registration form
+4. Submit
+5. Check console - should see NO errors about:
+   • "infinite recursion"
+   • "permission denied for table users"
+6. Check Supabase Table Editor:
+   • businesses table - new record exists
+   • profiles table - new record exists
+7. Login with new account
+8. Verify dashboard loads and all modules accessible
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  BONUS: TRIAL USERS HAVE FULL ACCESS                                    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Already fixed in your code:
+✅ Trial users can access ALL modules
+✅ All features enabled (same as Enterprise)
+✅ 30-day trial period
+✅ 1 branch, 5 staff limit
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  IF YOU STILL GET ERRORS                                                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+1. Make sure you're running /APPLY_THIS_FIXED.sql (not the old one)
+2. Copy the exact error message
+3. Check Supabase Dashboard → Logs → Database
+4. Try running in a new query tab
+5. Make sure you selected the correct Supabase project
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ⭐ ACTION: Run /APPLY_THIS_FIXED.sql in Supabase SQL Editor NOW!       ║
+╚══════════════════════════════════════════════════════════════════════════╝

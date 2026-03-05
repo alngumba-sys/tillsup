@@ -1,0 +1,245 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║               REGISTRATION ERROR - QUICK FIX GUIDE                    ║
+║                    "No profile record" ERROR                          ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  ⚠️  THE PROBLEM                                                      │
+├───────────────────────────────────────────────────────────────────────┤
+│  Error: "User is authenticated but has no profile record"            │
+│                                                                       │
+│  What happened:                                                       │
+│  1. ✅ Auth account created (albert@test.com)                        │
+│  2. ❌ Business record FAILED (network blocked)                      │
+│  3. ❌ Profile record FAILED (network blocked)                       │
+│  4. 🔴 Result: Partial registration (auth only)                      │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  🚨 ROOT CAUSE: NETWORK BLOCKAGE                                      │
+├───────────────────────────────────────────────────────────────────────┤
+│  Your browser console shows:                                          │
+│  ❌ ERR_BLOCKED_BY_ADMINISTRATOR                                      │
+│                                                                       │
+│  This means:                                                          │
+│  • Your network/firewall is blocking Supabase                        │
+│  • Corporate/school/ISP restriction                                  │
+│  • Cannot access https://ohpshxeynukbogwwezrt.supabase.co            │
+│                                                                       │
+│  YOU MUST FIX THIS FIRST! ⚠️                                         │
+└───────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                          SOLUTION: 3 STEPS                            ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  STEP 1: FIX NETWORK ACCESS (CRITICAL!) ⚡                           │
+├───────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Choose ONE option:                                                   │
+│                                                                       │
+│  ✅ OPTION A: Use VPN (Recommended)                                  │
+│     1. Download ProtonVPN (free): https://protonvpn.com              │
+│     2. Install and connect to any server                             │
+│     3. Test: Open console (F12), run:                                │
+│        fetch('https://ohpshxeynukbogwwezrt.supabase.co/rest/v1/')    │
+│          .then(() => alert('✅ Works!'))                             │
+│                                                                       │
+│  ✅ OPTION B: Use Mobile Hotspot                                     │
+│     1. Turn on phone's WiFi hotspot                                  │
+│     2. Disconnect computer from WiFi                                 │
+│     3. Connect computer to phone's hotspot                           │
+│     4. Run same test above                                           │
+│                                                                       │
+│  ✅ OPTION C: Different Network                                      │
+│     1. Go to different location (home/cafe/library)                  │
+│     2. Connect to their WiFi                                         │
+│     3. Run same test above                                           │
+│                                                                       │
+│  ⚠️  DO NOT PROCEED until you see "✅ Works!" alert                  │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  STEP 2: LOGIN WITH YOUR ACCOUNT 🔐                                  │
+├───────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  1. Go to: /login                                                     │
+│                                                                       │
+│  2. Enter credentials:                                                │
+│     Email:    albert@test.com                                        │
+│     Password: (the password you used during registration)            │
+│                                                                       │
+│  3. Click "Login"                                                     │
+│                                                                       │
+│  4. You will see a toast notification:                               │
+│     "⚠️ Registration incomplete. Please complete your setup."        │
+│                                                                       │
+│  5. Wait 1 second - auto-redirected to /recovery                     │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  STEP 3: COMPLETE RECOVERY FORM ✏️                                   │
+├───────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  You're now on: /recovery                                             │
+│                                                                       │
+│  Fill in the form:                                                    │
+│                                                                       │
+│  BUSINESS INFORMATION:                                                │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │ Business Name:  ABCDR Limited                                   │ │
+│  │ Country:        Kenya                                           │ │
+│  │ Currency:       KES                                             │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  YOUR INFORMATION:                                                    │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │ First Name:     Albert                                          │ │
+│  │ Last Name:      (your last name)                                │ │
+│  │ Phone Number:   0712345678                                      │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  Click: "Complete Registration"                                      │
+│                                                                       │
+│  You'll see:                                                          │
+│  ✅ "Business created!"                                              │
+│  ✅ "Profile created!"                                               │
+│  ✅ "Main branch created!"                                           │
+│  ✅ "Registration completed successfully! Redirecting..."            │
+│                                                                       │
+│  Wait 1.5 seconds - auto-redirected to /dashboard                    │
+└───────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                            SUCCESS! 🎉                                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  You now have full access to:                                         │
+│                                                                       │
+│  ✅ Dashboard - Overview & metrics                                   │
+│  ✅ POS Terminal - Make sales                                        │
+│  ✅ Inventory - Manage products                                      │
+│  ✅ Sales Reports - View analytics                                   │
+│  ✅ Expenses - Track spending                                        │
+│  ✅ Suppliers - Manage vendors                                       │
+│  ✅ Staff Management - Add employees                                 │
+│  ✅ Branch Management - Multi-location support                       │
+│                                                                       │
+│  Your trial:                                                          │
+│  📅 30 days free trial                                               │
+│  🎁 All features unlocked                                            │
+│  💳 No payment required                                              │
+└───────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                      ALTERNATIVE: FRESH START                         ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  If you prefer to delete the partial account and start over:         │
+├───────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  1. Fix network access first (VPN/hotspot)                           │
+│                                                                       │
+│  2. Go to Supabase SQL Editor:                                       │
+│     https://supabase.com/dashboard/project/ohpshxeynukbogwwezrt/sql  │
+│                                                                       │
+│  3. Run this SQL:                                                     │
+│     ┌───────────────────────────────────────────────────────────┐   │
+│     │ DELETE FROM auth.users                                     │   │
+│     │ WHERE email = 'albert@test.com';                           │   │
+│     └───────────────────────────────────────────────────────────┘   │
+│                                                                       │
+│  4. Go to /register                                                   │
+│                                                                       │
+│  5. Register again with same or different email                      │
+│                                                                       │
+│  6. Complete registration normally                                   │
+└───────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                        TROUBLESHOOTING                                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  ❌ "Still getting ERR_BLOCKED_BY_ADMINISTRATOR"                     │
+├───────────────────────────────────────────────────────────────────────┤
+│  ➜ VPN not connected properly                                        │
+│  ➜ Try different VPN server                                          │
+│  ➜ Disable antivirus temporarily                                     │
+│  ➜ Try mobile hotspot instead                                        │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  ❌ "Login fails"                                                     │
+├───────────────────────────────────────────────────────────────────────┤
+│  ➜ Check password (case-sensitive)                                   │
+│  ➜ Verify email: albert@test.com                                     │
+│  ➜ Try "Forgot Password" link                                        │
+│  ➜ Check console for errors                                          │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  ❌ "Recovery page shows errors"                                     │
+├───────────────────────────────────────────────────────────────────────┤
+│  ➜ Check network still accessible                                    │
+│  ➜ Open console (F12) - check for red errors                        │
+│  ➜ Verify VPN still connected                                        │
+│  ➜ Try refreshing page                                               │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│  ❌ "Redirects to login after recovery"                              │
+├───────────────────────────────────────────────────────────────────────┤
+│  ➜ Login again with same credentials                                 │
+│  ➜ Should work now (profile created)                                 │
+│  ➜ If still fails, check Supabase tables                            │
+└───────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                    VERIFICATION CHECKLIST                             ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Before starting recovery:
+  [ ] Network access fixed (VPN/hotspot connected)
+  [ ] Supabase accessible (ran fetch test - got "✅ Works!")
+  [ ] Know login credentials (email + password)
+  [ ] Browser console open (F12) to see errors
+
+During recovery:
+  [ ] Logged in successfully
+  [ ] Saw "Registration incomplete" toast
+  [ ] Auto-redirected to /recovery page
+  [ ] Filled in all required fields
+  [ ] Clicked "Complete Registration"
+  [ ] Saw success messages
+
+After recovery:
+  [ ] Redirected to /dashboard
+  [ ] No errors in console
+  [ ] Can see dashboard metrics
+  [ ] Can navigate to POS, Inventory, etc.
+  [ ] Business name shows correctly
+
+╔════════════════════════════════════════════════════════════��══════════╗
+║                          QUICK SUMMARY                                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+  🔴 Problem:   Network blocked → Partial registration
+  
+  🟡 Fix:       VPN/Hotspot → Login → Complete /recovery form
+  
+  🟢 Result:    Full access to Tillsup POS dashboard
+
+═══════════════════════════════════════════════════════════════════════════
+
+  ⚡ MOST IMPORTANT: FIX NETWORK ACCESS FIRST! ⚡
+
+═══════════════════════════════════════════════════════════════════════════
+
+Need help? Check console (F12) for errors and refer to:
+• /REGISTRATION_FIX_INSTRUCTIONS.md (detailed guide)
+• Supabase Table Editor (verify records)
+• Network tab in DevTools (check blocked requests)

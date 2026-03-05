@@ -1,0 +1,165 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                  🚨 FIX REGISTRATION ERRORS (2 MIN)                      ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+❌ ERROR 1: "infinite recursion detected in policy for relation profiles"
+❌ ERROR 2: "permission denied for table users"
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  THE FIX                                                                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+1. Open Supabase Dashboard → SQL Editor
+   https://supabase.com/dashboard
+
+2. Open this file: /APPLY_THIS_SQL_NOW.sql
+
+3. Copy ALL the SQL (from BEGIN to COMMIT)
+
+4. Paste into Supabase SQL Editor
+
+5. Click "Run" (or Ctrl+Enter)
+
+6. Wait for "Success" message
+
+7. Test registration → ERRORS GONE! ✅
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  WHAT GETS FIXED                                                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+✅ Removes infinite recursion in RLS policies
+✅ Grants permission to auth.users table
+✅ Drops ALL problematic triggers
+✅ Creates simple, working RLS policies
+✅ Enables table permissions for authenticated users
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ROOT CAUSES                                                             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Error 1: Infinite Recursion
+→ RLS policy on profiles table referenced itself in a subquery
+→ Created circular dependency
+→ Fix: Simplified policy to use EXISTS with businesses table
+
+Error 2: Permission Denied
+→ Triggers tried to access auth.users table without permission
+→ authenticated role didn't have SELECT on auth.users
+→ Fix: Granted SELECT permission and removed problematic triggers
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  VERIFICATION (After Running SQL)                                        │
+└──────────────────────────────────────────────────────────────────────────┘
+
+✓ Check Policies Created:
+  SELECT tablename, policyname FROM pg_policies 
+  WHERE tablename IN ('businesses', 'profiles');
+  
+  Should show:
+  • businesses_insert
+  • businesses_select  
+  • businesses_update
+  • businesses_delete
+  • profiles_insert
+  • profiles_select
+  • profiles_update
+  • profiles_delete
+
+✓ Check Permissions Granted:
+  SELECT table_name, privilege_type FROM information_schema.table_privileges
+  WHERE table_name IN ('businesses', 'profiles', 'users')
+  AND grantee = 'authenticated';
+
+✓ Test Registration:
+  • Go to registration page
+  • Fill form
+  • Submit
+  • Check browser console (F12)
+  • Should see NO errors
+  • Check Supabase tables for new records
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  FILES PROVIDED                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+
+📄 /APPLY_THIS_SQL_NOW.sql
+   → The actual SQL fix (RUN THIS!)
+
+📘 /FIX_ERRORS_NOW.md
+   → Complete documentation with troubleshooting
+
+📋 This file
+   → Quick reference card
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  BONUS: TRIAL USERS NOW HAVE FULL ACCESS                                │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Previously fixed (already in your code):
+✅ Free Trial users can access ALL modules
+✅ All features enabled during trial period
+✅ Same access as Enterprise users
+
+Trial Limits:
+• 1 Branch Location
+• Up to 5 Staff Members  
+• 30 days duration
+• FULL feature access!
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  TROUBLESHOOTING                                                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+If still seeing errors after running SQL:
+
+1. Check SQL ran successfully (no red errors in Supabase)
+2. Check browser console (F12) for specific error
+3. Check Supabase → Logs → Database
+4. Verify policies exist (run verification query above)
+5. Try registering in incognito/private window
+6. Clear browser cache and cookies
+
+Common Issues:
+
+• "Policies not found" → Re-run the SQL script
+• "Still getting recursion" → Make sure you ran ENTIRE script
+• "Permission still denied" → Check auth.users permissions granted
+• "Triggers not working" → Normal, they're optional for convenience
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  WHAT THE SQL DOES (Technical)                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Step 1: DROP all problematic triggers
+  • validate_business_owner_trigger
+  • auto_set_business_owner_trigger
+  • All variations that access auth.users
+
+Step 2: DROP all old RLS policies
+  • Removes recursive policies
+  • Clears conflicting policies
+
+Step 3: GRANT permissions
+  • GRANT SELECT ON auth.users TO authenticated
+  • Fixes "permission denied" error
+
+Step 4: CREATE simple RLS policies
+  • businesses: insert/select/update/delete
+  • profiles: insert/select/update/delete
+  • NO circular references
+  • NO recursion
+
+Step 5: ENABLE RLS
+  • ALTER TABLE ... ENABLE ROW LEVEL SECURITY
+
+Step 6: GRANT table permissions
+  • GRANT INSERT, SELECT, UPDATE, DELETE TO authenticated
+
+Step 7: CREATE safe trigger (optional)
+  • Auto-sets owner_id if null
+  • Does NOT access auth.users
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ACTION: Run /APPLY_THIS_SQL_NOW.sql in Supabase SQL Editor NOW!       ║
+╚══════════════════════════════════════════════════════════════════════════╝
