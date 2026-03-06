@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 interface BrandingAssets {
   logoMain: string | null;
   logoDark: string | null;
+  logoFooter: string | null;
   favicon: string | null;
   authBg: string | null;
   ogImage: string | null;
@@ -21,6 +22,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   const [assets, setAssets] = useState<BrandingAssets>({
     logoMain: null,
     logoDark: null,
+    logoFooter: null,
     favicon: null,
     authBg: null,
     ogImage: null,
@@ -60,6 +62,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
       setAssets({
         logoMain: getUrl('platform-logo-main'),
         logoDark: getUrl('platform-logo-dark'),
+        logoFooter: getUrl('platform-logo-footer'),
         favicon: getUrl('platform-favicon'),
         authBg: getUrl('platform-auth-bg'),
         ogImage: getUrl('platform-og-image'),

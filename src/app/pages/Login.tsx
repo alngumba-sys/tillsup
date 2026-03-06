@@ -186,14 +186,12 @@ export function Login() {
       <Card className="w-full max-w-md shadow-lg relative z-10 bg-card">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center items-center gap-3">
-            {assets.logoMain ? (
+            {assets.logoMain && (
               <img 
                 src={assets.logoMain} 
-                alt="Tillsup" 
+                alt="Logo" 
                 className="h-12 w-auto object-contain" 
               />
-            ) : (
-              <TillsupLogo height={48} />
             )}
           </div>
           <div>

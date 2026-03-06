@@ -37,6 +37,7 @@ import { LandingSimple } from "./pages/LandingSimple";
 import { DiagnosticLanding } from "./pages/DiagnosticLanding";
 import { PublicRouteTest } from "./pages/PublicRouteTest";
 import { WhoWeAre } from "./pages/WhoWeAre";
+import { Pricing } from "./pages/Pricing";
 import { BranchClosed } from "./pages/BranchClosed";
 import { SimpleTest } from "./pages/SimpleTest";
 import { SimpleTestBasic } from "./pages/SimpleTestBasic";
@@ -83,6 +84,11 @@ export const router = createBrowserRouter([
   {
     path: "/who-we-are",
     element: <WhoWeAre />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/pricing",
+    element: <Pricing />,
     errorElement: <ErrorBoundary />,
   },
   {

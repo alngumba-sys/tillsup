@@ -1,9 +1,13 @@
 import React from "react";
 import { useNavigate } from "react-router";
-import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CheckCircle2, ArrowRight, Pill } from "lucide-react";
+import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CheckCircle2, ArrowRight, Pill, Target, Shield, Zap, Heart } from "lucide-react";
 import { isPreviewMode } from "../utils/previewMode";
 import { TillsupLogo } from "../components/TillsupLogo";
 import { useBranding } from "../contexts/BrandingContext";
+
+// Import hero images
+import heroImage1 from 'figma:asset/21a330cd4033b51a67a4c364b3c77fd54c1bb825.png';
+import heroImage2 from 'figma:asset/ebca2988684ae36c1d0bd8615f19bc93d4d1fe29.png';
 
 /**
  * ULTRA SIMPLE LANDING PAGE - NO AUTH LOGIC
@@ -35,13 +39,7 @@ export function LandingSimple() {
   const { assets } = useBranding();
   const [adminClicks, setAdminClicks] = React.useState(0);
   
-  // Preview mode: Automatically redirect to dashboard
-  React.useEffect(() => {
-    if (isPreviewMode()) {
-      console.log('🎨 Preview mode detected - redirecting to dashboard');
-      navigate('/app/dashboard');
-    }
-  }, [navigate]);
+  // Preview mode redirect removed - users should always see the landing page
 
   // Reset click counter after 2 seconds of inactivity
   React.useEffect(() => {
@@ -495,7 +493,7 @@ export function LandingSimple() {
             <ArrowRight size={18} />
           </button>
           <button
-            onClick={() => navigate("/who-we-are")}
+            onClick={() => navigate("/pricing")}
             className="btn-cta btn-cta-outline"
           >
             View Pricing
@@ -578,6 +576,75 @@ export function LandingSimple() {
               Pharmacies
             </div>
           </div>
+        </div>
+
+        {/* Who We Are Section */}
+        <div style={{
+          marginTop: 'clamp(60px, 10vw, 100px)',
+          padding: '0 1rem',
+          maxWidth: '900px',
+          width: '100%'
+        }}>
+          {/* Section Badge */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            color: '#0891b2',
+            fontSize: 'clamp(13px, 2vw, 15px)',
+            fontWeight: '600',
+            marginBottom: 'clamp(12px, 2vw, 16px)'
+          }}>
+            <Target size={20} />
+            <span>Who We Are</span>
+          </div>
+
+          {/* Content */}
+          <p style={{
+            fontSize: 'clamp(15px, 2.5vw, 18px)',
+            color: '#94a3b8',
+            lineHeight: '1.7',
+            textAlign: 'center',
+            margin: '0'
+          }}>
+            We are a technology company dedicated to empowering businesses across the continent with the tools they need to thrive in a digital economy. From the bustling markets of Lagos to the tech hubs of Nairobi, we believe that every business owner deserves world-class tools to manage their operations. Our mission is to democratize access to enterprise-grade POS technology, making it accessible, affordable, and easy to use for businesses of all sizes.
+          </p>
+        </div>
+
+        {/* Building the Future Section - Full Width Image */}
+        <div style={{
+          marginTop: 'clamp(80px, 12vw, 120px)',
+          width: '100%',
+          padding: '0'
+        }}>
+          <img 
+            src={heroImage1} 
+            alt="Building the Future of African Commerce" 
+            style={{
+              width: '100%',
+              height: 'auto',
+              display: 'block'
+            }}
+          />
+        </div>
+
+        {/* Core Values Section - Full Width Image */}
+        <div style={{
+          marginTop: 'clamp(60px, 10vw, 100px)',
+          width: '100%',
+          padding: '0',
+          marginBottom: 'clamp(60px, 10vw, 100px)'
+        }}>
+          <img 
+            src={heroImage2} 
+            alt="Core Values and Ready to Grow" 
+            style={{
+              width: '100%',
+              height: 'auto',
+              display: 'block'
+            }}
+          />
         </div>
       </div>
     </div>

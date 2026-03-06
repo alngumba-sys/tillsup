@@ -23,17 +23,8 @@ export function TopNavbar() {
     <div className="h-16 border-b border-border flex items-center justify-between px-4 lg:px-6 fixed top-0 left-0 right-0 z-50 bg-[#f3f7ff]">
       {/* Logo and App Name */}
       <div className="flex items-center gap-3">
-        {assets.logoMain ? (
-          <img src={assets.logoMain} alt="Tillsup" className="h-10 w-auto object-contain" />
-        ) : (
-          <>
-            <div className="bg-[#ED363F] p-1.5 rounded-lg text-white shadow-lg shadow-red-500/20">
-              <Store className="w-5 h-5" strokeWidth={2.5} />
-            </div>
-            <span className="text-xl font-bold font-['Outfit'] tracking-tight text-slate-900">
-              Tillsup
-            </span>
-          </>
+        {assets.logoMain && (
+          <img src={assets.logoMain} alt="Logo" className="h-10 w-auto object-contain" />
         )}
         {/* Preview Mode Badge */}
         {isPreviewMode() && (

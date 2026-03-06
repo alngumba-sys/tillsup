@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../components/ui/command";
-import { Store, Building2, User, Mail, Lock, ArrowLeft, Check, ChevronsUpDown, Phone, Eye, EyeOff } from "lucide-react";
+import { Store, Building2, User, Mail, Lock, ArrowLeft, Check, ChevronsUpDown, Phone, Eye, EyeOff, Sparkles } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
 import { COUNTRIES } from "../utils/countries";
@@ -154,17 +154,8 @@ export function BusinessRegistration() {
       <Card className="w-full max-w-lg shadow-lg relative z-10 bg-card">
         <CardHeader className="text-center space-y-2 pb-4 pt-6">
           <div className="flex justify-center items-center gap-3 mb-4">
-            {assets.logoMain ? (
-               <img src={assets.logoMain} alt="Tillsup" className="h-12 w-auto object-contain" />
-            ) : (
-              <>
-                <div className="bg-[#ED363F] p-2 rounded-lg text-white shadow-lg shadow-red-500/20">
-                  <Store className="w-6 h-6" strokeWidth={2.5} />
-                </div>
-                <span className="text-2xl font-bold font-['Outfit'] tracking-tight text-card-foreground">
-                  Tillsup
-                </span>
-              </>
+            {assets.logoMain && (
+               <img src={assets.logoMain} alt="Logo" className="h-12 w-auto object-contain" />
             )}
           </div>
           <div>
@@ -172,6 +163,16 @@ export function BusinessRegistration() {
             <CardDescription className="mt-1 text-sm">
               Create your business account to get started
             </CardDescription>
+          </div>
+          
+          {/* Free Trial Banner */}
+          <div className="bg-[#0891b2]/10 border border-[#0891b2]/30 rounded-lg p-3 mt-4">
+            <div className="flex items-center justify-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#0891b2]" />
+              <span className="text-sm font-semibold text-[#075d8c]">
+                14-Day Free Trial • Full Access • No Credit Card Required
+              </span>
+            </div>
           </div>
         </CardHeader>
 

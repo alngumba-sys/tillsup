@@ -25,7 +25,9 @@ import {
   Monitor,
   Moon,
   Sun,
-  Palette
+  Palette,
+  DollarSign,
+  Layers
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -90,6 +92,13 @@ const BRANDING_SLOTS = [
     description: "Used in dark mode navigation and footers. Recommended: White text PNG, 200x50px.",
     icon: Moon,
     previewClass: "bg-slate-950"
+  },
+  {
+    id: "platform-logo-footer",
+    label: "Footer Logo",
+    description: "Used in website footers and bottom sections. Recommended: PNG, 200x50px.",
+    icon: Layers,
+    previewClass: "bg-slate-800"
   },
   {
     id: "platform-favicon",
@@ -167,6 +176,83 @@ export function AdminDashboard() {
   const [slotUploading, setSlotUploading] = useState<string | null>(null);
   const [showRLSDialog, setShowRLSDialog] = useState(false);
   const [storageError, setStorageError] = useState(false);
+
+  // Pricing State - Load from localStorage or use defaults
+  const [pricingData, setPricingData] = useState<Record<string, any>>(() => {
+    const saved = localStorage.getItem('tillsup-pricing-data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {
+          KE: { 
+            basic_monthly: 999, 
+            basic_quarterly: 2697, 
+            basic_annual: 9588,
+            professional_monthly: 2499, 
+            professional_quarterly: 6747,
+            professional_annual: 23988,
+            quarterly_discount: 10,
+            annual_discount: 20
+          },
+          GH: { 
+            basic_monthly: 150, 
+            basic_quarterly: 405,
+            basic_annual: 1440,
+            professional_monthly: 350, 
+            professional_quarterly: 945,
+            professional_annual: 3360,
+            quarterly_discount: 10,
+            annual_discount: 20
+          },
+          ET: { 
+            basic_monthly: 500, 
+            basic_quarterly: 1350,
+            basic_annual: 4800,
+            professional_monthly: 1200, 
+            professional_quarterly: 3240,
+            professional_annual: 11520,
+            quarterly_discount: 10,
+            annual_discount: 20
+          },
+        };
+      }
+    }
+    return {
+      KE: { 
+        basic_monthly: 999, 
+        basic_quarterly: 2697, 
+        basic_annual: 9588,
+        professional_monthly: 2499, 
+        professional_quarterly: 6747,
+        professional_annual: 23988,
+        quarterly_discount: 10,
+        annual_discount: 20
+      },
+      GH: { 
+        basic_monthly: 150, 
+        basic_quarterly: 405,
+        basic_annual: 1440,
+        professional_monthly: 350, 
+        professional_quarterly: 945,
+        professional_annual: 3360,
+        quarterly_discount: 10,
+        annual_discount: 20
+      },
+      ET: { 
+        basic_monthly: 500, 
+        basic_quarterly: 1350,
+        basic_annual: 4800,
+        professional_monthly: 1200, 
+        professional_quarterly: 3240,
+        professional_annual: 11520,
+        quarterly_discount: 10,
+        annual_discount: 20
+      },
+    };
+  });
+  const [selectedPricingCountry, setSelectedPricingCountry] = useState('KE');
+  const [savingPricing, setSavingPricing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -646,6 +732,7 @@ export function AdminDashboard() {
             <div className="flex items-center justify-between">
                 <TabsList className="bg-slate-950/40 border border-white/10">
                     <TabsTrigger value="overview" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400">Overview</TabsTrigger>
+                    <TabsTrigger value="pricing" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400">Pricing Management</TabsTrigger>
                     <TabsTrigger value="assets" onClick={fetchAssets} className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400">Platform Assets</TabsTrigger>
                 </TabsList>
             </div>
@@ -831,6 +918,7 @@ export function AdminDashboard() {
 
                 {/* Data Table */}
                 <div className={`${glassClass} rounded-lg overflow-hidden`}>
+                  <div className="max-h-[600px] overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="border-white/10 hover:bg-white/5">
@@ -983,6 +1071,320 @@ export function AdminDashboard() {
                       </TableRow>
                     </TableFooter>
                   </Table>
+                  </div>
+                </div>
+            </TabsContent>
+
+            <TabsContent value="pricing" className="space-y-8">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1 text-white">Pricing Management</h2>
+                    <p className="text-slate-400">Set country-specific pricing for subscription tiers</p>
+                  </div>
+                </div>
+
+                {/* Country Selector */}
+                <Card className={`${glassClass} border-white/10`}>
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Globe className="w-5 h-5 text-indigo-400" />
+                      Select Country
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Choose a country to manage its pricing
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Select value={selectedPricingCountry} onValueChange={setSelectedPricingCountry}>
+                      <SelectTrigger className="bg-slate-950/30 border-white/10 text-white w-64">
+                        <SelectValue placeholder="Select country" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-900 border-white/10 text-white">
+                        <SelectItem value="KE" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Kenya (Ksh)</SelectItem>
+                        <SelectItem value="GH" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Ghana (GH¢)</SelectItem>
+                        <SelectItem value="ET" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Ethiopia (ETB)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+
+                {/* Discount Percentages */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <Card className={`${glassClass} border-white/10`}>
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-green-400" />
+                        Discount Percentages
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Set discount rates for quarterly and annual billing
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className="text-slate-300">Quarterly Discount (%)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={pricingData[selectedPricingCountry]?.quarterly_discount || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                quarterly_discount: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Annual Discount (%)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={pricingData[selectedPricingCountry]?.annual_discount || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                annual_discount: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Pricing Forms */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Basic Tier */}
+                  <Card className={`${glassClass} border-white/10`}>
+                    <CardHeader>
+                      <CardTitle className="text-white">Basic Tier</CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Up to 2 branches, basic features
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className="text-slate-300">Monthly Price</Label>
+                        <Input
+                          type="number"
+                          value={pricingData[selectedPricingCountry]?.basic_monthly || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                basic_monthly: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Quarterly Price</Label>
+                        <Input
+                          type="number"
+                          value={pricingData[selectedPricingCountry]?.basic_quarterly || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                basic_quarterly: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Annual Price</Label>
+                        <Input
+                          type="number"
+                          value={pricingData[selectedPricingCountry]?.basic_annual || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                basic_annual: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Professional Tier */}
+                  <Card className={`${glassClass} border-white/10`}>
+                    <CardHeader>
+                      <CardTitle className="text-white">Professional Tier</CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Up to 5 branches, advanced features
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className="text-slate-300">Monthly Price</Label>
+                        <Input
+                          type="number"
+                          value={pricingData[selectedPricingCountry]?.professional_monthly || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                professional_monthly: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Quarterly Price</Label>
+                        <Input
+                          type="number"
+                          value={pricingData[selectedPricingCountry]?.professional_quarterly || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                professional_quarterly: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Annual Price</Label>
+                        <Input
+                          type="number"
+                          value={pricingData[selectedPricingCountry]?.professional_annual || 0}
+                          onChange={(e) => {
+                            setPricingData({
+                              ...pricingData,
+                              [selectedPricingCountry]: {
+                                ...pricingData[selectedPricingCountry],
+                                professional_annual: parseFloat(e.target.value)
+                              }
+                            });
+                          }}
+                          className="bg-slate-950/30 border-white/10 text-white"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Enterprise Info */}
+                <Alert className="bg-indigo-500/10 border-indigo-500/30">
+                  <DollarSign className="h-4 w-4 text-indigo-400" />
+                  <AlertTitle className="text-indigo-300">Enterprise Tier</AlertTitle>
+                  <AlertDescription className="text-indigo-200">
+                    Enterprise pricing is custom and requires direct contact with sales. No pricing configuration needed.
+                  </AlertDescription>
+                </Alert>
+
+                {/* Preview */}
+                <Card className={`${glassClass} border-white/10`}>
+                  <CardHeader>
+                    <CardTitle className="text-white">Pricing Preview</CardTitle>
+                    <CardDescription className="text-slate-400">
+                      How prices will appear on the pricing page
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-lg bg-slate-950/30 border border-white/10">
+                        <h4 className="font-semibold text-white mb-2">Basic</h4>
+                        <p className="text-2xl font-bold text-indigo-400">
+                          {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.basic_monthly?.toLocaleString() || 0}
+                        </p>
+                        <p className="text-sm text-slate-400">per month</p>
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-green-400">
+                            Quarterly: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.basic_quarterly?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.quarterly_discount || 0}%)
+                          </p>
+                          <p className="text-xs text-green-400">
+                            Annual: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.basic_annual?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.annual_discount || 0}%)
+                          </p>
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-lg bg-slate-950/30 border border-white/10">
+                        <h4 className="font-semibold text-white mb-2">Professional</h4>
+                        <p className="text-2xl font-bold text-indigo-400">
+                          {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.professional_monthly?.toLocaleString() || 0}
+                        </p>
+                        <p className="text-sm text-slate-400">per month</p>
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-green-400">
+                            Quarterly: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.professional_quarterly?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.quarterly_discount || 0}%)
+                          </p>
+                          <p className="text-xs text-green-400">
+                            Annual: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.professional_annual?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.annual_discount || 0}%)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    onClick={async () => {
+                      setSavingPricing(true);
+                      try {
+                        // Save to localStorage (in production, this would save to Supabase)
+                        localStorage.setItem('tillsup-pricing-data', JSON.stringify(pricingData));
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        toast.success('Pricing updated successfully! Changes will reflect on the pricing page.');
+                      } catch (error) {
+                        toast.error('Failed to save pricing data');
+                      } finally {
+                        setSavingPricing(false);
+                      }
+                    }}
+                    disabled={savingPricing}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
+                    {savingPricing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <DollarSign className="w-4 h-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open('/pricing', '_blank')}
+                    className="bg-slate-950/30 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
+                  >
+                    <ArrowUpRight className="w-4 h-4 mr-2" />
+                    Preview Pricing Page
+                  </Button>
                 </div>
             </TabsContent>
 
