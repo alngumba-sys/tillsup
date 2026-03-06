@@ -35,6 +35,17 @@ import { toast } from "sonner";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
 
+// Simple hash function for creating stable unique IDs
+const hashString = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
+};
+
 export function Reports() {
   const { 
     sales, 
@@ -118,7 +129,7 @@ export function Reports() {
     });
   };
 
-  // ═══════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
   // EXPORT TRANSACTIONS TO EXCEL
   // ═══════════════════════════════════════════════════════════════════
   const exportTransactions = () => {
@@ -207,18 +218,51 @@ export function Reports() {
       return date;
     });
 
-    const dailySalesData = last7Days.map(date => {
+    const dailySalesData = last7Days.map((date, index) => {
       const dateStr = date.toDateString();
       const daySales = filteredSales.filter(
         sale => new Date(sale.timestamp).toDateString() === dateStr
       );
       return {
+        id: `day-${index}`,
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         revenue: daySales.reduce((sum, sale) => sum + sale.total, 0),
         sales: daySales.length,
         customers: daySales.length
       };
     });
+
+    // Create completely separate data arrays for each chart to prevent Recharts key conflicts
+    const revenueChartData = dailySalesData.map((d, i) => ({
+      id: `revenue-day-${i}`,
+      chartId: `rev-${i}`,
+      date: `REV-${d.date}`, // Make the date field unique per chart
+      displayDate: d.displayDate,
+      revenue: d.revenue,
+      sales: d.sales,
+      customers: d.customers
+    }));
+    
+    const transactionsChartData = dailySalesData.map((d, i) => ({
+      id: `transactions-day-${i}`,
+      chartId: `txn-${i}`,
+      date: `TXN-${d.date}`, // Make the date field unique per chart
+      displayDate: d.displayDate,
+      revenue: d.revenue,
+      sales: d.sales,
+      customers: d.customers
+    }));
+    
+    const combinedChartData = dailySalesData.map((d, i) => ({
+      id: `combined-day-${i}`,
+      chartId: `cmb-${i}`,
+      date: `CMB-${d.date}`, // Make the date field unique per chart
+      displayDate: d.displayDate,
+      revenue: d.revenue,
+      sales: d.sales,
+      customers: d.customers
+    }));
 
     // Get sales by product for best sellers and category analysis
     const productSalesMap = new Map<string, { name: string; quantity: number; revenue: number }>();
@@ -232,7 +276,7 @@ export function Reports() {
         productSalesMap.set(item.productId, {
           name: item.productName,
           quantity: existing.quantity + item.quantity,
-          revenue: existing.revenue + item.subtotal
+          revenue: existing.revenue + item.totalPrice // Fixed: changed from item.subtotal to item.totalPrice
         });
       });
     });
@@ -247,7 +291,9 @@ export function Reports() {
     productSalesMap.forEach((productData, productId) => {
       const item = inventory.find(i => i.id === productId);
       if (item) {
-        const categoryName = item.categoryName || 'Uncategorized';
+        // Look up the category name from the categories array
+        const category = categories.find(c => c.id === item.category);
+        const categoryName = category?.name || item.category || 'Uncategorized';
         const existing = categoryMap.get(categoryName) || { sales: 0, count: 0, name: categoryName };
         categoryMap.set(categoryName, {
           sales: existing.sales + productData.revenue,
@@ -256,7 +302,8 @@ export function Reports() {
         });
       }
     });
-    const categoryData = Array.from(categoryMap.values()).map(cat => ({
+    const categoryData = Array.from(categoryMap.values()).map((cat) => ({
+      id: `cat-${hashString(cat.name)}`,
       name: cat.name,
       value: cat.count,
       sales: cat.sales
@@ -271,8 +318,12 @@ export function Reports() {
     // Inventory with sold quantities
     const inventoryWithSold = inventory.map(item => {
       const productSales = productSalesMap.get(item.id);
+      // Look up category name from categories array
+      const category = categories.find(c => c.id === item.category);
+      const categoryName = category?.name || item.category || 'Uncategorized';
       return {
         ...item,
+        categoryName,
         soldQuantity: productSales?.quantity || 0,
         soldRevenue: productSales?.revenue || 0
       };
@@ -280,7 +331,7 @@ export function Reports() {
 
     // ══════════════════════════════════════════════════════════════════
     // EXPENSES - Filter by time period
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     let filteredExpenses = expenses.filter(expense => {
       if (businessId && expense.businessId !== businessId) return false;
       if (branchId && expense.branchId !== branchId) return false;
@@ -328,10 +379,13 @@ export function Reports() {
       return acc;
     }, new Map<string, number>());
 
-    const expenseCategoryData = Array.from(expensesByCategory.entries()).map(([category, amount]) => ({
-      name: category,
-      value: amount
-    })).sort((a, b) => b.value - a.value);
+    const expenseCategoryData = Array.from(expensesByCategory.entries())
+      .map(([category, amount]) => ({
+        id: `exp-${hashString(category)}`, // Add unique ID using hash
+        name: category,
+        value: amount
+      }))
+      .sort((a, b) => b.value - a.value);
 
     return {
       totalRevenue,
@@ -355,7 +409,10 @@ export function Reports() {
       expenseCategoryData,
       lowStockItems,
       outOfStockItems,
-      inventoryWithSold
+      inventoryWithSold,
+      revenueChartData,
+      transactionsChartData,
+      combinedChartData
     };
   }, [sales, inventory, categories, expenses, businessId, staffId, branchId, timeFilter]);
 
@@ -587,11 +644,11 @@ export function Reports() {
                 <CardDescription>Sales revenue by date</CardDescription>
               </CardHeader>
               <CardContent style={{ minHeight: '350px' }}>
-                <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
+                <div key="daily-revenue-chart-container" className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
                   <ResponsiveContainer width="100%" height={300} minHeight={300}>
-                    <BarChart data={analytics.dailySalesData}>
+                    <BarChart id="daily-revenue-chart" data={analytics.revenueChartData}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="date" className="text-xs" />
+                      <XAxis dataKey="displayDate" className="text-xs" tick={{ fontSize: 11 }} />
                       <YAxis className="text-xs" />
                       <Tooltip />
                       <Bar 
@@ -612,11 +669,11 @@ export function Reports() {
                 <CardDescription>Number of sales per day</CardDescription>
               </CardHeader>
               <CardContent style={{ minHeight: '350px' }}>
-                <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
+                <div key="daily-transactions-chart-container" className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
                   <ResponsiveContainer width="100%" height={300} minHeight={300}>
-                    <BarChart data={analytics.dailySalesData}>
+                    <BarChart id="daily-transactions-chart" data={analytics.transactionsChartData}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="date" className="text-xs" />
+                      <XAxis dataKey="displayDate" className="text-xs" tick={{ fontSize: 11 }} />
                       <YAxis className="text-xs" />
                       <Tooltip />
                       <Bar dataKey="sales" fill="#00C49F" radius={[8, 8, 0, 0]} name="Transactions" />
@@ -633,11 +690,11 @@ export function Reports() {
               <CardDescription>Combined daily metrics</CardDescription>
             </CardHeader>
             <CardContent style={{ minHeight: '400px' }}>
-              <div className="h-[350px] w-full min-h-[350px]" style={{ minHeight: '350px', height: '350px', minWidth: '100%', width: '100%' }}>
+              <div key="revenue-customers-chart-container" className="h-[350px] w-full min-h-[350px]" style={{ minHeight: '350px', height: '350px', minWidth: '100%', width: '100%' }}>
                 <ResponsiveContainer width="100%" height={350} minHeight={350}>
-                  <BarChart data={analytics.dailySalesData}>
+                  <BarChart id="revenue-customers-chart" data={analytics.combinedChartData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="date" className="text-xs" />
+                    <XAxis dataKey="displayDate" className="text-xs" tick={{ fontSize: 11 }} />
                     <YAxis className="text-xs" />
                     <Tooltip />
                     <Legend />
@@ -807,7 +864,7 @@ export function Reports() {
                 <CardContent style={{ minHeight: '350px' }}>
                   <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
                     <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-                      <PieChart>
+                      <PieChart id="category-sales-pie-chart">
                         <Pie
                           data={analytics.categoryData}
                           cx="50%"
@@ -817,9 +874,10 @@ export function Reports() {
                           outerRadius={100}
                           fill="#8884d8"
                           dataKey="value"
+                          nameKey="name"
                         >
                           {analytics.categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={entry.id} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip />
@@ -837,10 +895,10 @@ export function Reports() {
                 <CardContent style={{ minHeight: '350px' }}>
                   <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
                     <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-                      <BarChart data={analytics.categoryData} layout="vertical">
+                      <BarChart id="category-revenue-bar-chart" data={analytics.categoryData} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis type="number" className="text-xs" />
-                        <YAxis dataKey="name" type="category" className="text-xs" />
+                        <YAxis dataKey="name" type="category" className="text-xs" width={120} />
                         <Tooltip />
                         <Bar dataKey="sales" fill="#FFBB28" radius={[0, 8, 8, 0]} name={`Revenue (${currencyCode})`} />
                       </BarChart>
@@ -910,7 +968,7 @@ export function Reports() {
                   <CardContent style={{ minHeight: '350px' }}>
                     <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
                       <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-                        <PieChart>
+                        <PieChart id="expense-category-pie-chart">
                           <Pie
                             data={analytics.expenseCategoryData}
                             cx="50%"
@@ -920,9 +978,10 @@ export function Reports() {
                             outerRadius={100}
                             fill="#8884d8"
                             dataKey="value"
+                            nameKey="name"
                           >
                             {analytics.expenseCategoryData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              <Cell key={entry.id} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
                           <Tooltip />
@@ -940,7 +999,7 @@ export function Reports() {
                   <CardContent style={{ minHeight: '350px' }}>
                     <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
                       <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-                        <BarChart data={analytics.expenseCategoryData} layout="vertical">
+                        <BarChart id="expense-breakdown-bar-chart" data={analytics.expenseCategoryData} layout="vertical">
                           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                           <XAxis type="number" className="text-xs" />
                           <YAxis dataKey="name" type="category" className="text-xs" width={100} />

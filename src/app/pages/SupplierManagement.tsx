@@ -92,7 +92,7 @@ export function SupplierManagement() {
       <div className="space-y-6">
         {/* Tabbed Interface - Pages handle their own padding and headers */}
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
-          <div className="p-4 lg:p-6 pb-0">
+          <div className="p-4 lg:p-6 pb-0 mx-[0px] mt-[0px] mb-[5px]">
             <TabsList>
               {canAccessSuppliers && (
                 <TabsTrigger value="suppliers" className="gap-2">
