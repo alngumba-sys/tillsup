@@ -2,8 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router";
 import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CheckCircle2, ArrowRight, Pill } from "lucide-react";
 import { isPreviewMode } from "../utils/previewMode";
-import { ImageWithFallback } from "../components/figma/ImageWithFallback";
-import tillsupLogo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.png";
+import { TillsupLogo } from "../components/TillsupLogo";
 
 /**
  * ULTRA SIMPLE LANDING PAGE - NO AUTH LOGIC
@@ -11,9 +10,28 @@ import tillsupLogo from "figma:asset/4f0019b6de17d228838092e3bc909e9dc8e3832f.pn
  * Auth is automatically bypassed for this route for instant load
  * 
  * In Preview Mode: Auto-redirect to dashboard to show the app
+ * 
+ * ═══════════════════════════════════════════════════════════════════
+ * ADMIN ACCESS EASTER EGG
+ * ═══════════════════════════════════════════════════════════════════
+ * 
+ * How to access Admin Panel:
+ * 1. Click the Tillsup logo 5 times within 2 seconds
+ * 2. You'll be redirected to /admin-login
+ * 3. Enter password: Tillsup@2026
+ * 4. Access granted to /admin-hidden (Admin Dashboard)
+ * 
+ * Admin Dashboard Features:
+ * - Upload/Change Platform Logos (Main & Dark Mode)
+ * - Upload/Change Favicon
+ * - Upload/Change Auth Background
+ * - Upload/Change Social Share Image (OG Image)
+ * - View all uploaded assets in the platform-assets bucket
+ * - Monitor business analytics and metrics
  */
 export function LandingSimple() {
   const navigate = useNavigate();
+  const [adminClicks, setAdminClicks] = React.useState(0);
   
   // Preview mode: Automatically redirect to dashboard
   React.useEffect(() => {
@@ -22,6 +40,25 @@ export function LandingSimple() {
       navigate('/app/dashboard');
     }
   }, [navigate]);
+
+  // Reset click counter after 2 seconds of inactivity
+  React.useEffect(() => {
+    if (adminClicks > 0) {
+      const timer = setTimeout(() => setAdminClicks(0), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [adminClicks]);
+
+  // Handle logo clicks for admin access (5 clicks)
+  const handleLogoClick = () => {
+    const newCount = adminClicks + 1;
+    setAdminClicks(newCount);
+    
+    if (newCount === 5) {
+      navigate('/admin-login');
+      setAdminClicks(0);
+    }
+  };
   
   // Background icons that float around
   const backgroundIcons = [
@@ -351,26 +388,29 @@ export function LandingSimple() {
           gap: 8px;
           min-width: fit-content;
         }
+
+        .admin-click-pulse {
+          animation: clickPulse 0.3s ease-out;
+        }
+
+        @keyframes clickPulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
       `}</style>
 
       {/* Navigation */}
       <nav className="landing-nav">
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <ImageWithFallback 
-            src={tillsupLogo} 
-            alt="Tillsup" 
+        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+          <TillsupLogo 
+            height={48}
             className="landing-logo"
-            fallback={
-              <div className="logo-fallback">
-                <div className="logo-icon">
-                  <Store size={20} color="white" />
-                </div>
-                <span className="logo-text">
-                  tillsup
-                </span>
-              </div>
-            }
+            onClick={handleLogoClick}
+            style={{ 
+              transition: 'transform 0.2s',
+            }}
           />
         </div>
 

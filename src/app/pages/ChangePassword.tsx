@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Lock, AlertCircle, CheckCircle2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import tillsupLogo from "figma:asset/d8ccfcda27bd287c53c65bd6331fc0ce5f63d0aa.png";
+import { TillsupLogo } from "../components/TillsupLogo";
 
 export function ChangePassword() {
   const navigate = useNavigate();
@@ -100,11 +100,7 @@ export function ChangePassword() {
           </div>
           
           <div className="flex justify-center">
-            <img 
-              src={tillsupLogo} 
-              alt="Tillsup" 
-              className="h-16 w-auto object-contain" 
-            />
+            <TillsupLogo height={64} />
           </div>
           <div>
             <CardTitle className="text-3xl">Change Password</CardTitle>

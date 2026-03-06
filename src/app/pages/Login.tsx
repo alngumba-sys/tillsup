@@ -11,7 +11,7 @@ import { useBranding } from "../contexts/BrandingContext";
 import { ConnectionChecker } from "../components/ConnectionChecker";
 import { isPreviewMode } from "../utils/previewMode";
 import { toast } from "sonner";
-import tillsupLogo from "figma:asset/d8ccfcda27bd287c53c65bd6331fc0ce5f63d0aa.png";
+import { TillsupLogo } from "../components/TillsupLogo";
 
 export function Login() {
   const navigate = useNavigate();
@@ -186,11 +186,15 @@ export function Login() {
       <Card className="w-full max-w-md shadow-lg relative z-10 bg-card">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center items-center gap-3">
-            <img 
-              src={assets.logoMain || tillsupLogo} 
-              alt="Tillsup" 
-              className="h-12 w-auto object-contain" 
-            />
+            {assets.logoMain ? (
+              <img 
+                src={assets.logoMain} 
+                alt="Tillsup" 
+                className="h-12 w-auto object-contain" 
+              />
+            ) : (
+              <TillsupLogo height={48} />
+            )}
           </div>
           <div>
             <CardTitle className="text-3xl font-['Outfit'] text-[#0479a1]">POS System</CardTitle>

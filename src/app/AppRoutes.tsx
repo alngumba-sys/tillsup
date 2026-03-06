@@ -29,6 +29,7 @@ import { BusinessRegistration } from "./pages/BusinessRegistration";
 import RecoveryRegistration from "./pages/RecoveryRegistration";
 import { ChangePassword } from "./pages/ChangePassword";
 import { DebugAuth } from "./pages/DebugAuth";
+import { AdminLogin } from "./pages/AdminLogin";
 
 // Public Pages
 import { Landing } from "./pages/Landing";
@@ -121,6 +122,11 @@ export const router = createBrowserRouter([
   {
     path: "/debug-auth",
     element: <DebugAuth />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/admin-login",
+    element: <AdminLogin />,
     errorElement: <ErrorBoundary />,
   },
   {
