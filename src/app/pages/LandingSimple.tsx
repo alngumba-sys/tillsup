@@ -5,9 +5,9 @@ import { isPreviewMode } from "../utils/previewMode";
 import { TillsupLogo } from "../components/TillsupLogo";
 import { useBranding } from "../contexts/BrandingContext";
 
-// Import hero images
-import heroImage1 from 'figma:asset/21a330cd4033b51a67a4c364b3c77fd54c1bb825.png';
-import heroImage2 from 'figma:asset/ebca2988684ae36c1d0bd8615f19bc93d4d1fe29.png';
+// Import hero images - using Unsplash for production-ready images
+const heroImage1 = 'https://images.unsplash.com/photo-1746723391801-1a24f7a57730?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjByZXRhaWwlMjBzdG9yZSUyMHBvcyUyMHN5c3RlbXxlbnwxfHx8fDE3NzI3OTY2NTB8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral';
+const heroImage2 = 'https://images.unsplash.com/photo-1761370571806-886404629697?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhZnJpY2FuJTIwc21hbGwlMjBidXNpbmVzcyUyMHN0b3JlZnJvbnR8ZW58MXx8fHwxNzcyNzk2NjUwfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral';
 
 /**
  * ULTRA SIMPLE LANDING PAGE - NO AUTH LOGIC

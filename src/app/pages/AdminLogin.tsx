@@ -168,7 +168,6 @@ export function AdminLogin() {
       }}>
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <TillsupLogo height={40} />
           </div>
           
           <div className="flex justify-center">
