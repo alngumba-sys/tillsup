@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CheckCircle2, ArrowRight, Pill } from "lucide-react";
 import { isPreviewMode } from "../utils/previewMode";
 import { TillsupLogo } from "../components/TillsupLogo";
+import { useBranding } from "../contexts/BrandingContext";
 
 /**
  * ULTRA SIMPLE LANDING PAGE - NO AUTH LOGIC
@@ -31,6 +32,7 @@ import { TillsupLogo } from "../components/TillsupLogo";
  */
 export function LandingSimple() {
   const navigate = useNavigate();
+  const { assets } = useBranding();
   const [adminClicks, setAdminClicks] = React.useState(0);
   
   // Preview mode: Automatically redirect to dashboard
@@ -404,14 +406,29 @@ export function LandingSimple() {
       <nav className="landing-nav">
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-          <TillsupLogo 
-            height={48}
-            className="landing-logo"
-            onClick={handleLogoClick}
-            style={{ 
-              transition: 'transform 0.2s',
-            }}
-          />
+          {assets.logoMain ? (
+            <img 
+              src={assets.logoMain} 
+              alt="Tillsup" 
+              onClick={handleLogoClick}
+              style={{ 
+                height: 'clamp(28px, 5vw, 38px)',
+                width: 'auto',
+                cursor: 'pointer',
+                transition: 'transform 0.2s',
+              }}
+              className="landing-logo"
+            />
+          ) : (
+            <TillsupLogo 
+              height={48}
+              className="landing-logo"
+              onClick={handleLogoClick}
+              style={{ 
+                transition: 'transform 0.2s',
+              }}
+            />
+          )}
         </div>
 
         {/* Top Right: Trust Badge + Buttons */}

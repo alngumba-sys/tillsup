@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { TillsupLogo } from "../components/TillsupLogo";
 import { toast } from "sonner";
+import { supabase } from "../../lib/supabase";
 
 /**
  * ADMIN LOGIN PAGE
@@ -16,7 +17,7 @@ import { toast } from "sonner";
  * 1. Go to landing page (/)
  * 2. Click the Tillsup logo 5 times rapidly (within 2 seconds)
  * 3. You'll be redirected to this admin login page
- * 4. Enter password: Tillsup@2026
+ * 4. Enter username: Admin and password: Tillsup@2026
  * 5. Access the admin dashboard to manage platform logos and branding
  * 
  * Admin Dashboard Features:
@@ -25,9 +26,14 @@ import { toast } from "sonner";
  * - Upload/Change Favicon
  * - Upload/Change Auth Background Image
  * - Upload/Change Social Share Image (Open Graph)
+ * 
+ * IMPORTANT: This creates/uses a special admin@tillsup.internal account in Supabase
+ * Make sure your RLS policies allow this admin user to access all data.
  */
 
+const ADMIN_USERNAME = "Admin";
 const ADMIN_PASSWORD = "Tillsup@2026";
+const ADMIN_EMAIL = "admin@tillsup.internal";
 
 export function AdminLogin() {
   const navigate = useNavigate();
@@ -42,18 +48,92 @@ export function AdminLogin() {
     setError("");
     setLoading(true);
 
-    // Simulate a slight delay for better UX
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      // Verify credentials match
+      if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+        setError("Invalid username or password. Access denied.");
+        toast.error("Invalid credentials");
+        setLoading(false);
+        return;
+      }
 
-    if (username.toLowerCase() === "admin" && password === ADMIN_PASSWORD) {
+      // Try to sign in with Supabase admin account
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      });
+
+      if (signInError) {
+        // If sign in fails, try to create the admin account
+        console.log("Admin account doesn't exist, creating...");
+        
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: ADMIN_EMAIL,
+          password: ADMIN_PASSWORD,
+          options: {
+            data: {
+              first_name: "Platform",
+              last_name: "Administrator",
+              role: "Platform Admin"
+            }
+          }
+        });
+
+        if (signUpError) {
+          console.error("Failed to create admin account:", signUpError);
+          setError("Failed to authenticate. Please ensure Supabase is configured correctly.");
+          toast.error("Authentication failed");
+          setLoading(false);
+          return;
+        }
+
+        // Try to sign in again
+        const { error: retrySignInError } = await supabase.auth.signInWithPassword({
+          email: ADMIN_EMAIL,
+          password: ADMIN_PASSWORD,
+        });
+
+        if (retrySignInError) {
+          setError("Admin account created but sign-in failed. Please try again or check your email for confirmation.");
+          toast.warning("Please check your email to confirm your account");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Create a profile for the admin if it doesn't exist
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!existingProfile) {
+          await supabase.from('profiles').insert({
+            id: user.id,
+            email: ADMIN_EMAIL,
+            first_name: "Platform",
+            last_name: "Administrator",
+            role: "Platform Admin",
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+
+      // Store admin flag in session storage
+      sessionStorage.setItem('isAdmin', 'true');
+      
       toast.success("Admin access granted");
       navigate("/admin-hidden");
-    } else {
-      setError("Invalid username or password. Access denied.");
-      toast.error("Invalid credentials");
+    } catch (err: any) {
+      console.error("Admin login error:", err);
+      setError("An unexpected error occurred. Please try again.");
+      toast.error("Login failed");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (

@@ -48,8 +48,9 @@ interface BusinessData {
   owner_phone: string;
   country: string;
   created_at: string;
-  customer_count: number;
+  sales_count: number;
   total_volume: number;
+  last_active: string | null;
   status: "active" | "trial" | "expired";
 }
 
@@ -115,6 +116,26 @@ const BRANDING_SLOTS = [
 
 import { useBranding } from "../contexts/BrandingContext";
 
+// Helper function to format time ago in short format
+function formatTimeAgo(dateStr: string | null): string {
+  if (!dateStr) return '-';
+  
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return '1D';
+  if (diffDays < 30) return `${diffDays}D`;
+  if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    return months === 1 ? '1M' : `${months}M`;
+  }
+  const years = Math.floor(diffDays / 365);
+  return years === 1 ? '1Y' : `${years}Y`;
+}
+
 export function AdminDashboard() {
   const navigate = useNavigate();
   const { refreshBranding } = useBranding();
@@ -154,6 +175,17 @@ export function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Not authenticated. Please log in to the admin panel.");
+        navigate('/admin-login');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Admin Dashboard - Authenticated as:', session.user.email);
+
       // 1. Fetch Businesses
       const { data: businessesData, error: bizError } = await supabase
         .from('businesses')
@@ -166,7 +198,16 @@ export function AdminDashboard() {
           subscription_status
         `);
 
-      if (bizError) throw bizError;
+      if (bizError) {
+        console.error('Admin Dashboard - Error fetching businesses:', bizError);
+        if (bizError.message.includes('permission denied') || bizError.code === 'PGRST301') {
+          toast.error(
+            'Access denied. Please run the RLS policy SQL from ADMIN_RLS_SETUP.md',
+            { duration: 10000 }
+          );
+        }
+        throw bizError;
+      }
 
       if (!businessesData || businessesData.length === 0) {
         setBusinesses([]);
@@ -181,60 +222,117 @@ export function AdminDashboard() {
         return;
       }
 
+      // DEBUG: Log businesses data
+      console.log('Admin Dashboard - Businesses fetched:', businessesData);
+
       // 2. Fetch Profiles (Owner Names & Phones) manually
       const ownerIds = businessesData.map(b => b.owner_id).filter(Boolean);
       let profilesMap: Record<string, { name: string; phone: string }> = {};
 
+      console.log('Admin Dashboard - Owner IDs to fetch:', ownerIds);
+
       if (ownerIds.length > 0) {
-        const { data: profilesData } = await supabase
+        // Try to fetch all profiles without RLS restrictions
+        const { data: profilesData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .in('id', ownerIds);
         
-        if (profilesData) {
+        console.log('Admin Dashboard - Profiles fetched:', profilesData);
+        if (profileError) {
+          console.error('Admin Dashboard - Profile error:', profileError);
+          toast.error('Failed to fetch owner profiles: ' + profileError.message);
+        }
+        
+        if (profilesData && profilesData.length > 0) {
           profilesData.forEach((p: any) => {
+             const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+             const phone = p.phone_number || p.phone || p.mobile || '';
+             
              profilesMap[p.id] = {
-               name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
-               phone: p.phone_number || p.phone || p.mobile || 'N/A'
+               name: fullName || p.email || 'Unknown',
+               phone: phone || 'Not provided'
              };
+             
+             console.log(`Profile mapped for ${p.id}:`, {
+               first_name: p.first_name,
+               last_name: p.last_name,
+               phone_number: p.phone_number,
+               email: p.email,
+               final_name: profilesMap[p.id].name,
+               final_phone: profilesMap[p.id].phone
+             });
           });
+          console.log('Admin Dashboard - Final profiles map:', profilesMap);
+        } else {
+          console.warn('Admin Dashboard - No profiles found for owner IDs:', ownerIds);
         }
       }
 
       // 3. Fetch Real Metrics
-      let customerCounts: Record<string, number> = {};
+      let salesCounts: Record<string, number> = {};
       let volumeCounts: Record<string, number> = {};
+      let lastActiveDates: Record<string, string> = {};
 
+      // Count sales transactions and get last activity from sales table
       try {
-          const { data: customersData } = await supabase.from('customers').select('business_id');
-          if (customersData) {
-              customersData.forEach((c: any) => {
-                  if (c.business_id) customerCounts[c.business_id] = (customerCounts[c.business_id] || 0) + 1;
-              });
+          const { data: salesData, error: salesError } = await supabase
+            .from('sales')
+            .select('business_id, total, created_at');
+          
+          if (salesError) {
+              console.warn("Error fetching sales data:", salesError);
           }
-      } catch (e) { console.warn("Failed to fetch customers for stats", e); }
-
-      try {
-          const { data: salesData } = await supabase.from('sales').select('business_id, total');
+          
           if (salesData) {
+              console.log(`Admin Dashboard: Found ${salesData.length} total sales across all businesses`);
+              
               salesData.forEach((s: any) => {
-                  if (s.business_id) volumeCounts[s.business_id] = (volumeCounts[s.business_id] || 0) + (Number(s.total) || 0);
+                  if (s.business_id) {
+                      // Count total sales transactions
+                      salesCounts[s.business_id] = (salesCounts[s.business_id] || 0) + 1;
+                      
+                      // Sum total volume
+                      volumeCounts[s.business_id] = (volumeCounts[s.business_id] || 0) + (Number(s.total) || 0);
+                      
+                      // Track most recent sale date
+                      if (s.created_at) {
+                          if (!lastActiveDates[s.business_id] || s.created_at > lastActiveDates[s.business_id]) {
+                              lastActiveDates[s.business_id] = s.created_at;
+                          }
+                      }
+                  }
               });
+              
+              console.log(`Admin Dashboard: Sales counts per business:`, salesCounts);
+              console.log(`Admin Dashboard: Last active dates:`, lastActiveDates);
           }
-      } catch (e) { console.warn("Failed to fetch sales for stats", e); }
+      } catch (e) { 
+          console.warn("Failed to fetch sales for stats", e); 
+      }
 
       // 4. Map Data
-      const mappedBusinesses: BusinessData[] = businessesData.map((b: any) => ({
-        id: b.id,
-        name: b.name || "Unnamed Business",
-        owner_name: profilesMap[b.owner_id]?.name || "Unknown",
-        owner_phone: profilesMap[b.owner_id]?.phone || "N/A",
-        country: b.country || "Global",
-        created_at: b.created_at,
-        customer_count: customerCounts[b.id] || 0,
-        total_volume: volumeCounts[b.id] || 0,
-        status: b.subscription_status === 'active' ? 'active' : 'trial'
-      }));
+      const mappedBusinesses: BusinessData[] = businessesData.map((b: any) => {
+        const mapped = {
+          id: b.id,
+          name: b.name || "Unnamed Business",
+          owner_name: profilesMap[b.owner_id]?.name || "Unknown",
+          owner_phone: profilesMap[b.owner_id]?.phone || "Not provided",
+          country: b.country || "Global",
+          created_at: b.created_at,
+          sales_count: salesCounts[b.id] || 0,
+          total_volume: volumeCounts[b.id] || 0,
+          last_active: lastActiveDates[b.id] || null,
+          status: b.subscription_status === 'active' ? 'active' : 'trial'
+        };
+        console.log(`Admin Dashboard - Mapped business ${b.name}:`, {
+          owner_id: b.owner_id,
+          profile_found: !!profilesMap[b.owner_id],
+          mapped_owner: mapped.owner_name,
+          mapped_phone: mapped.owner_phone
+        });
+        return mapped;
+      });
 
       // 5. Apply Time Filter
       let filteredData = mappedBusinesses;
@@ -256,12 +354,12 @@ export function AdminDashboard() {
       // 6. Calculate Metrics
       const totalBiz = filteredData.length;
       const activeSubs = filteredData.filter(b => b.status === "active").length;
-      const totalCust = filteredData.reduce((sum, b) => sum + b.customer_count, 0);
+      const totalSales = filteredData.reduce((sum, b) => sum + b.sales_count, 0);
       const totalVol = filteredData.reduce((sum, b) => sum + b.total_volume, 0);
 
       setMetrics({
         totalBusinesses: totalBiz,
-        totalCustomers: totalCust,
+        totalCustomers: totalSales, // This will be used to show total sales in the UI
         totalVolume: totalVol,
         activeSubscriptions: activeSubs,
         growthRate: 0
@@ -463,10 +561,18 @@ export function AdminDashboard() {
     // Sorting
     if (sortConfig) {
       data.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) {
+        const aVal = a[sortConfig.key];
+        const bVal = b[sortConfig.key];
+        
+        // Handle null values (put them at the end)
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+        
+        if (aVal < bVal) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        if (a[sortConfig.key] > b[sortConfig.key]) {
+        if (aVal > bVal) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
         return 0;
@@ -478,8 +584,8 @@ export function AdminDashboard() {
     return data;
   }, [businesses, searchQuery, sortConfig, statusFilter, countryFilter]);
 
-  const totalCustomers = processedData.reduce((sum, item) => sum + item.customer_count, 0);
-  const totalVolume = processedData.reduce((sum, item) => sum + item.total_volume, 0);
+  const totalSales = processedData.reduce((sum, item) => sum + (item.sales_count || 0), 0);
+  const totalVolume = processedData.reduce((sum, item) => sum + (item.total_volume || 0), 0);
 
   const formatCurrency = (amount: number, country: string) => {
     let currency = "USD";
@@ -605,10 +711,10 @@ export function AdminDashboard() {
 
                   <Card className={`${glassClass} border-white/5 shadow-xl`}>
                     <CardContent className="p-4 flex flex-col gap-1">
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Customers</p>
+                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Sales</p>
                       <div className="flex items-end justify-between">
                         <h3 className="text-2xl font-bold text-white">{metrics.totalCustomers.toLocaleString()}</h3>
-                        <Users className="w-5 h-5 text-emerald-400 mb-1" />
+                        <Activity className="w-5 h-5 text-emerald-400 mb-1" />
                       </div>
                       <p className="text-xs text-emerald-400 flex items-center gap-1 mt-2">
                          <ArrowUpRight className="w-3 h-3" /> Real-time
@@ -764,20 +870,20 @@ export function AdminDashboard() {
                         </TableHead>
                         <TableHead 
                           className="text-right text-slate-400 cursor-pointer hover:text-white transition-colors"
-                          onClick={() => handleSort('customer_count')}
-                        >
-                          <div className="flex items-center justify-end">
-                            Customers
-                            <SortIcon column="customer_count" />
-                          </div>
-                        </TableHead>
-                        <TableHead 
-                          className="text-right text-slate-400 cursor-pointer hover:text-white transition-colors"
                           onClick={() => handleSort('total_volume')}
                         >
                           <div className="flex items-center justify-end">
                             Total Volume
                             <SortIcon column="total_volume" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="text-right text-slate-400 cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('sales_count')}
+                        >
+                          <div className="flex items-center justify-end">
+                            Sales done
+                            <SortIcon column="sales_count" />
                           </div>
                         </TableHead>
                         <TableHead 
@@ -798,25 +904,31 @@ export function AdminDashboard() {
                             <SortIcon column="created_at" />
                           </div>
                         </TableHead>
+                        <TableHead 
+                          className="text-right text-slate-400 cursor-pointer hover:text-white transition-colors"
+                          onClick={() => handleSort('last_active')}
+                        >
+                           <div className="flex items-center justify-end">
+                            Last active
+                            <SortIcon column="last_active" />
+                          </div>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {loading ? (
                         <TableRow className="border-white/10 hover:bg-white/5">
-                          <TableCell colSpan={8} className="h-24 text-center text-slate-400">Loading data...</TableCell>
+                          <TableCell colSpan={9} className="h-24 text-center text-slate-400">Loading data...</TableCell>
                         </TableRow>
                       ) : processedData.length === 0 ? (
                         <TableRow className="border-white/10 hover:bg-white/5">
-                          <TableCell colSpan={8} className="h-24 text-center text-slate-400">No businesses found</TableCell>
+                          <TableCell colSpan={9} className="h-24 text-center text-slate-400">No businesses found</TableCell>
                         </TableRow>
                       ) : (
                         processedData.map((biz) => (
                           <TableRow key={biz.id} className="border-white/5 hover:bg-white/5 transition-colors">
                             <TableCell className="font-medium text-white">
-                              <div className="flex flex-col">
-                                <span>{biz.name}</span>
-                                <span className="text-xs text-slate-500">{biz.id}</span>
-                              </div>
+                              {biz.name}
                             </TableCell>
                             <TableCell className="text-slate-300">{biz.owner_name}</TableCell>
                             <TableCell className="text-slate-300 text-sm font-mono">
@@ -831,10 +943,10 @@ export function AdminDashboard() {
                                 {biz.country}
                               </div>
                             </TableCell>
-                            <TableCell className="text-right text-slate-300">{biz.customer_count.toLocaleString()}</TableCell>
                             <TableCell className="text-right font-mono text-xs text-indigo-300">
                               {formatCurrency(biz.total_volume, biz.country)}
                             </TableCell>
+                            <TableCell className="text-right text-slate-300">{(biz.sales_count || 0).toLocaleString()}</TableCell>
                             <TableCell>
                               <Badge 
                                 variant="secondary" 
@@ -852,6 +964,9 @@ export function AdminDashboard() {
                             <TableCell className="text-right text-slate-500">
                               {new Date(biz.created_at).toLocaleDateString()}
                             </TableCell>
+                            <TableCell className="text-right text-slate-400">
+                              {formatTimeAgo(biz.last_active)}
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -859,12 +974,12 @@ export function AdminDashboard() {
                     <TableFooter>
                       <TableRow className="border-white/10 bg-slate-900/80 font-bold hover:bg-slate-900/90">
                         <TableCell colSpan={4} className="text-right text-white text-[#ffffff]">Totals</TableCell>
-                        <TableCell className="text-right text-white">{totalCustomers.toLocaleString()}</TableCell>
                         <TableCell className="text-right text-white">
                            {/* Displaying raw sum here for simplicity, or we could show a mixed currency note */}
                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(totalVolume)}
                         </TableCell>
-                        <TableCell colSpan={2}></TableCell>
+                        <TableCell className="text-right text-white">{totalSales.toLocaleString()}</TableCell>
+                        <TableCell colSpan={3}></TableCell>
                       </TableRow>
                     </TableFooter>
                   </Table>
