@@ -1,0 +1,27 @@
+-- ══════════════════════════════════════════════════════════════════
+-- ⚠️ DEPRECATED - USE supabase_password_reset_FIXED.sql INSTEAD
+-- ══════════════════════════════════════════════════════════════════
+-- 
+-- This file has been superseded by a better version that:
+-- ✅ Runs all setup steps in the correct order
+-- ✅ Automatically enables pgcrypto extension first
+-- ✅ Drops old functions before creating new ones
+-- ✅ Verifies the setup completed successfully
+-- ✅ Provides clear success/error messages
+--
+-- ══════════════════════════════════════════════════════════════════
+-- INSTEAD, USE THIS FILE:
+-- /supabase_password_reset_FIXED.sql
+-- ══════════════════════════════════════════════════════════════════
+--
+-- Quick Instructions:
+-- 1. Open Supabase Dashboard → SQL Editor
+-- 2. Copy ALL contents from: /supabase_password_reset_FIXED.sql
+-- 3. Paste and click "Run"
+-- 4. Look for ✅ success messages
+--
+-- For detailed instructions, see:
+-- - /QUICK_PASSWORD_RESET_FIX.md (quick guide)
+-- - /PASSWORD_RESET_SETUP_GUIDE.md (complete guide)
+--
+-- ══════════════════════════════════════════════════════════════════

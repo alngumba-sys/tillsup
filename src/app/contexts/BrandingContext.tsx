@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
+import { isPreviewMode } from "../utils/previewMode";
 
 interface BrandingAssets {
   logoMain: string | null;
@@ -27,28 +28,34 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     authBg: null,
     ogImage: null,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Changed to false - don't block rendering
 
   const refreshBranding = async () => {
+    // Don't load branding in preview mode
+    if (isPreviewMode()) {
+      console.debug('🎨 Preview mode: Skipping branding asset fetch');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Add timeout to prevent hanging (increased to 10 seconds for slow connections)
-      const fetchPromise = supabase.storage.from('platform-assets').list('', {
-        limit: 100,
-        sortBy: { column: 'created_at', order: 'desc' },
-      });
+      console.debug('🎨 Fetching branding assets...');
+      
+      // Add AbortController with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 second timeout
 
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Branding fetch timeout")), 10000)
-      );
-
-      const { data, error } = await Promise.race([
-        fetchPromise,
-        timeoutPromise
-      ]) as any;
+      const { data, error } = await supabase.storage
+        .from('platform-assets')
+        .list('', {
+          limit: 100,
+          sortBy: { column: 'created_at', order: 'desc' },
+        })
+        .finally(() => clearTimeout(timeoutId));
 
       if (error) {
         // If bucket doesn't exist, just ignore silently
-        console.debug("Could not fetch platform assets:", error.message);
+        console.debug("ℹ️ Platform assets not available:", error.message);
         return;
       }
 
@@ -67,15 +74,21 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
         authBg: getUrl('platform-auth-bg'),
         ogImage: getUrl('platform-og-image'),
       });
-    } catch (err) {
+      
+      console.debug('✅ Branding assets loaded');
+    } catch (err: any) {
       // Silent fallback - branding is optional
-      console.debug("Branding assets not loaded (using defaults):", err);
+      // Don't log abort errors
+      if (err.name !== 'AbortError') {
+        console.debug("ℹ️ Branding assets not loaded (using defaults):", err.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Load branding assets in background - don't block rendering
     refreshBranding();
   }, []);
 

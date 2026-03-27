@@ -1,68 +1,79 @@
 -- ═══════════════════════════════════════════════════════════════════
--- ⚡ COPY THIS ENTIRE FILE → PASTE IN SUPABASE → CLICK RUN
+-- 🚀 QUICK FIX - RUN THIS NOW (UPDATED)
 -- ═══════════════════════════════════════════════════════════════════
--- This will PERMANENTLY fix the timeout in 30 seconds
+-- Fixes: "function gen_salt(unknown, integer) does not exist"
 -- ═══════════════════════════════════════════════════════════════════
 
--- STEP 1: See the current problem
-SELECT 
-    id,
-    name,
-    owner_id,
-    CASE 
-        WHEN owner_id IS NULL THEN '❌ NULL - CAUSING TIMEOUT'
-        ELSE '✓ Has owner_id'
-    END as status
-FROM businesses
-ORDER BY created_at DESC;
+-- Enable pgcrypto in both schemas (ensures it's available)
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
 
--- STEP 2: Fix all businesses with NULL owner_id
-UPDATE businesses b
-SET owner_id = (
-    SELECT p.id 
-    FROM profiles p 
-    WHERE p.business_id = b.id 
-    AND p.role = 'Business Owner'
-    LIMIT 1
+-- Drop old function
+DROP FUNCTION IF EXISTS public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT);
+
+-- Create function with corrected search_path
+CREATE OR REPLACE FUNCTION public.simple_reset_staff_password(
+  p_user_id UUID,
+  p_new_password TEXT,
+  p_admin_id UUID,
+  p_business_id TEXT
 )
-WHERE b.owner_id IS NULL;
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  v_admin_profile RECORD;
+  v_target_profile RECORD;
+BEGIN
+  SELECT * INTO v_admin_profile FROM profiles WHERE id = p_admin_id;
+  IF v_admin_profile IS NULL THEN
+    RETURN json_build_object('success', false, 'error', 'Admin not found');
+  END IF;
+  
+  IF v_admin_profile.role NOT IN ('Business Owner', 'Manager') THEN
+    RETURN json_build_object('success', false, 'error', 'Insufficient permissions');
+  END IF;
+  
+  SELECT * INTO v_target_profile FROM profiles WHERE id = p_user_id;
+  IF v_target_profile IS NULL THEN
+    RETURN json_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF v_target_profile.business_id != p_business_id THEN
+    RETURN json_build_object('success', false, 'error', 'Cannot reset password for staff in different business');
+  END IF;
+  
+  IF v_target_profile.role = 'Business Owner' AND v_admin_profile.role != 'Business Owner' THEN
+    RETURN json_build_object('success', false, 'error', 'Only Business Owner can reset another Business Owner password');
+  END IF;
+  
+  UPDATE auth.users
+  SET encrypted_password = crypt(p_new_password, gen_salt('bf')), updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN json_build_object('success', false, 'error', 'Failed to update password');
+  END IF;
+  
+  UPDATE profiles SET must_change_password = true WHERE id = p_user_id;
+  
+  RETURN json_build_object('success', true, 'message', 'Password reset successfully');
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('success', false, 'error', 'Function error: ' || SQLERRM);
+END;
+$$;
 
--- STEP 3: Verify the fix
-SELECT 
-    CASE 
-        WHEN COUNT(*) = 0 THEN '✅✅✅ ALL FIXED! Refresh browser and login now!'
-        ELSE '❌ Still have ' || COUNT(*) || ' problems - see below'
-    END as result
-FROM businesses 
-WHERE owner_id IS NULL;
+-- Grant all permissions
+GRANT EXECUTE ON FUNCTION public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT) TO service_role;
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon;
+GRANT USAGE ON SCHEMA extensions TO authenticated;
 
--- STEP 4: If still problems, show them
-SELECT 
-    id,
-    name,
-    owner_id,
-    '❌ NO OWNER' as issue
-FROM businesses 
-WHERE owner_id IS NULL;
-
--- STEP 5: Manual fix for YOUR business (run this if above didn't work)
--- This sets YOUR current business to YOUR user ID
-UPDATE businesses 
-SET owner_id = auth.uid()
-WHERE id IN (
-    SELECT business_id 
-    FROM profiles 
-    WHERE id = auth.uid()
-);
-
--- STEP 6: Final verification
-SELECT 
-    b.id,
-    b.name,
-    b.owner_id,
-    p.email as owner_email,
-    '✅ FIXED' as status
-FROM businesses b
-LEFT JOIN profiles p ON p.id = b.owner_id
-WHERE b.owner_id IS NOT NULL
-ORDER BY b.created_at DESC;
+-- ═══════════════════════════════════════════════════════════════════
+-- ✅ DONE! Close this and try resetting a password again.
+-- ═══════════════════════════════════════════════════════════════════

@@ -22,6 +22,8 @@ import { Onboarding } from "./pages/Onboarding";
 import { ReorderForecasting } from "./pages/ReorderForecasting";
 import { AIInsights } from "./pages/AIInsights";
 import { AdminDashboard } from "./pages/AdminDashboard";
+import { LocationManagement } from "./pages/LocationManagement";
+import { StockTransferHistory } from "./pages/StockTransferHistory";
 
 // Auth Pages
 import { Login } from "./pages/Login";
@@ -35,12 +37,17 @@ import { AdminLogin } from "./pages/AdminLogin";
 import { Landing } from "./pages/Landing";
 import { LandingSimple } from "./pages/LandingSimple";
 import { DiagnosticLanding } from "./pages/DiagnosticLanding";
+import { DiagnosticSimple } from "./pages/DiagnosticSimple";
+import { UltraSimpleLanding } from "./pages/UltraSimpleLanding";
+import { SimpleLandingDirect } from "./pages/SimpleLandingDirect";
 import { PublicRouteTest } from "./pages/PublicRouteTest";
 import { WhoWeAre } from "./pages/WhoWeAre";
 import { Pricing } from "./pages/Pricing";
 import { BranchClosed } from "./pages/BranchClosed";
 import { SimpleTest } from "./pages/SimpleTest";
 import { SimpleTestBasic } from "./pages/SimpleTestBasic";
+import { RenderTest } from "./pages/RenderTest";
+import { AppStatusCheck } from "./pages/AppStatusCheck";
 
 // Components
 import { BranchGuard } from "./components/BranchGuard";
@@ -53,6 +60,16 @@ import { AuthenticatedLayout } from "./components/AuthenticatedLayout";
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: <LandingSimple />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/diagnostic",
+    element: <DiagnosticSimple />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/landing",
     element: <LandingSimple />,
     errorElement: <ErrorBoundary />,
   },
@@ -72,8 +89,13 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
-    path: "/diagnostic",
-    element: <DiagnosticLanding />,
+    path: "/render-test",
+    element: <RenderTest />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/status-check",
+    element: <AppStatusCheck />,
     errorElement: <ErrorBoundary />,
   },
   {
@@ -215,6 +237,14 @@ export const router = createBrowserRouter([
       {
         path: "ai-insights",
         element: <AIInsights />,
+      },
+      {
+        path: "location-management",
+        element: <LocationManagement />,
+      },
+      {
+        path: "stock-transfer-history",
+        element: <StockTransferHistory />,
       },
     ],
   },

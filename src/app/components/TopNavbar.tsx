@@ -1,6 +1,7 @@
 import { AnimatedCounter } from "./AnimatedCounter";
 import { ProfileDropdown } from "./ProfileDropdown";
 import { ClockInOut } from "./ClockInOut";
+import { LocationSelector } from "./LocationSelector";
 import { cn } from "./ui/utils";
 import { useKPI } from "../contexts/KPIContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -103,6 +104,10 @@ export function TopNavbar() {
             </div>
           </div>
         </div>
+
+        {/* Location Selector - Only for Business Owner and Manager */}
+        {/* Temporarily disabled */}
+        {/* <LocationSelector /> */}
 
         {/* Clock In/Out */}
         <ClockInOut />

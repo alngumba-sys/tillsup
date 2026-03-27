@@ -49,12 +49,14 @@ import {
   Image as ImageIcon,
   Loader2,
   Info,
-  DollarSign
+  DollarSign,
+  MapPin
 } from "lucide-react";
 import { useInventory, InventoryItem } from "../contexts/InventoryContext";
 import { useCategory } from "../contexts/CategoryContext";
 import { useSupplier } from "../contexts/SupplierContext";
 import { useBranch } from "../contexts/BranchContext";
+import { useLocation } from "../contexts/LocationContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrency } from "../hooks/useCurrency";
 import { useSubscription } from "../hooks/useSubscription";
@@ -62,6 +64,9 @@ import { toast } from "sonner";
 import { CategoriesTab } from "../components/inventory/CategoriesTab";
 import * as XLSX from "xlsx";
 import { SchemaError } from "../components/inventory/SchemaError";
+import { WarehouseOnlyAlert } from "../components/inventory/WarehouseOnlyAlert";
+import { AddProductToShopDialog } from "../components/inventory/AddProductToShopDialog";
+import { StockTransferConfirmation } from "../components/inventory/StockTransferConfirmation";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { useNavigate } from "react-router";
 
@@ -76,7 +81,8 @@ interface ProductFormProps {
     stock: string;
     sku: string;
     supplier: string;
-    branchId: string;
+    branchId: string; // Legacy - kept for backwards compatibility
+    locationId?: string; // NEW - Initial location for multi-location tracking
     image?: string; // Image URL
     // Pricing extension fields
     costPrice?: string;
@@ -87,15 +93,50 @@ interface ProductFormProps {
   onFormChange: (data: any) => void;
   suppliers: { id: string; name: string }[];
   branches: { id: string; name: string; status: string }[];
+  locations: { id: string; name: string; type: "shop" | "warehouse"; isActive: boolean }[];
+  branchLocationMappings: Record<string, string>;
   userRole: string;
   userBranchId?: string;
   allCategories: { id: string; name: string; status: "active" | "disabled" }[];
   isEditMode?: boolean;
 }
 
-function ProductForm({ formData, onFormChange, suppliers, branches, userRole, userBranchId, allCategories, isEditMode = false }: ProductFormProps) {
+function ProductForm({ formData, onFormChange, suppliers, branches, locations, branchLocationMappings, userRole, userBranchId, allCategories, isEditMode = false }: ProductFormProps) {
   // Filter active branches only
   const activeBranches = branches.filter(b => b.status === "active");
+  
+  // Filter active locations only - WAREHOUSE ONLY for new products
+  const activeLocations = isEditMode 
+    ? locations.filter(loc => loc.isActive)
+    : locations.filter(loc => loc.isActive && loc.type === "warehouse");
+  
+  // Use explicit branch-location mappings (from user configuration)
+  // Build locationToBranchMap from the branchLocationMappings
+  const locationToBranchMap = new Map<string, string>();
+  Object.entries(branchLocationMappings).forEach(([branchId, locationId]) => {
+    // Reverse the mapping: locationId -> branchId
+    locationToBranchMap.set(locationId, branchId);
+  });
+  
+  // Check if we have any valid mappings - if not, use branches directly
+  const hasValidMappings = locationToBranchMap.size > 0;
+  
+  // Filter locations to only show those that have been mapped to branches
+  const mappedLocations = activeLocations.filter(loc => locationToBranchMap.has(loc.id));
+  
+  // Handle location selection - map to real branch ID
+  const handleLocationChange = (locationId: string) => {
+    const realBranchId = locationToBranchMap.get(locationId);
+    if (!realBranchId) {
+      console.error('❌ No branch mapping found for location:', locationId);
+      return;
+    }
+    onFormChange({ 
+      ...formData, 
+      locationId: locationId, 
+      branchId: realBranchId 
+    });
+  };
   
   // Determine if branch field should be disabled
   const isBranchDisabled = userRole !== "Business Owner";
@@ -299,26 +340,54 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
   
   return (
     <div className="grid gap-2 py-1">
-      {/* Branch Selection - REQUIRED */}
+      {/* Location/Branch Selection - Use branches directly if no valid location mappings */}
       <div className="grid gap-1">
         <Label htmlFor="branchId" className="text-xs">
-          Branch <span className="text-destructive">*</span>
+          {hasValidMappings ? "Location" : "Branch"} <span className="text-destructive">*</span>
+          {hasValidMappings && <span className="text-[10px] text-muted-foreground ml-1">(Shop or Warehouse)</span>}
         </Label>
-        {activeBranches.length > 0 ? (
+        {hasValidMappings && mappedLocations.length > 0 ? (
+          <Select 
+            value={formData.locationId || formData.branchId} 
+            onValueChange={handleLocationChange}
+          >
+            <SelectTrigger id="branchId" className="h-8 text-xs">
+              <SelectValue placeholder="Select location for initial stock" />
+            </SelectTrigger>
+            <SelectContent>
+              {mappedLocations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  <div className="flex items-center gap-2">
+                    {location.type === "shop" ? (
+                      <Building2 className="w-3 h-3 text-[#0891b2]" />
+                    ) : (
+                      <Package className="w-3 h-3 text-purple-600" />
+                    )}
+                    <span>{location.name}</span>
+                    <Badge variant="outline" className="text-[10px] py-0">
+                      {location.type === "shop" ? "Shop" : "Warehouse"}
+                    </Badge>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : activeBranches.length > 0 ? (
+          // Fallback: Show branches directly (no valid location mappings)
           <Select 
             value={formData.branchId} 
-            onValueChange={(value) => onFormChange({ ...formData, branchId: value })}
+            onValueChange={(value) => onFormChange({ ...formData, branchId: value, locationId: undefined })}
             disabled={isBranchDisabled}
           >
-            <SelectTrigger id="branchId" className={isBranchDisabled ? "bg-muted h-8 text-xs" : "h-8 text-xs"}>
+            <SelectTrigger id="branchId" className="h-8 text-xs">
               <SelectValue placeholder="Select branch" />
             </SelectTrigger>
             <SelectContent>
               {activeBranches.map((branch) => (
                 <SelectItem key={branch.id} value={branch.id}>
                   <div className="flex items-center gap-2">
-                    <Building2 className="w-3 h-3 text-muted-foreground" />
-                    {branch.name}
+                    <Building2 className="w-3 h-3 text-[#0891b2]" />
+                    <span>{branch.name}</span>
                   </div>
                 </SelectItem>
               ))}
@@ -326,12 +395,24 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
           </Select>
         ) : (
           <div className="flex items-center gap-2 p-1.5 rounded-md border border-dashed bg-muted/30">
-            <Building2 className="w-3 h-3 text-muted-foreground" />
+            <AlertCircle className="w-3 h-3 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
-              No active branches available.
+              No locations or branches available.
             </p>
           </div>
         )}
+        {hasValidMappings ? (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Choose where this product will be initially stocked
+          </p>
+        ) : activeBranches.length > 0 ? (
+          <div className="flex items-start gap-1.5 p-2 mt-1 rounded-md bg-blue-50 border border-blue-200">
+            <AlertCircle className="w-3 h-3 text-blue-600 mt-0.5 shrink-0" />
+            <p className="text-[10px] text-blue-700 leading-relaxed">
+              <strong>Using branches mode.</strong> For multi-location inventory tracking, run the database migration: <code className="text-[9px] bg-blue-100 px-1 py-0.5 rounded">/supabase/migrations/create_locations_and_stock_transfers.sql</code>
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-1">
@@ -395,7 +476,7 @@ function ProductForm({ formData, onFormChange, suppliers, branches, userRole, us
         <div className="grid gap-1">
         <Label htmlFor="category" className="text-xs">Category <span className="text-destructive">*</span></Label>
         
-        {/* ═══════════════════════════════════════════════════════════════════
+        {/* ═════════════════════════════════��═════════════════════════════════
             EDGE CASE: Product with deactivated category (Edit Mode)
             ═══════════════════════════════════════════════════════════����══════ */}
         {isEditMode && isCategoryDeactivated && (
@@ -646,6 +727,7 @@ export function Inventory() {
   const { categories: categoryList, activeCategories, addCategory, error: categoryError } = useCategory();
   const { suppliers } = useSupplier();
   const { branches, getBranchById, createBranch, error: branchError } = useBranch();
+  const { locations } = useLocation();
   const { user } = useAuth();
   const { formatCurrency } = useCurrency();
   const { hasFeature, plan } = useSubscription();
@@ -662,9 +744,13 @@ export function Inventory() {
   
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; id: string; name: string } | null>(null);
   
+  // Manage Stock Locations Dialog
+  const [isManageLocationsOpen, setIsManageLocationsOpen] = useState(false);
+  const [managingProduct, setManagingProduct] = useState<InventoryItem | null>(null);
+  
   // ══════════════════��════════════════════════════════════════════════
   // EXCEL IMPORT STATE
-  // ═══════════════════════════════════════════════════════════════════
+  // ══��════════════════════════════════════════════════════════════════
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isProcessingImport, setIsProcessingImport] = useState(false);
@@ -705,6 +791,7 @@ export function Inventory() {
     sku: string;
     supplier: string;
     branchId: string;
+    locationId?: string;
     image?: string;
     costPrice: string;
     retailPrice: string;
@@ -718,6 +805,7 @@ export function Inventory() {
     sku: "",
     supplier: "",
     branchId: getDefaultBranchId(),
+    locationId: undefined, // Don't set locationId initially - will be set only if valid mapping exists
     // Pricing extension fields
     costPrice: "",
     retailPrice: "",
@@ -736,6 +824,29 @@ export function Inventory() {
       setFilterBranchId(user.branchId);
     }
   }, [user?.role, user?.branchId]);
+
+  // Branch-Location Mapping State
+  const [branchLocationMappings, setBranchLocationMappings] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('tillsup_branch_location_mappings');
+    return saved ? JSON.parse(saved) : {};
+  });
+  
+  useEffect(() => {
+    localStorage.setItem('tillsup_branch_location_mappings', JSON.stringify(branchLocationMappings));
+  }, [branchLocationMappings]);
+  
+  const updateBranchLocationMapping = (branchId: string, locationId: string | null) => {
+    setBranchLocationMappings(prev => {
+      const newMappings = { ...prev };
+      if (locationId === null) {
+        delete newMappings[branchId];
+      } else {
+        newMappings[branchId] = locationId;
+      }
+      return newMappings;
+    });
+    toast.success("Mapping updated successfully");
+  };
 
   const getStockStatusCategory = (item: InventoryItem): "Out of Stock" | "Low Stock" | "In Stock" => {
     const threshold = item.lowStockThreshold || 10;
@@ -780,8 +891,22 @@ export function Inventory() {
     }
     if (!formData.branchId) {
       console.log('❌ BranchId validation failed:', formData.branchId);
-      toast.error("Branch selection is required");
+      toast.error("Warehouse selection is required");
       return;
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // WAREHOUSE-ONLY VALIDATION: Ensure products are only added to warehouses
+    // ═══════════════════════════════════════════════════════════════════
+    if (formData.locationId) {
+      const selectedLocation = locations.find(loc => loc.id === formData.locationId);
+      if (selectedLocation && selectedLocation.type !== "warehouse") {
+        console.error('❌ Cannot add product directly to shop:', selectedLocation.name);
+        toast.error("Products can only be added to warehouses", {
+          description: "To add inventory to a shop, transfer stock from a warehouse."
+        });
+        return;
+      }
     }
 
     const selectedCategory = categoryList.find(cat => cat.id === formData.category);
@@ -862,6 +987,10 @@ export function Inventory() {
       toast.error("Branch selection is required");
       return;
     }
+    
+    // REMOVED: Location validation - not needed in branches mode
+    // When locations are properly configured, locationId will be set automatically
+    // When in branches mode, only branchId is required (which we already validated above)
 
     const selectedCategory = categoryList.find(cat => cat.id === formData.category);
     if (!selectedCategory) {
@@ -938,6 +1067,7 @@ export function Inventory() {
       sku: item.sku,
       supplier: item.supplier,
       branchId: item.branchId,
+      locationId: undefined, // Don't set locationId - it will be managed by the form
       image: item.image,
       costPrice: item.costPrice?.toString() || "",
       retailPrice: item.retailPrice?.toString() || "",
@@ -1381,6 +1511,8 @@ export function Inventory() {
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
             if (open) {
               // Reset form when opening the dialog
+              // WAREHOUSE-ONLY: Default to first warehouse
+              const firstWarehouse = locations.find(loc => loc.isActive && loc.type === "warehouse");
               setFormData({
                 name: "",
                 category: getDefaultCategoryId(),
@@ -1388,7 +1520,8 @@ export function Inventory() {
                 stock: "",
                 sku: "",
                 supplier: "",
-                branchId: getDefaultBranchId(),
+                branchId: firstWarehouse ? branchLocationMappings[Object.keys(branchLocationMappings).find(bId => branchLocationMappings[bId] === firstWarehouse.id) || ""] || getDefaultBranchId() : getDefaultBranchId(),
+                locationId: firstWarehouse?.id || "",
                 image: undefined,
                 costPrice: "",
                 retailPrice: "",
@@ -1403,21 +1536,24 @@ export function Inventory() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
-              Add Product
+              Add Product to Warehouse
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-base">Add New Product</DialogTitle>
+              <DialogTitle className="text-base">Add New Product to Warehouse</DialogTitle>
               <DialogDescription className="text-[11px]">
-                Fill in the product details below.
+                Products must be added to a warehouse first, then transferred to shops as needed.
               </DialogDescription>
             </DialogHeader>
+            <WarehouseOnlyAlert showFullDescription={false} />
             <ProductForm 
               formData={formData} 
               onFormChange={setFormData}
               suppliers={suppliers}
               branches={branches}
+              locations={locations}
+              branchLocationMappings={branchLocationMappings}
               userRole={user?.role || ""}
               userBranchId={user?.branchId || undefined}
               allCategories={categoryList}
@@ -1468,16 +1604,17 @@ export function Inventory() {
         </Card>
       </div>
 
-      <Tabs defaultValue="products" className="space-y-4">
+      <Tabs defaultValue="categories" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="products" className="gap-2">
-            <Package className="w-4 h-4" />
-            Products
-          </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <Tag className="w-4 h-4" />
             Categories
           </TabsTrigger>
+          <TabsTrigger value="products" className="gap-2">
+            <Package className="w-4 h-4" />
+            Products
+          </TabsTrigger>
+  
         </TabsList>
         
         <TabsContent value="products" className="space-y-4">
@@ -1545,7 +1682,7 @@ export function Inventory() {
                       <TableHead>Category</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Stock</TableHead>
-                      <TableHead>Branch</TableHead>
+                      <TableHead>Locations</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1587,7 +1724,7 @@ export function Inventory() {
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span>{item.stock}</span>
+                                <span className="font-medium">{item.stock}</span>
                                 {stockStatus !== "In Stock" && (
                                   <Badge variant={stockStatus === "Out of Stock" ? "destructive" : "secondary"} className="w-fit text-[10px] px-1 py-0 h-4">
                                     {stockStatus}
@@ -1596,13 +1733,60 @@ export function Inventory() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Building2 className="w-3 h-3" />
-                                {branch?.name || "Unknown"}
+                              <div className="flex flex-col gap-1">
+                                {(() => {
+                                  // Find the location mapped to this product's branch
+                                  const locationId = branchLocationMappings[item.branchId];
+                                  const location = locations.find(loc => loc.id === locationId);
+                                  
+                                  if (location) {
+                                    // Show location (shop or warehouse)
+                                    return (
+                                      <div className="flex items-center gap-1.5 text-sm">
+                                        {location.type === "shop" ? (
+                                          <Building2 className="w-3.5 h-3.5 text-[#0891b2]" />
+                                        ) : (
+                                          <Package className="w-3.5 h-3.5 text-purple-600" />
+                                        )}
+                                        <span className="text-xs font-medium">{location.name}</span>
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                          {location.type === "shop" ? "Shop" : "Warehouse"}
+                                        </Badge>
+                                      </div>
+                                    );
+                                  } else {
+                                    // Fallback to branch display if no location mapping exists
+                                    return (
+                                      <>
+                                        <div className="flex items-center gap-1.5 text-sm">
+                                          <Building2 className="w-3 h-3 text-[#0891b2]" />
+                                          <span className="text-xs">{branch?.name || "Unknown"}</span>
+                                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                                            Branch
+                                          </Badge>
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          No location mapping
+                                        </p>
+                                      </>
+                                    );
+                                  }
+                                })()}
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
+                              <div className="flex justify-end gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => {
+                                    setManagingProduct(item);
+                                    setIsManageLocationsOpen(true);
+                                  }}
+                                  title="Manage stock at locations"
+                                >
+                                  <MapPin className="w-4 h-4 text-[#0891b2]" />
+                                </Button>
                                 <Button variant="ghost" size="icon" onClick={() => openEditDialog(item)}>
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -1625,6 +1809,156 @@ export function Inventory() {
         <TabsContent value="categories">
           <CategoriesTab />
         </TabsContent>
+        
+        <TabsContent value="location-setup">
+          <Card>
+            <CardHeader>
+              <CardTitle>Branch-Location Mapping</CardTitle>
+              <CardDescription>
+                Tie your branches to specific locations (shops or warehouses) for multi-location inventory tracking.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {branches.filter(b => b.status === "active").length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No active branches found. Create branches first to set up location mappings.
+                </div>
+              ) : locations.filter(loc => loc.isActive).length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-8">
+                  <AlertCircle className="w-10 h-10 text-amber-500" />
+                  <p className="text-sm text-muted-foreground text-center max-w-md">
+                    No locations available. Run the database migration to enable multi-location tracking:
+                  </p>
+                  <code className="text-xs bg-muted px-3 py-1.5 rounded border">
+                    /supabase/migrations/create_locations_and_stock_transfers.sql
+                  </code>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-900 text-xs">
+                      Map each branch to a location (shop or warehouse). Once configured, the product form will show locations instead of branches.
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Branch</TableHead>
+                          <TableHead>Mapped Location</TableHead>
+                          <TableHead className="w-[200px]">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {branches.filter(b => b.status === "active").map(branch => {
+                          const mappedLocationId = branchLocationMappings[branch.id];
+                          const mappedLocation = locations.find(loc => loc.id === mappedLocationId);
+                          
+                          return (
+                            <TableRow key={branch.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="w-4 h-4 text-[#0891b2]" />
+                                  <span className="font-medium">{branch.name}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {mappedLocation ? (
+                                  <div className="flex items-center gap-2">
+                                    {mappedLocation.type === "shop" ? (
+                                      <Building2 className="w-4 h-4 text-[#0891b2]" />
+                                    ) : (
+                                      <Package className="w-4 h-4 text-purple-600" />
+                                    )}
+                                    <span>{mappedLocation.name}</span>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {mappedLocation.type === "shop" ? "Shop" : "Warehouse"}
+                                    </Badge>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground italic">Not mapped</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Select
+                                    value={mappedLocationId || "__none__"}
+                                    onValueChange={(value) => {
+                                      if (value === "__none__") {
+                                        updateBranchLocationMapping(branch.id, null);
+                                      } else {
+                                        updateBranchLocationMapping(branch.id, value);
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue placeholder="Select location..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">
+                                        <span className="text-muted-foreground italic">None</span>
+                                      </SelectItem>
+                                      {locations.filter(loc => loc.isActive).map(location => (
+                                        <SelectItem key={location.id} value={location.id}>
+                                          <div className="flex items-center gap-2">
+                                            {location.type === "shop" ? (
+                                              <Building2 className="w-3 h-3 text-[#0891b2]" />
+                                            ) : (
+                                              <Package className="w-3 h-3 text-purple-600" />
+                                            )}
+                                            <span>{location.name}</span>
+                                            <Badge variant="outline" className="text-[10px] py-0">
+                                              {location.type === "shop" ? "Shop" : "Warehouse"}
+                                            </Badge>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  {mappedLocationId && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={() => {
+                                        updateBranchLocationMapping(branch.id, null);
+                                        toast.success("Mapping removed", {
+                                          description: `${branch.name} is no longer mapped to any location.`
+                                        });
+                                      }}
+                                      title="Remove mapping"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  
+                  <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 border border-amber-200">
+                    <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="text-xs text-amber-900">
+                      <p className="font-medium mb-1">Important Notes:</p>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        <li>Each branch can only be mapped to one location</li>
+                        <li>Multiple branches can share the same location</li>
+                        <li>Mappings are stored locally in your browser</li>
+                        <li>Once configured, the product form will use locations instead of branches</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Edit Dialog */}
@@ -1644,6 +1978,8 @@ export function Inventory() {
             onFormChange={setFormData}
             suppliers={suppliers}
             branches={branches}
+            locations={locations}
+            branchLocationMappings={branchLocationMappings}
             userRole={user?.role || ""}
             userBranchId={user?.branchId || undefined}
             allCategories={categoryList}
@@ -1677,6 +2013,157 @@ export function Inventory() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Manage Stock Locations Dialog */}
+      <Dialog open={isManageLocationsOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsManageLocationsOpen(false);
+          setManagingProduct(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-[#0891b2]" />
+              Manage Stock Locations
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {managingProduct && (
+                <span>Manage stock quantities for <strong>{managingProduct.name}</strong> across different locations</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {managingProduct && (
+              <>
+                {/* Current Stock Summary */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Stock Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-2xl font-bold">{managingProduct.stock}</p>
+                        <p className="text-xs text-muted-foreground">Total units across all locations</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        SKU: {managingProduct.sku}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Stock by Location */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Stock at Each Location</Label>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Location</TableHead>
+                          <TableHead className="text-xs">Type</TableHead>
+                          <TableHead className="text-xs text-right">Current Stock</TableHead>
+                          <TableHead className="text-xs text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {locations.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-6 text-xs text-muted-foreground">
+                              No locations available. Create locations first.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          locations.map((location) => {
+                            // Check if product is at this location (currently using branch match)
+                            const isAtLocation = managingProduct.branchId === location.id;
+                            const stockAtLocation = isAtLocation ? managingProduct.stock : 0;
+                            
+                            return (
+                              <TableRow key={location.id}>
+                                <TableCell className="text-xs">
+                                  <div className="flex items-center gap-2">
+                                    {location.type === "shop" ? (
+                                      <Building2 className="w-3.5 h-3.5 text-[#0891b2]" />
+                                    ) : (
+                                      <Package className="w-3.5 h-3.5 text-purple-600" />
+                                    )}
+                                    <span className="font-medium">{location.name}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {location.type === "shop" ? "Shop" : "Warehouse"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-right">
+                                  <span className="font-medium">{stockAtLocation}</span>
+                                  {isAtLocation && (
+                                    <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0">
+                                      Primary
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {isAtLocation ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => openEditDialog(managingProduct)}
+                                    >
+                                      Edit Stock
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs text-[#0891b2]"
+                                      onClick={() => {
+                                        toast.info("Coming Soon", {
+                                          description: "Multi-location stock distribution will be available after running the product_stock migration."
+                                        });
+                                      }}
+                                    >
+                                      <Plus className="w-3 h-3 mr-1" />
+                                      Add Stock
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Info Alert */}
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertTitle className="text-xs">Multi-Location Feature</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    To enable full multi-location stock tracking, run the SQL migration at 
+                    <code className="mx-1 px-1 py-0.5 bg-muted rounded text-[10px]">
+                      /supabase/migrations/create_product_stock_table.sql
+                    </code>
+                    in your Supabase dashboard.
+                  </AlertDescription>
+                </Alert>
+              </>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsManageLocationsOpen(false)} className="h-9 text-xs">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

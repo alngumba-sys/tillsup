@@ -9,34 +9,53 @@ import { isPreviewMode, mockPreviewInventory } from "../utils/previewMode";
  * INVENTORY CONTEXT - ENTERPRISE POS BRANCH-BASED INVENTORY MANAGEMENT
  * ═══════════════════════════════════════════════════════════════════════════
  * 
- * VERSION: 3.0 - Supabase Persistence
+ * VERSION: 4.0 - Multi-Location Stock Tracking
  * 
  * ARCHITECTURE PRINCIPLES:
  * 
  * 1. SUPABASE BACKEND
  *    - All inventory data is persisted in the 'inventory' table
+ *    - Stock quantities tracked per-location in 'product_stock' table
  *    - Real-time synchronization (optional, can be added later)
  * 
- * 2. MANDATORY BRANCH ASSIGNMENT
- *    - Every product MUST have a branchId
- *    - Branch selection is REQUIRED when adding products
+ * 2. MULTI-LOCATION STOCK TRACKING
+ *    - Products can exist at multiple locations (shops/warehouses)
+ *    - Each location has independent stock quantity
+ *    - Stock transfers move inventory between locations
  * 
- * 3. ZERO-TOLERANCE ISOLATION
- *    - Each branch's inventory is completely isolated
+ * 3. BACKWARDS COMPATIBILITY
+ *    - Legacy branchId field maintained for existing features
+ *    - New features use product_stock table
  * 
  * ═══════════════════════════════════════════════════════════════════════════
  */
+
+// ═══════════════════════════════════════════════════════════════════
+// PRODUCT STOCK - Per-Location Stock Tracking
+// ═══════════════════════════════════════════════════════════════════
+export interface ProductStock {
+  id: string;
+  businessId: string;
+  productId: string;
+  locationId: string;
+  locationName: string;
+  locationType: 'shop' | 'warehouse';
+  quantity: number;
+  reorderLevel: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export interface InventoryItem {
   id: string;
   name: string;
   category: string;
   price: number; // LEGACY FIELD - Maps to Retail Price (DEFAULT selling price)
-  stock: number;
+  stock: number; // LEGACY - Total stock across all locations (calculated)
   sku: string;
   supplier: string;
   businessId: string;
-  branchId: string; // MANDATORY - Determines which branch owns this product
+  branchId: string; // LEGACY - Kept for backwards compatibility
   lowStockThreshold?: number; // Optional threshold for low-stock alerts (default: 10)
   image?: string; // Product image URL
   // ═══════════════════════════════════════════════════════════════════
@@ -45,6 +64,11 @@ export interface InventoryItem {
   costPrice?: number; // Purchase/acquisition price (for margin calculation)
   retailPrice?: number; // Default selling price (if not set, falls back to 'price')
   wholesalePrice?: number; // Optional bulk/wholesale selling price
+  // ═══════════════════════════════════════════════════════════════════
+  // MULTI-LOCATION EXTENSION
+  // ═══════════════════════════════════════════════════════════════════
+  stockRecords?: ProductStock[]; // Stock at each location
+  totalStock?: number; // Total stock across all locations
 }
 
 interface InventoryContextType {

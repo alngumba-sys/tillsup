@@ -16,7 +16,7 @@ const heroImage2 = 'https://images.unsplash.com/photo-1761370571806-886404629697
  * 
  * In Preview Mode: Auto-redirect to dashboard to show the app
  * 
- * ═══════════════════════════════════════════════════════════════════
+ * ═════════════════════════════════════════════════════════════════
  * ADMIN ACCESS EASTER EGG
  * ═══════════════════════════════════════════════════════════════════
  * 
@@ -38,6 +38,18 @@ export function LandingSimple() {
   const navigate = useNavigate();
   const { assets } = useBranding();
   const [adminClicks, setAdminClicks] = React.useState(0);
+  
+  // AGGRESSIVE Debug logging
+  React.useEffect(() => {
+    console.log('🎯🎯🎯 LandingSimple component mounted successfully');
+    console.log('📋 Assets loaded:', assets);
+    console.log('🎨 Component is rendering - you should see the page now');
+    console.log('🌐 Current pathname:', window.location.pathname);
+    console.log('✅ Landing page is ACTIVE and VISIBLE');
+    
+    // Add a visible indicator to the page
+    document.title = 'Tillsup - Landing Page LOADED ✅';
+  }, [assets]);
   
   // Preview mode redirect removed - users should always see the landing page
 
@@ -67,15 +79,13 @@ export function LandingSimple() {
   ];
   
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#0a0e1a',
-      color: 'white',
-      position: 'relative',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
+    <div 
+      className="relative min-h-screen overflow-hidden"
+      style={{
+        background: '#0f172a' // Dark navy background
+      }}
+    >
+      
       {/* Animated Background Icons */}
       <div style={{
         position: 'absolute',
@@ -83,19 +93,26 @@ export function LandingSimple() {
         left: 0,
         right: 0,
         bottom: 0,
-        opacity: 0.05,
+        opacity: 0.25,
         pointerEvents: 'none',
-        zIndex: 0
+        zIndex: 0,
+        color: '#64748b'
       }}>
-        {Array.from({ length: 40 }).map((_, i) => {
+        {Array.from({ length: 150 }).map((_, i) => {
           const Icon = backgroundIcons[i % backgroundIcons.length];
+          // Use seeded random for uneven distribution
+          const random1 = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+          const random2 = Math.sin(i * 93.9898 + 12.233) * 43758.5453;
+          const left = ((random1 - Math.floor(random1)) * 100);
+          const top = ((random2 - Math.floor(random2)) * 100);
+          
           return (
             <div
               key={i}
               style={{
                 position: 'absolute',
-                left: `${(i * 13) % 100}%`,
-                top: `${(i * 17) % 100}%`,
+                left: `${left}%`,
+                top: `${top}%`,
                 animation: `float ${12 + (i % 8)}s infinite ease-in-out ${i * 0.5}s`
               }}
             >
@@ -371,7 +388,7 @@ export function LandingSimple() {
           width: 100%;
           position: relative;
           font-size: clamp(13px, 2vw, 15px);
-          opacity: 0.5;
+          color: #64748b;
           padding: 0 1rem;
         }
 
@@ -387,6 +404,7 @@ export function LandingSimple() {
           align-items: center;
           gap: 8px;
           min-width: fit-content;
+          color: #64748b;
         }
 
         .admin-click-pulse {
@@ -473,13 +491,13 @@ export function LandingSimple() {
       {/* Hero Section */}
       <div className="hero-section">
         {/* Main Heading */}
-        <h1 className="hero-title font-[Biryani]">
+        <h1 className="hero-title font-[Biryani]" style={{ color: '#ffffff' }}>
           The Modern POS That<br />
           <span style={{ color: '#ef4444' }}>Grows</span> With You
         </h1>
 
         {/* Subtitle */}
-        <p className="hero-subtitle">
+        <p className="hero-subtitle" style={{ color: '#94a3b8' }}>
           Transform your business operations with our comprehensive platform. Manage sales, inventory, staff, and analytics—all in one powerful system designed for modern enterprises.
         </p>
 
@@ -524,7 +542,7 @@ export function LandingSimple() {
 
         {/* Industry Categories - Scrolling Marquee */}
         <div className="marquee-container">
-          <div className="marquee-content">
+          <div className="marquee-content bg-[#ffffff00]">
             {/* First set of items */}
             <div className="marquee-item">
               <Coffee size={16} />
@@ -618,15 +636,6 @@ export function LandingSimple() {
           width: '100%',
           padding: '0'
         }}>
-          <img 
-            src={heroImage1} 
-            alt="Building the Future of African Commerce" 
-            style={{
-              width: '100%',
-              height: 'auto',
-              display: 'block'
-            }}
-          />
         </div>
 
         {/* Core Values Section - Full Width Image */}
@@ -636,15 +645,6 @@ export function LandingSimple() {
           padding: '0',
           marginBottom: 'clamp(60px, 10vw, 100px)'
         }}>
-          <img 
-            src={heroImage2} 
-            alt="Core Values and Ready to Grow" 
-            style={{
-              width: '100%',
-              height: 'auto',
-              display: 'block'
-            }}
-          />
         </div>
       </div>
     </div>

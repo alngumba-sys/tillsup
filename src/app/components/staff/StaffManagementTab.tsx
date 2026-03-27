@@ -8,12 +8,13 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Avatar, AvatarFallback } from "../ui/avatar";
-import { Search, UserPlus, Edit, Trash2, Copy, CheckCircle2, Building2, KeyRound, AlertCircle, Shield, DollarSign, Mail, Upload, Download, FileSpreadsheet } from "lucide-react";
+import { Search, UserPlus, Edit, Trash2, Copy, CheckCircle2, Building2, KeyRound, AlertCircle, Shield, DollarSign, Mail, Upload, Download, FileSpreadsheet, XCircle } from "lucide-react";
 import { useAuth, UserRole, User, SalaryType, PayFrequency, StaffSalary } from "../../contexts/AuthContext";
 import { useBranch } from "../../contexts/BranchContext";
 import { useRole } from "../../contexts/RoleContext";
 import { useCurrency } from "../../hooks/useCurrency";
 import { useSubscription } from "../../hooks/useSubscription";
+import { useBranding } from "../../contexts/BrandingContext";
 import { toast } from "sonner";
 import { ConfirmationDialog } from "../ConfirmationDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
@@ -21,6 +22,7 @@ import { SchemaError } from "../../components/inventory/SchemaError";
 import { Separator } from "../ui/separator";
 import { useNavigate } from "react-router";
 import * as XLSX from "xlsx";
+import { DatabaseSetupAlert } from "../DatabaseSetupAlert";
 
 export function StaffManagementTab() {
   const { user, business, getStaffMembers, createStaff, updateStaff, deleteStaff, resetStaffPassword, resendStaffInvite } = useAuth();
@@ -28,10 +30,12 @@ export function StaffManagementTab() {
   const { activeRoles, getRoleById } = useRole();
   const { currencyCode, currencySymbol } = useCurrency();
   const { canCreateStaff, plan, usage, limits } = useSubscription();
+  const { assets, loading: brandingLoading } = useBranding();
   const navigate = useNavigate();
   const [staffMembers, setStaffMembers] = useState<User[]>([]);
   const [isLoadingStaff, setIsLoadingStaff] = useState(true);
   const [schemaError, setSchemaError] = useState<any>(null);
+  const [databaseSetupError, setDatabaseSetupError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -103,10 +107,11 @@ export function StaffManagementTab() {
     firstName: "",
     lastName: "",
     role: "Cashier" as UserRole,
+    roleId: "", // Store the UUID of the role
     branchId: "", // Add branch assignment
     // ═══════════════════════════════════════════════════════════════════
     // COMPENSATION (HR DATA) - Optional but recommended
-    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════��═══════════════════════════════════════════════════
     salaryEnabled: false,
     salaryType: "monthly" as SalaryType,
     baseSalary: "",
@@ -145,7 +150,8 @@ export function StaffManagementTab() {
             toast.error("Username is required");
             return;
          }
-         finalEmail = `${username.trim().toLowerCase().replace(/[^a-z0-9]/g, '')}@no-email.tillsup.com`;
+         const normalizedUsername = username.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+         finalEmail = `${normalizedUsername || 'staff'}@noemail.tillsup.com`;
        } else {
          if (!formData.email.trim() || !formData.email.includes("@")) {
             toast.error("Valid email is required");
@@ -154,15 +160,11 @@ export function StaffManagementTab() {
        }
 
        if (autoGeneratePassword) {
-          const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-          let retVal = "";
-          for (let i = 0, n = charset.length; i < 6; ++i) {
-              retVal += charset.charAt(Math.floor(Math.random() * n));
-          }
-          finalPassword = retVal;
+          // Use a simpler, easy-to-share numeric temporary code (6 digits)
+          finalPassword = String(Math.floor(100000 + Math.random() * 900000));
        } else {
-          if (!manualPassword || manualPassword.length < 6) {
-             toast.error("Password must be at least 6 characters");
+          if (!manualPassword || manualPassword.length < 4) {
+             toast.error("Password must be at least 4 characters");
              return;
           }
           finalPassword = manualPassword;
@@ -204,7 +206,7 @@ export function StaffManagementTab() {
         formData.lastName,
         formData.role,
         formData.branchId,
-        undefined,
+        formData.roleId || undefined,
         finalPassword
       );
 
@@ -223,9 +225,9 @@ export function StaffManagementTab() {
       if (result.success) {
         console.log("✅ Staff creation successful!");
         if (result.credentials) {
-           // ═══════════════════════════════════════════════════════════════════
+           // ════════════════════���══════════════════════════════════════════════
            // CREDENTIALS FLOW (Admin API)
-           // ═══════════════════════════════════════════════════════════════════
+           // ═══════════════════════════════════���═══════════════════════════════
            if (formData.salaryEnabled) {
               const updatedStaffMembers = await getStaffMembers();
               setStaffMembers(updatedStaffMembers);
@@ -249,7 +251,7 @@ export function StaffManagementTab() {
            setGeneratedCredentials(result.credentials);
            toast.success("Staff member created successfully!");
         } else {
-           // ═══════════════════════════════════════════════════════════════════
+           // ══════════════════════════════════════════════���════════════════════
            // INVITE FLOW (Frontend/Supabase)
            // ═══════════════════════════════════════════════════════════════════
            setIsAddDialogOpen(false);
@@ -399,15 +401,15 @@ export function StaffManagementTab() {
          if (autoGeneratePassword) {
             const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             let retVal = "";
-            for (let i = 0, n = charset.length; i < 6; ++i) {
+            for (let i = 0, n = charset.length; i < 5; ++i) {
                 retVal += charset.charAt(Math.floor(Math.random() * n));
             }
             finalPassword = retVal;
-            console.log("✅ Auto-generated password (6 chars, alphanumeric)");
+            console.log("✅ Auto-generated password (5 chars, alphanumeric)");
          } else {
-            if (!manualPassword || manualPassword.length < 6) {
-               console.error("❌ Validation failed: Password must be at least 6 characters");
-               toast.error("Password must be at least 6 characters");
+            if (!manualPassword || manualPassword.length < 5) {
+               console.error("❌ Validation failed: Password must be at least 5 characters");
+               toast.error("Password must be at least 5 characters");
                console.timeEnd("⏱️  1_VALIDATION");
                console.timeEnd("⏱️  TOTAL_STAFF_CREATION_TIME");
                return;
@@ -474,7 +476,7 @@ export function StaffManagementTab() {
         formData.lastName,
         formData.role,
         formData.branchId,
-        undefined,
+        formData.roleId || undefined,
         finalPassword
       );
 
@@ -573,7 +575,7 @@ export function StaffManagementTab() {
 
       // ═══════════════════════════════════════════════════════════════════
       // SALARY VALIDATION (if enabled)
-      // ═══════════════════════════════════════════════════════════��═══════
+      // ══════════════════════════════════���════════════════════════��═══════
       if (formData.salaryEnabled) {
         if (!formData.baseSalary || parseFloat(formData.baseSalary) <= 0) {
           toast.error("Base salary must be greater than 0");
@@ -604,6 +606,7 @@ export function StaffManagementTab() {
           firstName: formData.firstName,
           lastName: formData.lastName,
           role: formData.role,
+          roleId: formData.roleId || undefined,
           branchId: formData.branchId,
           salary, // Include salary in updates
         });
@@ -655,6 +658,7 @@ export function StaffManagementTab() {
       firstName: member.firstName,
       lastName: member.lastName,
       role: member.role,
+      roleId: member.roleId || "",
       branchId: member.branchId || "",
       // Populate salary data
       salaryEnabled: hasSalary,
@@ -672,6 +676,7 @@ export function StaffManagementTab() {
       firstName: "",
       lastName: "",
       role: "Cashier",
+      roleId: "",
       branchId: "",
       // Reset salary fields
       salaryEnabled: false,
@@ -709,52 +714,95 @@ export function StaffManagementTab() {
     return `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase();
   };
 
-  const copyToClipboard = (text: string) => {
-    // Fallback method for environments where Clipboard API is restricted
-    try {
-      // Try modern Clipboard API first
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
-          toast.success("Copied to clipboard!");
-        }).catch(() => {
-          // Fallback to execCommand
-          fallbackCopyTextToClipboard(text);
+  const copyToClipboard = async (text: string, inputRef?: HTMLInputElement) => {
+    // Enhanced copy method specifically for restricted environments (like Figma)
+    // This prioritizes selecting the actual input field which works better than programmatic copying
+    
+    // Method 1: If we have a reference to the input, select it directly (most reliable in restricted environments)
+    if (inputRef) {
+      try {
+        inputRef.focus();
+        inputRef.select();
+        inputRef.setSelectionRange(0, inputRef.value.length);
+        
+        // Try to copy the selection
+        const successful = document.execCommand('copy');
+        if (successful) {
+          toast.success("Copied to clipboard!", {
+            description: "Password copied successfully"
+          });
+          return;
+        }
+      } catch (err) {
+        console.log("Direct input copy failed:", err);
+      }
+    }
+    
+    // Method 2: Try modern Clipboard API (works in secure contexts)
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success("Copied to clipboard!", {
+          description: "Password copied successfully"
         });
+        return;
+      } catch (err) {
+        console.log("Clipboard API blocked, trying fallback method...");
+      }
+    }
+    
+    // Method 3: Fallback to execCommand with textarea (works in more environments)
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      
+      // Make invisible but functional
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      textArea.style.pointerEvents = "none";
+      textArea.setAttribute('readonly', '');
+      
+      document.body.appendChild(textArea);
+      
+      // iOS Safari compatibility
+      if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
+        const range = document.createRange();
+        range.selectNodeContents(textArea);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        textArea.setSelectionRange(0, text.length);
       } else {
-        // Use fallback method
-        fallbackCopyTextToClipboard(text);
+        textArea.focus();
+        textArea.select();
+        textArea.setSelectionRange(0, text.length);
+      }
+      
+      // Try to copy
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        toast.success("Copied to clipboard!", {
+          description: "Password copied successfully"
+        });
+        return;
       }
     } catch (err) {
-      fallbackCopyTextToClipboard(text);
+      console.log("execCommand failed:", err);
     }
+    
+    // Method 4: If all else fails, show a helpful message (never show error)
+    toast.warning("Please copy manually", {
+      description: "Click the password field and press Ctrl+C (or Cmd+C on Mac)"
+    });
   };
 
   const fallbackCopyTextToClipboard = (text: string) => {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    
-    // Avoid scrolling to bottom
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
-    textArea.style.opacity = "0";
-    
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    
-    try {
-      const successful = document.execCommand('copy');
-      if (successful) {
-        toast.success("Copied to clipboard!");
-      } else {
-        toast.error("Failed to copy to clipboard");
-      }
-    } catch (err) {
-      toast.error("Failed to copy to clipboard");
-    }
-    
-    document.body.removeChild(textArea);
+    // Legacy function - now redirects to improved copyToClipboard
+    copyToClipboard(text);
   };
 
   const activeStaff = staffMembers.filter(m => !m.mustChangePassword).length;
@@ -775,7 +823,7 @@ export function StaffManagementTab() {
 
   // ═══════════════════════════════════════════════════════════════════
   // EXCEL IMPORT FUNCTIONS
-  // ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════��
   const downloadStaffImportTemplate = () => {
     const templateData = [
       {
@@ -915,10 +963,10 @@ export function StaffManagementTab() {
         const rowNum = headerRowIndex + i + 2;
 
         try {
-          const firstName = row[headerMap["First Name"]]?.toString().trim() || "";
-          const lastName = row[headerMap["Last Name"]]?.toString().trim() || "";
-          const email = row[headerMap["Email"]]?.toString().trim().toLowerCase() || "";
-          const role = row[headerMap["Role"]]?.toString().trim() || "Cashier";
+          const firstName = String(row[headerMap["First Name"]] ?? '').trim();
+          const lastName = String(row[headerMap["Last Name"]] ?? '').trim();
+          const email = String(row[headerMap["Email"]] ?? '').trim().toLowerCase();
+          const role = String(row[headerMap["Role"]] ?? '').trim();
           const branchName = row[headerMap["Branch"]]?.toString().trim() || "";
           const salaryType = row[headerMap["Salary Type"]]?.toString().trim().toLowerCase() || "";
           const baseSalary = row[headerMap["Base Salary"]]?.toString().trim() || "";
@@ -987,22 +1035,30 @@ export function StaffManagementTab() {
             branchId: branchId || business?.id
           };
 
-          // Add salary if provided
-          if (salaryType && baseSalary) {
-            const validSalaryTypes: SalaryType[] = ["monthly", "hourly", "daily", "weekly"];
-            if (validSalaryTypes.includes(salaryType as SalaryType)) {
-              staffData.salary = {
-                salaryType: salaryType as SalaryType,
-                baseSalary: parseFloat(baseSalary),
-                payFrequency: (salaryType === "monthly" ? "monthly" : "weekly") as PayFrequency,
-                effectiveFrom: new Date().toISOString().split('T')[0]
-              };
-            }
-          }
-
-          const result = await createStaff(staffData);
+          const result = await createStaff(email, firstName, lastName, staffRole, branchId || business?.id);
 
           if (result.success) {
+            // Add salary if provided
+            if (salaryType && baseSalary) {
+              const validSalaryTypes: SalaryType[] = ["monthly", "hourly", "daily", "weekly"];
+              if (validSalaryTypes.includes(salaryType as SalaryType)) {
+                // Find the created staff to update with salary
+                const updatedStaffMembers = await getStaffMembers();
+                const newStaff = updatedStaffMembers.find(s => s.email.toLowerCase() === email);
+                if (newStaff) {
+                  const salary: StaffSalary = {
+                    salaryType: salaryType as SalaryType,
+                    baseSalary: parseFloat(baseSalary),
+                    currency: currencyCode,
+                    payFrequency: (salaryType === "monthly" ? "monthly" : "weekly") as PayFrequency,
+                    effectiveFrom: new Date(),
+                    lastUpdated: new Date(),
+                    updatedBy: user?.id,
+                  };
+                  await updateStaff(newStaff.id, { salary });
+                }
+              }
+            }
             success.push(`Row ${rowNum}: Created staff "${firstName} ${lastName}"`);
           } else {
             errors.push(`Row ${rowNum}: ${result.error || "Failed to create staff"}`);
@@ -1251,14 +1307,20 @@ export function StaffManagementTab() {
                       <Label className="text-xs text-muted-foreground">Email</Label>
                       <div className="flex items-center gap-2 mt-1">
                         <Input 
+                          id="new-staff-email-input"
                           value={generatedCredentials.email} 
                           readOnly 
-                          className="font-mono text-sm"
+                          className="font-mono text-sm cursor-pointer select-all"
+                          onClick={(e) => e.currentTarget.select()}
                         />
                         <Button 
                           variant="outline" 
                           size="icon"
-                          onClick={() => copyToClipboard(generatedCredentials.email)}
+                          onClick={() => {
+                            const input = document.getElementById('new-staff-email-input') as HTMLInputElement;
+                            copyToClipboard(generatedCredentials.email, input);
+                          }}
+                          className="shrink-0"
                         >
                           <Copy className="w-4 h-4" />
                         </Button>
@@ -1269,14 +1331,20 @@ export function StaffManagementTab() {
                       <Label className="text-xs text-muted-foreground">Temporary Password</Label>
                       <div className="flex items-center gap-2 mt-1">
                         <Input 
+                          id="new-staff-password-input"
                           value={generatedCredentials.password} 
                           readOnly 
-                          className="font-mono text-sm"
+                          className="font-mono text-lg font-bold cursor-pointer select-all bg-white border-2 border-primary/20"
+                          onClick={(e) => e.currentTarget.select()}
                         />
                         <Button 
                           variant="outline" 
                           size="icon"
-                          onClick={() => copyToClipboard(generatedCredentials.password)}
+                          onClick={() => {
+                            const input = document.getElementById('new-staff-password-input') as HTMLInputElement;
+                            copyToClipboard(generatedCredentials.password, input);
+                          }}
+                          className="shrink-0"
                         >
                           <Copy className="w-4 h-4" />
                         </Button>
@@ -1395,7 +1463,7 @@ export function StaffManagementTab() {
                                 className="accent-primary w-4 h-4 rounded"
                               />
                               <Label htmlFor="auto-gen" className="text-sm font-normal cursor-pointer">
-                                 Auto-generate password (6-digit alphanumeric)
+                                 Auto-generate password (6-digit code)
                               </Label>
                            </div>
 
@@ -1429,7 +1497,22 @@ export function StaffManagementTab() {
 
                   <div className="grid gap-2">
                     <Label htmlFor="staff-role">Role</Label>
-                    <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value as UserRole })}>
+                    <Select 
+                      value={formData.roleId || formData.role} 
+                      onValueChange={(value) => {
+                        // Value could be Name (legacy) or ID (new)
+                        const selectedRole = activeRoles.find(r => r.id === value || r.name === value);
+                        if (selectedRole) {
+                          setFormData({ 
+                            ...formData, 
+                            role: selectedRole.name as UserRole,
+                            roleId: selectedRole.id 
+                          });
+                        } else {
+                          setFormData({ ...formData, role: value as UserRole });
+                        }
+                      }}
+                    >
                       <SelectTrigger id="staff-role">
                         <SelectValue />
                       </SelectTrigger>
@@ -1440,7 +1523,7 @@ export function StaffManagementTab() {
                           </div>
                         ) : (
                           activeRoles.map((role) => (
-                            <SelectItem key={role.id} value={role.name}>
+                            <SelectItem key={role.id} value={role.id}>
                               {role.name}
                             </SelectItem>
                           ))
@@ -1989,21 +2072,37 @@ export function StaffManagementTab() {
               console.log("Password reset result:", result);
               
               if (result.success && result.temporaryPassword) {
-                setResetPasswordDialog({
-                  isOpen: true,
-                  staffId: resetPasswordConfirmation.staffId,
-                  staffName: resetPasswordConfirmation.staffName,
-                  temporaryPassword: result.temporaryPassword
-                });
-                toast.success("Password reset successfully! Staff member can now login with the temporary password.");
-                // Refresh list to show updated status
-                const updatedList = await getStaffMembers();
-                setStaffMembers(updatedList);
+                if (result.temporaryPassword === "CHECK_EMAIL" || result.temporaryPassword === "EMAIL_SENT") {
+                  // Email-based reset (automatic workaround when database not setup)
+                  toast.success("Password reset email sent! Staff member should check their email.", {
+                    description: "A password reset link has been sent. This is an automatic workaround."
+                  });
+                  setResetPasswordConfirmation(null);
+                  // Refresh list to show updated status
+                  const updatedList = await getStaffMembers();
+                  setStaffMembers(updatedList);
+                } else {
+                  // Direct password reset (works when database is setup)
+                  setResetPasswordDialog({
+                    isOpen: true,
+                    staffId: resetPasswordConfirmation.staffId,
+                    staffName: resetPasswordConfirmation.staffName,
+                    temporaryPassword: result.temporaryPassword
+                  });
+                  toast.success("Password reset successfully! Staff member can now login with the temporary password.");
+                  // Refresh list to show updated status
+                  const updatedList = await getStaffMembers();
+                  setStaffMembers(updatedList);
+                }
               } else {
                 console.error("Password reset failed:", result.error);
                 // Show detailed error message
-                if (result.error?.includes("does not exist")) {
-                  toast.error("Database function not found. Please run the setup SQL script first. See PASSWORD_RESET_COMPLETE_GUIDE.md");
+                if (result.error?.includes("pgcrypto") || result.error?.includes("gen_salt") || result.error?.includes("DATABASE SETUP REQUIRED") || result.error?.includes("function") && result.error?.includes("does not exist")) {
+                  // Show visual database setup alert
+                  setDatabaseSetupError(result.error || "Database setup required");
+                } else if (result.error?.includes("Database function missing")) {
+                  // Show visual database setup alert
+                  setDatabaseSetupError(result.error || "Database setup required");
                 } else if (result.error?.includes("Insufficient permissions")) {
                   toast.error("You don't have permission to reset passwords. Only Business Owners and Managers can reset passwords.");
                 } else if (result.error?.includes("different business")) {
@@ -2025,6 +2124,12 @@ export function StaffManagementTab() {
         <Dialog open={resetPasswordDialog.isOpen} onOpenChange={(open) => setResetPasswordDialog(open ? resetPasswordDialog : null)}>
           <DialogContent>
             <DialogHeader>
+              {/* Tillsup Logo */}
+              {!brandingLoading && assets.logoMain && (
+                <div className="flex justify-center mb-4">
+                  <img src={assets.logoMain} alt="Tillsup Logo" className="h-12 w-auto object-contain" />
+                </div>
+              )}
               <DialogTitle>Password Reset Successful</DialogTitle>
               <DialogDescription>
                 A temporary password has been generated for {resetPasswordDialog.staffName}.
@@ -2056,18 +2161,32 @@ export function StaffManagementTab() {
                   <Label className="text-xs text-muted-foreground">Temporary Password</Label>
                   <div className="flex items-center gap-2 mt-1">
                     <Input 
+                      id="temp-password-input"
                       value={resetPasswordDialog.temporaryPassword} 
                       readOnly 
-                      className="font-mono text-sm"
+                      className="font-mono text-lg font-bold select-all cursor-pointer bg-white border-2 border-primary/20"
+                      onClick={(e) => {
+                        // Auto-select on click for easy manual copying
+                        e.currentTarget.select();
+                      }}
+                      title="Click to select, then Ctrl+C to copy"
                     />
                     <Button 
                       variant="outline" 
                       size="icon"
-                      onClick={() => copyToClipboard(resetPasswordDialog.temporaryPassword)}
+                      onClick={() => {
+                        const input = document.getElementById('temp-password-input') as HTMLInputElement;
+                        copyToClipboard(resetPasswordDialog.temporaryPassword, input);
+                      }}
+                      title="Copy to clipboard"
+                      className="shrink-0"
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
                   </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    💡 Tip: Click the password to select it, then press Ctrl+C (or Cmd+C) to copy
+                  </p>
                 </div>
 
                 <p className="text-xs text-muted-foreground mt-2">
@@ -2083,6 +2202,14 @@ export function StaffManagementTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Database Setup Alert */}
+      {databaseSetupError && (
+        <DatabaseSetupAlert 
+          error={databaseSetupError} 
+          onClose={() => setDatabaseSetupError(null)} 
+        />
       )}
     </div>
   );

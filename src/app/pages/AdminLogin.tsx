@@ -111,14 +111,22 @@ export function AdminLogin() {
           .maybeSingle();
 
         if (!existingProfile) {
+          // Create admin profile with a special business_id to suppress warnings
           await supabase.from('profiles').insert({
             id: user.id,
             email: ADMIN_EMAIL,
             first_name: "Platform",
             last_name: "Administrator",
             role: "Platform Admin",
+            business_id: "PLATFORM_ADMIN", // Special ID to identify platform admins
             created_at: new Date().toISOString()
           });
+        } else {
+          // Update existing profile to have the special business_id
+          await supabase.from('profiles').update({
+            role: "Platform Admin",
+            business_id: "PLATFORM_ADMIN"
+          }).eq('id', user.id);
         }
       }
 

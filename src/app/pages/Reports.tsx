@@ -863,7 +863,7 @@ export function Reports() {
                 </CardHeader>
                 <CardContent style={{ minHeight: '350px' }}>
                   <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
-                    <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                    <ResponsiveContainer width="100%" height={300} minHeight={300}>
                       <PieChart id="category-sales-pie-chart">
                         <Pie
                           data={analytics.categoryData}
@@ -894,7 +894,7 @@ export function Reports() {
                 </CardHeader>
                 <CardContent style={{ minHeight: '350px' }}>
                   <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
-                    <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                    <ResponsiveContainer width="100%" height={300} minHeight={300}>
                       <BarChart id="category-revenue-bar-chart" data={analytics.categoryData} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis type="number" className="text-xs" />
@@ -998,7 +998,7 @@ export function Reports() {
                   </CardHeader>
                   <CardContent style={{ minHeight: '350px' }}>
                     <div className="h-[300px] w-full min-h-[300px]" style={{ minHeight: '300px', height: '300px' }}>
-                      <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                      <ResponsiveContainer width="100%" height={300} minHeight={300}>
                         <BarChart id="expense-breakdown-bar-chart" data={analytics.expenseCategoryData} layout="vertical">
                           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                           <XAxis type="number" className="text-xs" />

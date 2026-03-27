@@ -10,22 +10,34 @@ import {
 
 import { cn } from "./utils";
 
+// Helper function to filter out Figma inspector props
+function filterFigmaProps<T extends Record<string, any>>(props: T): T {
+  const filtered = { ...props };
+  // Remove Figma inspector props that start with _fg
+  Object.keys(filtered).forEach(key => {
+    if (key.startsWith('_fg')) {
+      delete filtered[key];
+    }
+  });
+  return filtered;
+}
+
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+  return <SelectPrimitive.Root data-slot="select" {...filterFigmaProps(props)} />;
 }
 
 function SelectGroup({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Group>) {
-  return <SelectPrimitive.Group data-slot="select-group" {...props} />;
+  return <SelectPrimitive.Group data-slot="select-group" {...filterFigmaProps(props)} />;
 }
 
 function SelectValue({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
+  return <SelectPrimitive.Value data-slot="select-value" {...filterFigmaProps(props)} />;
 }
 
 function SelectTrigger({
@@ -36,6 +48,13 @@ function SelectTrigger({
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default";
 }) {
+  // Filter Figma props from icon
+  const ChevronIcon = React.forwardRef<SVGSVGElement, React.SVGProps<SVGSVGElement>>((iconProps, ref) => {
+    const cleanProps = filterFigmaProps(iconProps);
+    return <ChevronDownIcon {...cleanProps} ref={ref} className="size-4 opacity-50" />;
+  });
+  ChevronIcon.displayName = "ChevronIcon";
+
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
@@ -44,11 +63,11 @@ function SelectTrigger({
         "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 dark:hover:bg-input/50 flex w-full items-center justify-between gap-2 rounded-md border bg-input-background px-3 py-2 text-sm whitespace-nowrap transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
-      {...props}
+      {...filterFigmaProps(props)}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
+        <ChevronIcon />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -71,7 +90,7 @@ function SelectContent({
           className,
         )}
         position={position}
-        {...props}
+        {...filterFigmaProps(props)}
       >
         <SelectScrollUpButton />
         <SelectPrimitive.Viewport
@@ -97,7 +116,7 @@ function SelectLabel({
     <SelectPrimitive.Label
       data-slot="select-label"
       className={cn("text-muted-foreground px-2 py-1.5 text-xs", className)}
-      {...props}
+      {...filterFigmaProps(props)}
     />
   );
 }
@@ -114,7 +133,7 @@ function SelectItem({
         "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className,
       )}
-      {...props}
+      {...filterFigmaProps(props)}
     >
       <span className="absolute right-2 flex size-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
@@ -134,7 +153,7 @@ function SelectSeparator({
     <SelectPrimitive.Separator
       data-slot="select-separator"
       className={cn("bg-border pointer-events-none -mx-1 my-1 h-px", className)}
-      {...props}
+      {...filterFigmaProps(props)}
     />
   );
 }
@@ -143,6 +162,13 @@ function SelectScrollUpButton({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
+  // Filter Figma props from icon
+  const ChevronUpIconWrapper = React.forwardRef<SVGSVGElement, React.SVGProps<SVGSVGElement>>((iconProps, ref) => {
+    const cleanProps = filterFigmaProps(iconProps);
+    return <ChevronUpIcon {...cleanProps} ref={ref} className="size-4" />;
+  });
+  ChevronUpIconWrapper.displayName = "ChevronUpIconWrapper";
+
   return (
     <SelectPrimitive.ScrollUpButton
       data-slot="select-scroll-up-button"
@@ -150,9 +176,9 @@ function SelectScrollUpButton({
         "flex cursor-default items-center justify-center py-1",
         className,
       )}
-      {...props}
+      {...filterFigmaProps(props)}
     >
-      <ChevronUpIcon className="size-4" />
+      <ChevronUpIconWrapper />
     </SelectPrimitive.ScrollUpButton>
   );
 }
@@ -161,6 +187,13 @@ function SelectScrollDownButton({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>) {
+  // Filter Figma props from icon
+  const ChevronDownIconWrapper = React.forwardRef<SVGSVGElement, React.SVGProps<SVGSVGElement>>((iconProps, ref) => {
+    const cleanProps = filterFigmaProps(iconProps);
+    return <ChevronDownIcon {...cleanProps} ref={ref} className="size-4" />;
+  });
+  ChevronDownIconWrapper.displayName = "ChevronDownIconWrapper";
+
   return (
     <SelectPrimitive.ScrollDownButton
       data-slot="select-scroll-down-button"
@@ -168,9 +201,9 @@ function SelectScrollDownButton({
         "flex cursor-default items-center justify-center py-1",
         className,
       )}
-      {...props}
+      {...filterFigmaProps(props)}
     >
-      <ChevronDownIcon className="size-4" />
+      <ChevronDownIconWrapper />
     </SelectPrimitive.ScrollDownButton>
   );
 }

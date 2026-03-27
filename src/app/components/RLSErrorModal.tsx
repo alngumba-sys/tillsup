@@ -61,13 +61,40 @@ FOR DELETE USING (
 );`;
 
   const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(sqlScript);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+    // Method 1: Try Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(sqlScript);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      } catch (err) {
+        console.log("Clipboard API blocked, trying fallback...");
+      }
     }
+    
+    // Method 2: Fallback to execCommand
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = sqlScript;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      }
+    } catch (err) {
+      console.log("execCommand failed:", err);
+    }
+    
+    // Method 3: Silent fail with visual hint
+    // User can still manually select the code
   };
 
   if (!show) return null;

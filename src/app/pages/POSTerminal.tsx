@@ -269,7 +269,7 @@ export function POSTerminal() {
   const tax = useMemo(() => subtotal * 0.16, [subtotal]);
   const total = useMemo(() => subtotal + tax, [subtotal, tax]);
 
-  const handleCheckout = useCallback(async () => {
+  const handleCheckout = useCallback(async (paymentMethod: "Cash" | "MPesa" | "Credit") => {
     // Clear any previous validation errors
     setValidationError(null);
 
@@ -311,7 +311,8 @@ export function POSTerminal() {
       unitPrice: item.selectedPrice, // Use the selected price tier
       totalPrice: item.selectedPrice * item.quantity,
       priceType: item.priceType, // Track which price tier was used
-      costPrice: item.costPrice // Track purchase price for COGS calculation
+      costPrice: item.costPrice, // Track purchase price for COGS calculation
+      category: item.category
     }));
 
     // Record the sale with complete details
@@ -320,6 +321,7 @@ export function POSTerminal() {
       subtotal,
       tax,
       total,
+      paymentMethod,
       customerCount: 1, // Each transaction counts as 1 customer
       businessId: business!.id,
       branchId: activeBranchId, // MANDATORY branch ID
@@ -591,7 +593,7 @@ export function POSTerminal() {
                   <CardContent className="p-4">
                     <div className="relative aspect-square bg-slate-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                       {product.image ? (
-                        <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                        <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
                       ) : (
                         <Package className="w-12 h-12 text-slate-400" />
                       )}
@@ -669,7 +671,7 @@ export function POSTerminal() {
                 setCustomerName={setCustomerName}
                 generateFiscalReceipt={generateFiscalReceipt}
                 handleGenerateFiscalReceiptChange={handleGenerateFiscalReceiptChange}
-                handleCheckout={handleCheckout}
+                handleCheckout={(paymentMethod) => handleCheckout(paymentMethod)}
               />
             </SheetContent>
           </Sheet>
@@ -694,7 +696,7 @@ export function POSTerminal() {
           setCustomerName={setCustomerName}
           generateFiscalReceipt={generateFiscalReceipt}
           handleGenerateFiscalReceiptChange={handleGenerateFiscalReceiptChange}
-          handleCheckout={handleCheckout}
+          handleCheckout={(paymentMethod) => handleCheckout(paymentMethod)}
         />
       </div>
 

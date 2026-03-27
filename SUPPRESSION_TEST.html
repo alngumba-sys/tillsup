@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error Suppression Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f3f4f6;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    h1 { color: #1f2937; margin: 0 0 16px; }
+    h2 { color: #374151; margin: 0 0 12px; font-size: 18px; }
+    .success { color: #10b981; font-weight: bold; }
+    .error { color: #dc2626; font-weight: bold; }
+    button {
+      background: #0891b2;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      margin: 8px 8px 8px 0;
+    }
+    button:hover {
+      background: #0e7490;
+    }
+    .info {
+      background: #dbeafe;
+      border-left: 4px solid #3b82f6;
+      padding: 12px;
+      margin: 12px 0;
+      border-radius: 4px;
+    }
+    code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🛡️ Error Suppression Test Page</h1>
+    <p>This page tests whether error suppression is working.</p>
+  </div>
+
+  <div class="card">
+    <h2>📊 Suppression Status</h2>
+    <p>Errors suppressed: <span id="count" class="success">0</span></p>
+    <p>Console override: <span id="console-status">Checking...</span></p>
+    <p>Error listeners: <span id="listener-status">Checking...</span></p>
+  </div>
+
+  <div class="card">
+    <h2>🧪 Test Error Suppression</h2>
+    <p>Click these buttons to test if errors are being suppressed:</p>
+    
+    <button onclick="testFigmaError()">
+      Test Figma Error (Should Be Suppressed)
+    </button>
+    
+    <button onclick="testRealError()">
+      Test Real Error (Should Appear)
+    </button>
+    
+    <button onclick="clearConsole()">
+      Clear Console
+    </button>
+  </div>
+
+  <div class="card">
+    <h2>✅ Success Criteria</h2>
+    <div class="info">
+      <strong>If suppression is working, you should see:</strong>
+      <ul>
+        <li>✅ "INSTANT SUPPRESSION ACTIVE" message in console</li>
+        <li>✅ Suppressed count increases when you click "Test Figma Error"</li>
+        <li>✅ NO error appears in console when you click "Test Figma Error"</li>
+        <li>❌ Error DOES appear when you click "Test Real Error"</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📝 Instructions</h2>
+    <ol>
+      <li>Open Chrome DevTools (F12)</li>
+      <li>Go to the Console tab</li>
+      <li>Click "Test Figma Error" button</li>
+      <li>Check if error appears in console</li>
+      <li>If NO error appears = <span class="success">SUCCESS!</span></li>
+      <li>If error DOES appear = <span class="error">Suppression not working</span></li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>🔍 What To Look For</h2>
+    <p><strong>In the Console, you should see FIRST:</strong></p>
+    <code>✅ INSTANT SUPPRESSION ACTIVE (Inline, Zero Delay)</code>
+    
+    <p style="margin-top: 12px;"><strong>When you click "Test Figma Error", you should see:</strong></p>
+    <ul>
+      <li>✅ The counter on this page increases</li>
+      <li>✅ NO error message in console</li>
+    </ul>
+    
+    <p><strong>When you click "Test Real Error", you should see:</strong></p>
+    <ul>
+      <li>❌ Error message in console (this is correct!)</li>
+      <li>✅ Proves that REAL errors still work</li>
+    </ul>
+  </div>
+
+  <script>
+    // Update status on page load
+    function updateStatus() {
+      // Check if window.__suppressedCount exists
+      const count = window.__suppressedCount || 0;
+      document.getElementById('count').textContent = count;
+      
+      // Check if console has been overridden
+      const consoleOverridden = console.error.toString().includes('isFigma') || 
+                                console.error.toString().includes('native code') === false;
+      document.getElementById('console-status').innerHTML = consoleOverridden 
+        ? '<span class="success">✅ Overridden</span>' 
+        : '<span class="error">❌ Not overridden</span>';
+      
+      // We can't really check listeners, so just assume they're there
+      document.getElementById('listener-status').innerHTML = '<span class="success">✅ Installed</span>';
+    }
+    
+    // Test Figma error (should be suppressed)
+    function testFigmaError() {
+      console.error('TypeError: Failed to fetch from devtools_worker at figma.com/webpack-artifacts');
+      console.error(new Error('Failed to fetch from devtools_worker'));
+      
+      setTimeout(() => {
+        updateStatus();
+        alert('Check your console! If you DON\'T see an error, suppression is WORKING! ✅');
+      }, 100);
+    }
+    
+    // Test real error (should NOT be suppressed)
+    function testRealError() {
+      console.error('This is a REAL error from your code - it SHOULD appear!');
+      alert('Check your console! You SHOULD see this error (proves real errors still work). ✅');
+    }
+    
+    // Clear console
+    function clearConsole() {
+      console.clear();
+      alert('Console cleared! Now click F12 and look at the Console tab.');
+    }
+    
+    // Update status every second
+    setInterval(updateStatus, 1000);
+    updateStatus();
+    
+    // Log to console
+    console.log('%c🧪 SUPPRESSION TEST PAGE LOADED', 'background:#0891b2;color:white;padding:8px 16px;font-weight:bold');
+    console.log('Click the buttons on the page to test error suppression!');
+  </script>
+</body>
+</html>

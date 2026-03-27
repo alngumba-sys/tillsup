@@ -15,6 +15,18 @@ import { ProfileViewModal } from "./ProfileViewModal";
 import { ProfileEditModal } from "./ProfileEditModal";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import { Badge } from "./ui/badge";
+import * as React from "react";
+
+// Helper to filter out Figma inspector props
+function filterFigmaProps<T extends Record<string, any>>(props: T): Partial<T> {
+  const filtered: any = {};
+  Object.keys(props).forEach(key => {
+    if (!key.startsWith('_fg')) {
+      filtered[key] = props[key];
+    }
+  });
+  return filtered;
+}
 
 export function ProfileDropdown() {
   const { user, business, logout } = useAuth();
@@ -41,24 +53,34 @@ export function ProfileDropdown() {
   // Get assigned branch
   const currentBranch = user.branchId ? getBranchById(user.branchId) : null;
 
+  // Create a button component that filters Figma props and forwards refs
+  const TriggerButton = React.forwardRef<HTMLButtonElement, any>(({ ...props }, ref) => {
+    const cleanProps = filterFigmaProps(props);
+    return (
+      <button {...cleanProps} ref={ref} className="flex items-center gap-2 hover:bg-slate-100 rounded-lg px-2 py-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 relative">
+        <Avatar className="w-8 h-8">
+          <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        {user.mustChangePassword && (
+          <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-destructive rounded-full border-2 border-white" />
+        )}
+        <div className="hidden sm:block text-left">
+          <p className="text-sm font-medium leading-none">{user.firstName} {user.lastName}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{user.role}</p>
+        </div>
+      </button>
+    );
+  });
+  
+  TriggerButton.displayName = "TriggerButton";
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 hover:bg-slate-100 rounded-lg px-2 py-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 relative">
-            <Avatar className="w-8 h-8">
-              <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            {user.mustChangePassword && (
-              <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-destructive rounded-full border-2 border-white" />
-            )}
-            <div className="hidden sm:block text-left">
-              <p className="text-sm font-medium leading-none">{user.firstName} {user.lastName}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{user.role}</p>
-            </div>
-          </button>
+          <TriggerButton />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>

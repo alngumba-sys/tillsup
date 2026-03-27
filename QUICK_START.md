@@ -1,136 +1,135 @@
-# ⚡ Quick Start - Deploy Staff Creation Fix
+# 🚀 QUICK START - Fix Password Reset Now
 
-## Problem
-```
-❌ ERR_BLOCKED_BY_ADMINISTRATOR
-   Staff creation blocked by browser extensions/firewalls
-```
+## The Problem
+✖️ "function gen_salt(unknown, integer) does not exist"
 
-## Solution
-```
-✅ Server-side Edge Function
-   Bypasses browser blocks, works 100% of the time
+## The Solution (30 seconds)
+
+### Easiest: Use Pre-Made File ⭐
+
+Open: **`RUN_THIS_NOW.sql`**  
+Copy everything → Paste in Supabase → Run
+
+---
+
+### OR: Copy This SQL Directly:
+
+```sql
+-- Enable pgcrypto in both schemas
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
+
+-- Drop old function
+DROP FUNCTION IF EXISTS public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT);
+
+-- Recreate with correct search_path
+CREATE OR REPLACE FUNCTION public.simple_reset_staff_password(
+  p_user_id UUID,
+  p_new_password TEXT,
+  p_admin_id UUID,
+  p_business_id TEXT
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  v_admin_profile RECORD;
+  v_target_profile RECORD;
+BEGIN
+  SELECT * INTO v_admin_profile FROM profiles WHERE id = p_admin_id;
+  IF v_admin_profile IS NULL THEN
+    RETURN json_build_object('success', false, 'error', 'Admin not found');
+  END IF;
+  
+  IF v_admin_profile.role NOT IN ('Business Owner', 'Manager') THEN
+    RETURN json_build_object('success', false, 'error', 'Insufficient permissions');
+  END IF;
+  
+  SELECT * INTO v_target_profile FROM profiles WHERE id = p_user_id;
+  IF v_target_profile IS NULL THEN
+    RETURN json_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF v_target_profile.business_id != p_business_id THEN
+    RETURN json_build_object('success', false, 'error', 'Cannot reset password for staff in different business');
+  END IF;
+  
+  IF v_target_profile.role = 'Business Owner' AND v_admin_profile.role != 'Business Owner' THEN
+    RETURN json_build_object('success', false, 'error', 'Only Business Owner can reset another Business Owner password');
+  END IF;
+  
+  UPDATE auth.users
+  SET encrypted_password = crypt(p_new_password, gen_salt('bf')), updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN json_build_object('success', false, 'error', 'Failed to update password');
+  END IF;
+  
+  UPDATE profiles SET must_change_password = true WHERE id = p_user_id;
+  
+  RETURN json_build_object('success', true, 'message', 'Password reset successfully');
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('success', false, 'error', 'Function error: ' || SQLERRM);
+END;
+$$;
+
+-- Grant all permissions
+GRANT EXECUTE ON FUNCTION public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.simple_reset_staff_password(UUID, TEXT, UUID, TEXT) TO service_role;
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon;
+GRANT USAGE ON SCHEMA extensions TO authenticated;
 ```
 
 ---
 
-## 🚀 Deploy in 3 Steps
-
-### Step 1: Install Supabase CLI (if needed)
-```bash
-npm install -g supabase
-```
-
-### Step 2: Link Your Project
-```bash
-supabase link --project-ref YOUR-PROJECT-REF
-```
-*Get YOUR-PROJECT-REF from your Supabase project URL: `https://YOUR-PROJECT-REF.supabase.co`*
-
-### Step 3: Deploy the Function
-```bash
-supabase functions deploy create-staff
-```
-
-**That's it!** ✅
+### Run It:
+1. Go to https://supabase.com/dashboard
+2. Open your project → **SQL Editor** → **+ New query**
+3. Paste the SQL above
+4. Click **Run**
+5. ✅ Done!
 
 ---
 
-## ✅ Verify It Works
+## Verify It Worked
 
-1. Open Tillsup
+Should see:
+```
+✅ CREATE EXTENSION (or "already exists")
+✅ CREATE EXTENSION (or "already exists")
+✅ DROP FUNCTION
+✅ CREATE FUNCTION
+✅ GRANT (multiple times)
+```
+
+---
+
+## Test It
+
+1. Close any error dialogs in Tillsup
 2. Go to Staff Management
-3. Click "Add Staff Member"
-4. Fill in details and create
-5. Should work without errors! 🎉
+3. Click Reset Password
+4. ✅ **Should work!**
 
 ---
 
-## 📊 What Was Changed
+## Need More Help?
 
-| Component | Change |
-|-----------|--------|
-| **Client Code** | Now calls Edge Function instead of direct auth |
-| **Server Code** | New Edge Function handles staff creation |
-| **Security** | Service role key stays secure on server |
-| **Reliability** | Can't be blocked by browser extensions |
-
----
-
-## 🔍 Check Deployment
-
-### Verify function is deployed
-```bash
-supabase functions list
-```
-You should see: `create-staff`
-
-### View function logs
-```bash
-# In Supabase Dashboard
-Edge Functions → create-staff → Logs
-```
+| Document | Purpose |
+|----------|---------|
+| `START_HERE.md` | Ultra-simple guide |
+| `RUN_THIS_NOW.sql` | Shortest SQL to fix it |
+| `FIX_GEN_SALT_ERROR.sql` | Fix with verification |
+| `COMPLETE_PASSWORD_RESET_FIX.sql` | Complete rebuild |
+| `FIX_GEN_SALT_README.md` | Detailed explanation |
+| `PASSWORD_RESET_FINAL_FIX.md` | Full troubleshooting |
 
 ---
 
-## 🆘 Troubleshooting
-
-### "Command not found: supabase"
-```bash
-npm install -g supabase
-```
-
-### "Project not linked"
-```bash
-supabase link --project-ref YOUR-PROJECT-REF
-```
-
-### "Deployment failed"
-```bash
-# Check you're logged in
-supabase login
-
-# Then try again
-supabase functions deploy create-staff
-```
-
-### Still getting errors when creating staff?
-1. Check Edge Function logs in Supabase Dashboard
-2. Verify function is deployed: `supabase functions list`
-3. Make sure you're logged in as Business Owner or Manager
-
----
-
-## 📚 Need More Help?
-
-| Document | When to Use |
-|----------|-------------|
-| `IMPLEMENTATION_SUMMARY.md` | Full overview and details |
-| `EDGE_FUNCTION_DEPLOYMENT.md` | Detailed deployment guide |
-| `STAFF_CREATION_FIX_GUIDE.md` | Complete implementation guide |
-| `supabase/functions/create-staff/README.md` | API documentation |
-
----
-
-## 🎯 Key Points
-
-✅ **No UI Changes** - Everything works the same for users  
-✅ **More Secure** - Service role key never exposed  
-✅ **More Reliable** - Can't be blocked by extensions  
-✅ **Zero Downtime** - Backwards compatible  
-✅ **Easy Rollback** - Old code preserved if needed  
-
----
-
-## ⚡ One-Line Deploy
-
-```bash
-# If you already have Supabase CLI and linked project:
-supabase functions deploy create-staff
-```
-
-**Done!** 🚀
-
----
-
-*Last Updated: February 27, 2024*
+**That's it! 30 seconds and you're done.** 🎉

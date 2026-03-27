@@ -15,6 +15,7 @@ import { SupplierProvider } from "../contexts/SupplierContext";
 import { SupplierInvoiceProvider } from "../contexts/SupplierInvoiceContext";
 import { SupplierManagementProvider } from "../contexts/SupplierManagementContext";
 import { SupplierRequestProvider } from "../contexts/SupplierRequestContext";
+import { LocationProvider } from "../contexts/LocationContext";
 
 interface BusinessProvidersProps {
   children: ReactNode;
@@ -25,37 +26,39 @@ interface BusinessProvidersProps {
 export function BusinessProviders({ children }: BusinessProvidersProps) {
   return (
     <BranchProvider>
-      <RoleProvider>
-        <CategoryProvider>
-          <SalesProvider>
-            <SupplierProvider>
-              <SupplierManagementProvider>
-                <SupplierRequestProvider>
-                  <InventoryProvider>
-                    <InventoryAuditProvider>
-                      <ExpenseProvider>
-                        <PurchaseOrderProvider>
-                          <GoodsReceivedProvider>
-                            <SupplierInvoiceProvider>
-                              <ForecastingProvider>
-                                <AttendanceProvider>
-                                  <KPIProvider>
-                                    {children}
-                                  </KPIProvider>
-                                </AttendanceProvider>
-                              </ForecastingProvider>
-                            </SupplierInvoiceProvider>
-                          </GoodsReceivedProvider>
-                        </PurchaseOrderProvider>
-                      </ExpenseProvider>
-                    </InventoryAuditProvider>
-                  </InventoryProvider>
-                </SupplierRequestProvider>
-              </SupplierManagementProvider>
-            </SupplierProvider>
-          </SalesProvider>
-        </CategoryProvider>
-      </RoleProvider>
+      <InventoryProvider>
+        <LocationProvider>
+          <RoleProvider>
+            <CategoryProvider>
+              <SalesProvider>
+                <SupplierProvider>
+                  <SupplierManagementProvider>
+                    <SupplierRequestProvider>
+                      <InventoryAuditProvider>
+                        <ExpenseProvider>
+                          <PurchaseOrderProvider>
+                            <GoodsReceivedProvider>
+                              <SupplierInvoiceProvider>
+                                <ForecastingProvider>
+                                  <AttendanceProvider>
+                                    <KPIProvider>
+                                      {children}
+                                    </KPIProvider>
+                                  </AttendanceProvider>
+                                </ForecastingProvider>
+                              </SupplierInvoiceProvider>
+                            </GoodsReceivedProvider>
+                          </PurchaseOrderProvider>
+                        </ExpenseProvider>
+                      </InventoryAuditProvider>
+                    </SupplierRequestProvider>
+                  </SupplierManagementProvider>
+                </SupplierProvider>
+              </SalesProvider>
+            </CategoryProvider>
+          </RoleProvider>
+        </LocationProvider>
+      </InventoryProvider>
     </BranchProvider>
   );
 }

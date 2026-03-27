@@ -75,8 +75,8 @@ export function ChangePassword() {
   };
 
   const handleBack = () => {
-    // Go back to previous page (likely dashboard)
-    navigate(-1);
+    // Go back to home page
+    navigate("/");
   };
 
   // Early return if no user (shouldn't happen due to AuthGuard)
@@ -99,13 +99,10 @@ export function ChangePassword() {
             </Button>
           </div>
           
-          <div className="flex justify-center">
-            <TillsupLogo height={64} />
-          </div>
           <div>
-            <CardTitle className="text-3xl">Change Password</CardTitle>
-            <CardDescription className="mt-2">
-              For security reasons, please change your password before continuing
+            <CardTitle className="text-[32px]">Update Your Password</CardTitle>
+            <CardDescription className="mt-2 text-[12px]">
+              Required for Security – An administrator has reset your password
             </CardDescription>
           </div>
         </CardHeader>

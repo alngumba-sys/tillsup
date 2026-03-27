@@ -75,7 +75,6 @@ export function SubscriptionBilling() {
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [showComparisonDialog, setShowComparisonDialog] = useState(false);
 
   // Check for successful payment return from Stripe
   useEffect(() => {
@@ -128,6 +127,11 @@ export function SubscriptionBilling() {
   // Calculate usage
   const branchUsage = usage.branches;
   const staffUsage = usage.staff;
+
+  const currencySymbol = business?.currency || "USD";
+  const formatCurrency = (amount: number) => `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const allowedPlanKeys: SubscriptionPlan[] = ["Basic", "Pro", "Enterprise"];
 
   const handleUpgradePlan = (plan: SubscriptionPlan) => {
     setSelectedPlan(plan);
@@ -304,7 +308,7 @@ export function SubscriptionBilling() {
                 <CreditCard className="w-3.5 h-3.5 text-purple-600" />
                 <div className="text-center sm:text-left">
                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Cost</p>
-                   <p className="text-sm font-bold leading-none">${currentPlan.price}</p>
+                   <p className="text-sm font-bold leading-none">{formatCurrency(currentPlan.price)}</p>
                 </div>
              </div>
           </div>
@@ -325,44 +329,6 @@ export function SubscriptionBilling() {
         </div>
       </div>
 
-      {/* M-Pesa Payment Info (Kenya Only) */}
-      {business.country === "Kenya" && (
-        <Card className="bg-emerald-50 border-emerald-200 shadow-sm overflow-hidden">
-          <div className="flex flex-col xl:flex-row xl:items-center gap-4 p-1">
-            <CardHeader className="pb-2 xl:pb-4 flex flex-row items-center gap-3 space-y-0 shrink-0 xl:w-auto">
-              <div className="p-2 bg-emerald-100 rounded-full border border-emerald-200 shrink-0">
-                <Smartphone className="w-5 h-5 text-emerald-700" />
-              </div>
-              <div>
-                <CardTitle className="text-base text-emerald-900">M-PESA</CardTitle>
-                <CardDescription className="text-xs text-emerald-700">
-                  Pay via M-PESA
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-1 pt-0 xl:pt-4 xl:pl-0 min-w-0">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-white p-2.5 rounded-md border border-emerald-100 shadow-sm">
-                  <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Pay To</p>
-                  <p className="font-bold text-sm text-emerald-900 leading-tight">WEXLOT LTD PAYMENTS</p>
-                </div>
-                <div className="bg-white p-2.5 rounded-md border border-emerald-100 shadow-sm">
-                  <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Paybill Number</p>
-                  <p className="font-mono font-bold text-lg text-emerald-800 tracking-wider">522533</p>
-                </div>
-                <div className="bg-white p-2.5 rounded-md border border-emerald-100 shadow-sm">
-                  <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-0.5">Account Number</p>
-                  <p className="font-mono font-bold text-sm text-emerald-800 break-all">8063089#NAME</p>
-                  <p className="text-[10px] text-emerald-600 mt-0.5 break-all">
-                    Example: <span className="font-medium">8063089#Edwin</span>
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </div>
-        </Card>
-      )}
-
       {/* Tabs */}
       <Tabs defaultValue="plans" className="space-y-4">
         <TabsList>
@@ -373,22 +339,23 @@ export function SubscriptionBilling() {
 
         {/* Available Plans */}
         <TabsContent value="plans" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][]).map(([key, plan]) => {
-              const isCurrent = key === business.subscriptionPlan;
-              const isUpgrade = plan.price > currentPlan.price;
-              
-              // Extract key limits
-              const branches = plan.limits.maxBranches === 999 ? "Unlimited" : plan.limits.maxBranches;
-              const staff = plan.limits.maxStaff === 999 ? "Unlimited" : plan.limits.maxStaff;
-              
-              // Get transaction limit based on plan
-              const getTransactionLimit = () => {
-                if (key === "Free Trial") return "100";
-                if (key === "Basic") return "1,000";
-                if (key === "Pro") return "10,000";
-                return "Unlimited";
-              };
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 justify-center">
+            {(Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][])
+              .filter(([key]) => allowedPlanKeys.includes(key))
+              .map(([key, plan]) => {
+                const isCurrent = key === business.subscriptionPlan;
+                const isUpgrade = plan.price > currentPlan.price;
+                
+                // Extract key limits
+                const branches = plan.limits.maxBranches === 999 ? "Unlimited" : plan.limits.maxBranches;
+                const staff = plan.limits.maxStaff === 999 ? "Unlimited" : plan.limits.maxStaff;
+                
+                // Get transaction limit based on plan
+                const getTransactionLimit = () => {
+                  if (key === "Basic") return "1,000";
+                  if (key === "Pro") return "10,000";
+                  return "Unlimited";
+                };
               
               // Get unique features (excluding the limit features)
               const uniqueFeatures = plan.highlightedFeatures.filter(f => 
@@ -410,7 +377,7 @@ export function SubscriptionBilling() {
                     <CardTitle className="text-base font-bold">{plan.name}</CardTitle>
                     <div className="flex items-baseline justify-center gap-1 mt-2">
                       <span className="text-3xl font-bold text-foreground">
-                        ${plan.price}
+                        {formatCurrency(plan.price)}
                       </span>
                       <span className="text-xs text-muted-foreground">/{plan.period === "14 days" ? "14 days" : "month"}</span>
                     </div>
@@ -477,9 +444,17 @@ export function SubscriptionBilling() {
                         variant="ghost"
                         size="sm"
                         className="w-full h-7 text-[11px] text-primary hover:text-primary"
-                        onClick={() => setShowComparisonDialog(true)}
+                        onClick={() => {
+                          const comparisonSection = document.getElementById('plan-comparison');
+                          if (comparisonSection) {
+                            window.scrollTo({
+                              top: comparisonSection.offsetTop - 20,
+                              behavior: 'smooth'
+                            });
+                          }
+                        }}
                       >
-                        Compare all features →
+                        View full feature table →
                       </Button>
                     </div>
                   </CardContent>
@@ -487,6 +462,130 @@ export function SubscriptionBilling() {
               );
             })}
           </div>
+
+          <div id="plan-comparison" className="mt-8 border-t pt-6">
+            <h2 className="text-2xl font-bold mb-3">Feature Comparison</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Compare Starter, Professional and Enterprise plan capabilities in one glance.
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-muted/40 bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[220px]">Feature</TableHead>
+                    <TableHead className="text-center">Starter</TableHead>
+                    <TableHead className="text-center">Professional</TableHead>
+                    <TableHead className="text-center">Enterprise</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow className="bg-muted/50">
+                    <TableCell className="font-semibold">Price</TableCell>
+                    <TableCell className="text-center font-bold">{formatCurrency(SUBSCRIPTION_PLANS["Basic"].price)}/mo</TableCell>
+                    <TableCell className="text-center font-bold">{formatCurrency(SUBSCRIPTION_PLANS["Pro"].price)}/mo</TableCell>
+                    <TableCell className="text-center font-bold">{formatCurrency(SUBSCRIPTION_PLANS["Enterprise"].price)}/mo</TableCell>
+                  </TableRow>
+                  <TableRow className="bg-muted/30">
+                    <TableCell colSpan={4} className="font-bold text-xs uppercase tracking-wider">Usage Limits</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Branches</TableCell>
+                    <TableCell className="text-center">2</TableCell>
+                    <TableCell className="text-center">10</TableCell>
+                    <TableCell className="text-center">Unlimited</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Staff Members</TableCell>
+                    <TableCell className="text-center">10</TableCell>
+                    <TableCell className="text-center">50</TableCell>
+                    <TableCell className="text-center">Unlimited</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Monthly Transactions</TableCell>
+                    <TableCell className="text-center">1,000</TableCell>
+                    <TableCell className="text-center">10,000</TableCell>
+                    <TableCell className="text-center">Unlimited</TableCell>
+                  </TableRow>
+                  <TableRow className="bg-muted/30">
+                    <TableCell colSpan={4} className="font-bold text-xs uppercase tracking-wider">Core Features</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>POS Terminal</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Inventory Management</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Advanced Reports</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow className="bg-muted/30">
+                    <TableCell colSpan={4} className="font-bold text-xs uppercase tracking-wider">Advanced Features</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>AI Insights</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Purchase Orders</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Role-based Access</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Dedicated Account Manager</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Audit Logs</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>SLA Uptime Guarantee</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><span className="text-xs font-semibold">99.9%</span></TableCell>
+                  </TableRow>
+                  <TableRow className="bg-muted/30">
+                    <TableCell colSpan={4} className="font-bold text-xs uppercase tracking-wider">Support</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Email Support</TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><CheckCircle className="w-4 h-4 text-green-600 mx-auto" /></TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Priority Support</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center text-muted-foreground">—</TableCell>
+                    <TableCell className="text-center"><span className="text-xs font-semibold">24/7</span></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
         </TabsContent>
 
         {/* Billing History */}
@@ -518,7 +617,7 @@ export function SubscriptionBilling() {
                         <TableCell>{new Date(invoice.date).toLocaleDateString()}</TableCell>
                         <TableCell>{SUBSCRIPTION_PLANS[invoice.plan].name}</TableCell>
                         <TableCell className="text-right font-semibold">
-                          ${invoice.amount.toFixed(2)}
+                          {formatCurrency(invoice.amount)}
                         </TableCell>
                         <TableCell>
                           {invoice.status === "paid" && (
@@ -645,7 +744,7 @@ export function SubscriptionBilling() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Price</span>
                       <span className="font-semibold text-lg">
-                        ${SUBSCRIPTION_PLANS[selectedPlan].price}/{SUBSCRIPTION_PLANS[selectedPlan].period}
+                        {formatCurrency(SUBSCRIPTION_PLANS[selectedPlan].price)}/{SUBSCRIPTION_PLANS[selectedPlan].period}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
@@ -676,257 +775,6 @@ export function SubscriptionBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* Feature Comparison Dialog */}
-      <Dialog open={showComparisonDialog} onOpenChange={setShowComparisonDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Feature Comparison</DialogTitle>
-            <DialogDescription>
-              Compare all features across our subscription plans
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[200px]">Feature</TableHead>
-                  <TableHead className="text-center">Free Trial</TableHead>
-                  <TableHead className="text-center">Starter</TableHead>
-                  <TableHead className="text-center">Professional</TableHead>
-                  <TableHead className="text-center">Enterprise</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {/* Pricing */}
-                <TableRow className="bg-muted/50">
-                  <TableCell className="font-semibold">Price</TableCell>
-                  <TableCell className="text-center font-bold">$0</TableCell>
-                  <TableCell className="text-center font-bold">$29/mo</TableCell>
-                  <TableCell className="text-center font-bold">$79/mo</TableCell>
-                  <TableCell className="text-center font-bold">$199/mo</TableCell>
-                </TableRow>
-
-                {/* Limits */}
-                <TableRow className="bg-muted/30">
-                  <TableCell colSpan={5} className="font-bold text-xs uppercase tracking-wider">
-                    Usage Limits
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Branches</TableCell>
-                  <TableCell className="text-center">1</TableCell>
-                  <TableCell className="text-center">2</TableCell>
-                  <TableCell className="text-center">10</TableCell>
-                  <TableCell className="text-center">Unlimited</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Staff Members</TableCell>
-                  <TableCell className="text-center">5</TableCell>
-                  <TableCell className="text-center">10</TableCell>
-                  <TableCell className="text-center">50</TableCell>
-                  <TableCell className="text-center">Unlimited</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Monthly Transactions</TableCell>
-                  <TableCell className="text-center">100</TableCell>
-                  <TableCell className="text-center">1,000</TableCell>
-                  <TableCell className="text-center">10,000</TableCell>
-                  <TableCell className="text-center">Unlimited</TableCell>
-                </TableRow>
-
-                {/* Core Features */}
-                <TableRow className="bg-muted/30">
-                  <TableCell colSpan={5} className="font-bold text-xs uppercase tracking-wider">
-                    Core Features
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>POS Terminal</TableCell>
-                  <TableCell className="text-center">
-                    <span className="text-xs text-muted-foreground">Basic</span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Inventory Management</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Sales Reports</TableCell>
-                  <TableCell className="text-center">
-                    <span className="text-xs text-muted-foreground">Basic</span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-
-                {/* Advanced Features */}
-                <TableRow className="bg-muted/30">
-                  <TableCell colSpan={5} className="font-bold text-xs uppercase tracking-wider">
-                    Advanced Features
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>AI Insights</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Expense Tracking</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Inventory Forecasting</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Purchase Orders</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Supplier Management</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Custom Branding</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Data Export</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>API Access</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-
-                {/* Support */}
-                <TableRow className="bg-muted/30">
-                  <TableCell colSpan={5} className="font-bold text-xs uppercase tracking-wider">
-                    Support
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Email Support</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Priority Support</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center text-muted-foreground">—</TableCell>
-                  <TableCell className="text-center">
-                    <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className="text-xs font-semibold">24/7</span>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowComparisonDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

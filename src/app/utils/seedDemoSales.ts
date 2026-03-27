@@ -67,6 +67,7 @@ export function seedDemoSales(
           quantity,
           unitPrice: product.price,
           totalPrice,
+          category: product.category
         });
 
         subtotal += totalPrice;

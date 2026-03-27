@@ -3,33 +3,31 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Printer, X } from "lucide-react";
 import { useCurrency } from "../hooks/useCurrency";
-
-interface ReceiptItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-}
-
-interface FiscalReceiptProps {
-  isOpen: boolean;
-  onClose: () => void;
-  receiptData: {
-    receiptNumber: string;
-    date: Date;
-    items: ReceiptItem[];
-    subtotal: number;
-    tax: number;
-    total: number;
-    cashierName: string;
-    businessName: string;
-    businessAddress?: string;
-    paymentMethod?: string;
-    customerName?: string;
-  };
-}
-
+        <style>{`
+          @media print {
+            body * { visibility: hidden; }
+            #fiscal-receipt, #fiscal-receipt * { visibility: visible; }
+            #fiscal-receipt {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 320px; /* ~80mm receipt width */
+              padding: 8px;
+              font-size: 12px;
+              line-height: 1.2;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #000;
+              background: #fff;
+            }
+            /* Hide UI elements not meant for print */
+            .print\:hidden { display: none !important; }
+            .print\:max-w-full { max-width: 100% !important; }
+            .print\:shadow-none { box-shadow: none !important; }
+            /* Remove dialog chrome */
+            .tn-dialog, .react-modal { display: none !important; }
+            @page { size: auto; margin: 0; }
+          }
+        `}</style>
 export function FiscalReceipt({ isOpen, onClose, receiptData }: FiscalReceiptProps) {
   const { formatCurrency } = useCurrency();
   const handlePrint = () => {
@@ -38,105 +36,92 @@ export function FiscalReceipt({ isOpen, onClose, receiptData }: FiscalReceiptPro
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md print:max-w-full print:shadow-none">
+      <DialogContent className="max-w-md print:max-w-[320px] print:shadow-none">
         <DialogHeader className="print:hidden">
           <DialogTitle>Fiscal Receipt</DialogTitle>
           <DialogDescription>Print or close the receipt</DialogDescription>
         </DialogHeader>
 
-        {/* Receipt Content - Optimized for printing */}
-        <div className="receipt-content space-y-4" id="fiscal-receipt">
-          {/* Business Header */}
-          <div className="text-center space-y-1">
-            <h2 className="text-xl font-bold">{receiptData.businessName}</h2>
+        {/* Receipt Content - Optimized for printing (receipt-style) */}
+        <div className="receipt-content" id="fiscal-receipt">
+          <div className="text-center">
+            <h2 className="text-base font-bold">{receiptData.businessName}</h2>
             {receiptData.businessAddress && (
-              <p className="text-sm text-muted-foreground">{receiptData.businessAddress}</p>
+              <p className="text-xs text-muted-foreground">{receiptData.businessAddress}</p>
             )}
           </div>
 
-          <Separator />
+          <div className="my-2 border-t border-dashed" />
 
-          {/* Receipt Info */}
-          <div className="space-y-1 text-sm">
+          <div className="text-xs">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Receipt No:</span>
-              <span className="font-mono font-semibold">{receiptData.receiptNumber}</span>
+              <span>Receipt No</span>
+              <span className="font-mono">{receiptData.receiptNumber}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Date:</span>
+              <span>Date</span>
               <span>{receiptData.date.toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Time:</span>
+              <span>Time</span>
               <span>{receiptData.date.toLocaleTimeString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Cashier:</span>
+              <span>Cashier</span>
               <span>{receiptData.cashierName}</span>
             </div>
             {receiptData.customerName && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Customer:</span>
+                <span>Customer</span>
                 <span>{receiptData.customerName}</span>
               </div>
             )}
           </div>
 
-          <Separator />
+          <div className="my-2 border-t border-dashed" />
 
-          {/* Items */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-sm">Items</h3>
+          {/* Items table */}
+          <div className="text-xs">
             {receiptData.items.map((item, index) => (
-              <div key={index} className="space-y-1">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{item.productName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.quantity} × {formatCurrency(item.unitPrice)}
-                    </p>
-                  </div>
-                  <span className="font-semibold text-sm ml-2">
-                    {formatCurrency(item.totalPrice)}
-                  </span>
+              <div key={index} className="flex justify-between py-1">
+                <div className="w-2/3">
+                  <div className="font-medium truncate">{item.productName}</div>
+                  <div className="text-[11px] text-muted-foreground">{item.quantity} × {formatCurrency(item.unitPrice)}</div>
                 </div>
+                <div className="w-1/3 text-right font-mono">{formatCurrency(item.totalPrice)}</div>
               </div>
             ))}
           </div>
 
-          <Separator />
+          <div className="my-2 border-t border-dashed" />
 
           {/* Totals */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal:</span>
-              <span>{formatCurrency(receiptData.subtotal)}</span>
+          <div className="text-xs space-y-1">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span className="font-mono">{formatCurrency(receiptData.subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Tax (16%):</span>
-              <span>{formatCurrency(receiptData.tax)}</span>
+            <div className="flex justify-between">
+              <span>Tax (16%)</span>
+              <span className="font-mono">{formatCurrency(receiptData.tax)}</span>
             </div>
-            <Separator />
-            <div className="flex justify-between font-bold text-lg">
-              <span>Total:</span>
-              <span>{formatCurrency(receiptData.total)}</span>
+            <div className="flex justify-between font-semibold text-sm">
+              <span>Total</span>
+              <span className="font-mono">{formatCurrency(receiptData.total)}</span>
             </div>
             {receiptData.paymentMethod && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Payment Method:</span>
+              <div className="flex justify-between">
+                <span>Payment</span>
                 <span className="uppercase">{receiptData.paymentMethod}</span>
               </div>
             )}
           </div>
 
-          <Separator />
+          <div className="my-2 border-t border-dashed" />
 
-          {/* Footer */}
-          <div className="text-center space-y-2 pt-2">
-            <p className="text-sm font-medium">Thank you for your business!</p>
-            <p className="text-xs text-muted-foreground">
-              Please keep this receipt for your records
-            </p>
+          <div className="text-center text-xs">
+            <div className="font-medium">Thank you!</div>
+            <div className="text-muted-foreground">Please keep this receipt</div>
           </div>
         </div>
 

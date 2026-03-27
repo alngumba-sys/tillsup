@@ -32,14 +32,27 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       'X-Client-Info': 'tillsup-web'
     },
     fetch: (url, options = {}) => {
+      // Create AbortController with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       return fetch(url, {
         ...options,
-        // Add timeout to prevent hanging requests
-        signal: AbortSignal.timeout?.(30000) // 30 second timeout
-      }).catch(err => {
-        console.error('Fetch error:', err);
-        throw err;
-      });
+        signal: controller.signal
+      })
+        .then(response => {
+          clearTimeout(timeoutId);
+          return response;
+        })
+        .catch(err => {
+          clearTimeout(timeoutId);
+          // Suppress network errors - these are common and handled by individual components
+          // Only log if it's not a network/abort error
+          if (err.name !== 'AbortError' && err.name !== 'TypeError') {
+            console.debug('Supabase request failed:', err.message);
+          }
+          throw err;
+        });
     }
   },
   db: {

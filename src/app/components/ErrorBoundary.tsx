@@ -1,65 +1,101 @@
-import { useRouteError, isRouteErrorResponse, useNavigate } from "react-router";
-import { AlertCircle, Home, RefreshCcw } from "lucide-react";
-import { Button } from "./ui/button";
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Button } from './ui/button';
 
-export function ErrorBoundary() {
-  const error = useRouteError();
-  const navigate = useNavigate();
-  console.error(error);
+interface Props {
+  children: ReactNode;
+}
 
-  let errorMessage = "An unexpected error occurred.";
-  let errorTitle = "Something went wrong";
+interface State {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+}
 
-  if (isRouteErrorResponse(error)) {
-    errorTitle = `${error.status} ${error.statusText}`;
-    errorMessage = error.data?.message || error.statusText;
-  } else if (error instanceof Error) {
-    errorMessage = error.message;
-  } else if (typeof error === 'string') {
-    errorMessage = error;
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+    error: null,
+    errorInfo: null
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error, errorInfo: null };
   }
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4 text-center">
-      <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full border border-gray-100">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <AlertCircle className="w-8 h-8 text-red-600" />
-        </div>
-        
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">{errorTitle}</h1>
-        <p className="text-gray-500 mb-6 break-words">
-          {errorMessage}
-        </p>
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    
+    // Filter out Figma platform errors
+    if (error.message?.includes('Failed to fetch') && 
+        error.stack?.includes('devtools_worker')) {
+      console.log('Ignoring Figma platform fetch error');
+      // Don't show UI for Figma internal errors
+      return;
+    }
+    
+    this.setState({
+      error,
+      errorInfo
+    });
+  }
 
-        <div className="flex flex-col gap-3 justify-center">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button 
-              variant="outline" 
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2"
-            >
-              <RefreshCcw className="w-4 h-4" />
-              Try Again
-            </Button>
-            
-            <Button 
-              onClick={() => navigate("/")}
-              className="flex items-center gap-2 w-full sm:w-auto"
-            >
-              <Home className="w-4 h-4" />
-              Return Home
-            </Button>
-          </div>
-          
-          <Button 
-            variant="ghost"
-            onClick={() => navigate("/diagnostic")}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Run System Diagnostics
-          </Button>
+  public render() {
+    if (this.state.hasError && this.state.error) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <Alert className="max-w-2xl border-red-200 bg-white">
+            <AlertTriangle className="h-5 w-5 text-red-600" />
+            <AlertTitle className="text-lg font-semibold text-red-900 mb-2">
+              Something went wrong
+            </AlertTitle>
+            <AlertDescription>
+              <div className="space-y-4">
+                <p className="text-sm text-slate-700">
+                  The application encountered an unexpected error. This has been logged for investigation.
+                </p>
+                
+                <div className="bg-slate-50 p-3 rounded-md border border-slate-200">
+                  <p className="text-xs font-mono text-slate-800 break-all">
+                    {this.state.error.message || 'Unknown error'}
+                  </p>
+                </div>
+
+                {this.state.errorInfo && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-slate-600 hover:text-slate-900">
+                      Technical Details
+                    </summary>
+                    <pre className="mt-2 p-3 bg-slate-900 text-slate-100 rounded-md overflow-auto max-h-64 text-[10px]">
+                      {this.state.errorInfo.componentStack}
+                    </pre>
+                  </details>
+                )}
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => window.location.reload()}
+                    className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reload Application
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
         </div>
-      </div>
-    </div>
-  );
+      );
+    }
+
+    return this.props.children;
+  }
 }

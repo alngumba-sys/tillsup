@@ -177,6 +177,38 @@ export function AdminDashboard() {
   const [showRLSDialog, setShowRLSDialog] = useState(false);
   const [storageError, setStorageError] = useState(false);
 
+  // Dashboard metric pop-up state
+  const [selectedMetricCard, setSelectedMetricCard] = useState<string | null>(null);
+  const [isMetricDialogOpen, setIsMetricDialogOpen] = useState(false);
+
+  const metricDetails: Record<string, {description: string; insights: string; nextSteps: string}> = {
+    'Total Businesses': {
+      description: 'All businesses currently active in your platform marketplace, including trial and subscribed accounts.',
+      insights: 'Strong growth in this metric indicates successful acquisition and onboarding of new business customers.',
+      nextSteps: 'Check the businesses page for activation funnel and retention details.'
+    },
+    'Total Sales': {
+      description: 'Total completed sales transactions across your merchant network in the chosen time filter.',
+      insights: 'Rapid increases in sales volume typically correspond to high adoption and transaction efficiency.',
+      nextSteps: 'Analyze location-wise and product-wise sales in the Reports section.'
+    },
+    'Total Volume': {
+      description: 'Total gross sales volume represents the actual revenue processed through your merchants.',
+      insights: 'High volume with stable growth suggests strong market confidence and pricing alignment.',
+      nextSteps: 'Review average order value and repeat customer cohorts in analytics.'
+    },
+    'Active Subs': {
+      description: 'Active subscription count for premium or paid packages on the platform.',
+      insights: 'Higher conversion rate means customers find value in premium features.',
+      nextSteps: 'Investigate churn drivers or upsell opportunities for low-conversion segments.'
+    },
+    'Growth Rate': {
+      description: 'Percentage growth across the selected metric baseline (period to period).',
+      insights: 'Consistent growth rate is a leading indicator for scaling and business sustainability.',
+      nextSteps: 'Drill into top-performing regions and campaigns as the source of growth.'
+    }
+  };
+
   // Pricing State - Load from localStorage or use defaults
   const [pricingData, setPricingData] = useState<Record<string, any>>(() => {
     const saved = localStorage.getItem('tillsup-pricing-data');
@@ -783,70 +815,44 @@ export function AdminDashboard() {
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                  <Card className={`${glassClass} border-white/5 shadow-xl`}>
-                    <CardContent className="p-4 flex flex-col gap-1">
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Businesses</p>
-                      <div className="flex items-end justify-between">
-                        <h3 className="text-2xl font-bold text-white">{metrics.totalBusinesses.toLocaleString()}</h3>
-                        <Building2 className="w-5 h-5 text-blue-400 mb-1" />
-                      </div>
-                      <p className="text-xs text-emerald-400 flex items-center gap-1 mt-2">
-                        <ArrowUpRight className="w-3 h-3" /> Real-time
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className={`${glassClass} border-white/5 shadow-xl`}>
-                    <CardContent className="p-4 flex flex-col gap-1">
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Sales</p>
-                      <div className="flex items-end justify-between">
-                        <h3 className="text-2xl font-bold text-white">{metrics.totalCustomers.toLocaleString()}</h3>
-                        <Activity className="w-5 h-5 text-emerald-400 mb-1" />
-                      </div>
-                      <p className="text-xs text-emerald-400 flex items-center gap-1 mt-2">
-                         <ArrowUpRight className="w-3 h-3" /> Real-time
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className={`${glassClass} border-white/5 shadow-xl`}>
-                    <CardContent className="p-4 flex flex-col gap-1">
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
-                      <div className="flex items-end justify-between">
-                        <h3 className="text-2xl font-bold text-white">${(metrics.totalVolume / 1000000).toFixed(1)}M</h3>
-                        <CreditCard className="w-5 h-5 text-violet-400 mb-1" />
-                      </div>
-                      <p className="text-xs text-emerald-400 flex items-center gap-1 mt-2">
-                         <ArrowUpRight className="w-3 h-3" /> Real-time
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className={`${glassClass} border-white/5 shadow-xl`}>
-                    <CardContent className="p-4 flex flex-col gap-1">
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Active Subs</p>
-                      <div className="flex items-end justify-between">
-                        <h3 className="text-2xl font-bold text-white">{metrics.activeSubscriptions}</h3>
-                        <Activity className="w-5 h-5 text-amber-400 mb-1" />
-                      </div>
-                      <p className="text-xs text-slate-400 mt-2">
-                        {metrics.totalBusinesses > 0 ? (metrics.activeSubscriptions / metrics.totalBusinesses * 100).toFixed(1) : 0}% conversion
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className={`${glassClass} border-white/5 shadow-xl`}>
-                    <CardContent className="p-4 flex flex-col gap-1">
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Growth Rate</p>
-                      <div className="flex items-end justify-between">
-                        <h3 className="text-2xl font-bold text-white">{metrics.growthRate}%</h3>
-                        <TrendingUp className="w-5 h-5 text-rose-400 mb-1" />
-                      </div>
-                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-2">
-                        Needs history
-                      </p>
-                    </CardContent>
-                  </Card>
+                  {[
+                    { id: 'Total Businesses', title: 'Total Businesses', value: metrics.totalBusinesses.toLocaleString(), icon: <Building2 className="w-5 h-5 text-blue-400 mb-1" />, detail: 'Total active businesses on the platform and recent activation trends.' },
+                    { id: 'Total Sales', title: 'Total Sales', value: metrics.totalCustomers.toLocaleString(), icon: <Activity className="w-5 h-5 text-emerald-400 mb-1" />, detail: 'Aggregate number of sales transactions processed this period.' },
+                    { id: 'Total Volume', title: 'Total Volume', value: `$${(metrics.totalVolume / 1000000).toFixed(1)}M`, icon: <CreditCard className="w-5 h-5 text-violet-400 mb-1" />, detail: 'Gross sales volume indicating business scale and revenue velocity.' },
+                    { id: 'Active Subs', title: 'Active Subs', value: metrics.activeSubscriptions, icon: <Activity className="w-5 h-5 text-amber-400 mb-1" />, detail: 'Number of active subscriptions currently running; conversion from total businesses.' },
+                    { id: 'Growth Rate', title: 'Growth Rate', value: `${metrics.growthRate}%`, icon: <TrendingUp className="w-5 h-5 text-rose-400 mb-1" />, detail: 'Growth rate measured using recent period vs previous period.', },
+                  ].map(card => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      className="w-full text-left"
+                      aria-label={`Open details for ${card.title}`}
+                      onClick={() => {
+                        setSelectedMetricCard(card.id);
+                        setIsMetricDialogOpen(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedMetricCard(card.id);
+                          setIsMetricDialogOpen(true);
+                        }
+                      }}
+                    >
+                      <Card className={`${glassClass} border-white/5 shadow-xl hover:shadow-2xl transition-shadow duration-200 cursor-pointer`}>
+                        <CardContent className="p-4 flex flex-col gap-1">
+                          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{card.title}</p>
+                          <div className="flex items-end justify-between">
+                            <h3 className="text-2xl font-bold text-white">{card.value}</h3>
+                            {card.icon}
+                          </div>
+                          <p className="text-xs text-emerald-400 flex items-center gap-1 mt-2">
+                            <ArrowUpRight className="w-3 h-3" /> Real-time
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </button>
+                  ))}
                 </div>
 
                 {/* Search & Filter */}
@@ -1597,6 +1603,35 @@ export function AdminDashboard() {
                 </div>
             </TabsContent>
         </Tabs>
+
+        <Dialog open={isMetricDialogOpen} onOpenChange={setIsMetricDialogOpen}>
+          <DialogContent className="sm:max-w-lg bg-white text-slate-900 border border-slate-200 shadow-2xl">
+            <DialogHeader>
+              <DialogTitle>{selectedMetricCard || 'Metric Details'}</DialogTitle>
+              <DialogDescription className="text-slate-500">
+                Deep-dive insights for the selected dashboard metric.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-slate-700">
+                {selectedMetricCard ? metricDetails[selectedMetricCard]?.description : 'Select a card for metric details.'}
+              </p>
+              <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Insight</h4>
+                <p className="text-sm text-slate-700 mt-1">{selectedMetricCard ? metricDetails[selectedMetricCard]?.insights : '-'}</p>
+              </div>
+              <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested Next Steps</h4>
+                <p className="text-sm text-slate-700 mt-1">{selectedMetricCard ? metricDetails[selectedMetricCard]?.nextSteps : '-'}</p>
+              </div>
+            </div>
+            <DialogFooter className="mt-4">
+              <DialogClose asChild>
+                <Button className="w-full" onClick={() => setSelectedMetricCard(null)}>Close</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={showRLSDialog} onOpenChange={setShowRLSDialog}>
           <DialogContent className="sm:max-w-2xl bg-slate-900 text-white border-white/10">

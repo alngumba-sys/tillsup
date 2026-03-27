@@ -16,6 +16,7 @@ export interface SaleItem {
   totalPrice: number;
   priceType?: "retail" | "wholesale";
   costPrice?: number;
+  category?: string;
 }
 
 export interface Sale {

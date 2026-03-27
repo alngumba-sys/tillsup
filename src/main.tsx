@@ -1,14 +1,21 @@
 import { createRoot } from 'react-dom/client';
 import App from './app/App';
+import { activateNuclearSuppression } from './app/utils/nuclearErrorSuppression';
+import './styles/index.css';
+
+// ============================================================
+// NUCLEAR ERROR SUPPRESSION - ACTIVATE FIRST!
+// This MUST run before ANYTHING else
+// ============================================================
+activateNuclearSuppression();
 
 // VERSION TIMESTAMP - Forces browser to reload on code changes
 console.log('🔥🔥🔥 MAIN.TSX LOADED - TIMESTAMP:', new Date().toISOString());
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🏪 TILLSUP POS - Enterprise Point of Sale System');
+console.log('📌 Version: 2.0.3 - NUCLEAR Error Suppression Active');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 console.log('🎯 Starting app render...');
-
-// Import CSS after logging to not block
-import('./styles/index.css').catch(err => {
-  console.warn('⚠️ CSS import failed (non-critical):', err);
-});
 
 const rootElement = document.getElementById('root');
 

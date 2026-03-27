@@ -646,15 +646,40 @@ CREATE INDEX IF NOT EXISTS idx_branches_business_id ON public.branches(business_
     }
 
     const copyToClipboard = async () => {
-      try {
-        await navigator.clipboard.writeText(sqlScript);
-        toast.success("SQL script copied to clipboard");
-      } catch (err) {
-        console.error("Clipboard access denied:", err);
-        toast.error("Clipboard access blocked", {
-          description: "Please manually select and copy the SQL script below."
-        });
+      // Method 1: Try Clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(sqlScript);
+          toast.success("SQL script copied to clipboard");
+          return;
+        } catch (err) {
+          console.log("Clipboard API blocked, trying fallback...");
+        }
       }
+      
+      // Method 2: Fallback to execCommand
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = sqlScript;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+          toast.success("SQL script copied to clipboard");
+          return;
+        }
+      } catch (err) {
+        console.log("execCommand failed:", err);
+      }
+      
+      // Method 3: Show helpful message
+      toast.info("Please copy manually", {
+        description: "Select the SQL script below and press Ctrl+C (or Cmd+C on Mac)"
+      });
     };
 
     return (

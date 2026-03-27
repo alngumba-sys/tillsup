@@ -1,100 +1,78 @@
-# 🔧 QUICK FIX - RLS Blocking Business Access
+# Quick Fix Reference Card
 
-## Problem
-Leah's user account references a business that exists in the database, but RLS (Row Level Security) policies are preventing access because the `owner_id` doesn't match her user ID.
-
-## ✅ Solution - Run This in Supabase SQL Editor
-
-### Step 1: Open Supabase SQL Editor
-1. Go to your Supabase project dashboard
-2. Click **SQL Editor** in the left sidebar
-3. Click **New Query**
-
-### Step 2: Run This SQL (Copy & Paste)
-
-```sql
--- Fix the owner_id mismatch for Leah's business
-UPDATE businesses
-SET owner_id = (
-    SELECT id FROM profiles 
-    WHERE email = 'leah.wangui@tillsup.com' 
-    LIMIT 1
-)
-WHERE id = '7250c216-c81f-44c7-b9d6-1bb16a10b14d';
-
--- Verify the fix worked
-SELECT 
-    b.id as business_id,
-    b.name as business_name,
-    b.owner_id,
-    p.email as owner_email,
-    p.first_name || ' ' || p.last_name as owner_name,
-    CASE 
-        WHEN b.owner_id = p.id THEN '✅ MATCH'
-        ELSE '❌ MISMATCH'
-    END as status
-FROM businesses b
-LEFT JOIN profiles p ON p.id = b.owner_id
-WHERE b.id = '7250c216-c81f-44c7-b9d6-1bb16a10b14d';
-```
-
-### Step 3: After Running the SQL
-1. **Refresh your Tillsup app** (Ctrl+Shift+R / Cmd+Shift+R)
-2. **Log in with Leah's credentials**
-3. You should see the dashboard load successfully! 🎉
+## 🚨 Seeing Errors? Start Here!
 
 ---
 
-## 🔍 What This Does
+## Error: "useAuth called before AuthProvider..."
 
-- **Updates the business record** to set `owner_id` to Leah's actual user ID
-- **Bypasses RLS** because SQL Editor runs with admin privileges
-- **Verifies the fix** by showing if owner_id now matches
+### ✅ Status: FIXED IN CODE
+
+### 🔧 What You Need to Do:
+
+**Clear your browser cache:**
+
+```
+Windows/Linux: Ctrl + Shift + R
+Mac: Cmd + Shift + R
+```
+
+### ✅ Verify Fix:
+Open console (`F12`) and look for:
+```
+📌 Tillsup Version: 2.0.1 - Auth Init Warning Fix Applied
+```
 
 ---
 
-## 📊 Optional: Check Current State First
+## Error: "function gen_salt(unknown) does not exist"
 
-If you want to see what's wrong before fixing, run this first:
+### ✅ Status: FIXED (Needs Database Setup)
 
-```sql
--- See the mismatch
-SELECT 
-    'Business' as record_type,
-    b.id,
-    b.name,
-    b.owner_id
-FROM businesses b
-WHERE b.id = '7250c216-c81f-44c7-b9d6-1bb16a10b14d'
+### 🔧 What You Need to Do:
 
-UNION ALL
+**1. Enable pgcrypto in Supabase:**
+- Go to Supabase Dashboard → SQL Editor
+- Run: `CREATE EXTENSION IF NOT EXISTS pgcrypto;`
 
-SELECT 
-    'Profile' as record_type,
-    p.id,
-    p.email,
-    p.business_id as owner_id
-FROM profiles p
-WHERE p.email = 'leah.wangui@tillsup.com';
-```
+**2. Create the function:**
+- Open file: `/supabase_simple_password_reset.sql`
+- Copy all contents
+- Paste in Supabase SQL Editor
+- Click "Run"
 
-This will show you that the business `owner_id` doesn't match Leah's profile `id`.
+### ✅ Verify Fix:
+Try resetting a staff password - should show temporary password!
 
 ---
 
-## 🚨 Alternative: Nuclear Option (If Above Fails)
+## Still Not Working?
 
-If the UPDATE still fails for some reason, delete the business and let the app auto-create it:
+### Try These in Order:
 
-```sql
--- Delete the problematic business
-DELETE FROM businesses 
-WHERE id = '7250c216-c81f-44c7-b9d6-1bb16a10b14d';
+1. **Hard Refresh:** `Ctrl+Shift+R` (Windows) or `Cmd+Shift+R` (Mac)
+2. **Full Cache Clear:** F12 → Right-click refresh → "Empty Cache and Hard Reload"
+3. **Incognito Mode:** Open app in private/incognito window
+4. **Restart Dev Server:** Stop server, run `rm -rf node_modules/.vite && npm run dev`
 
--- Update Leah's profile to create a new business
-UPDATE profiles 
-SET business_id = gen_random_uuid()
-WHERE email = 'leah.wangui@tillsup.com';
-```
+---
 
-Then refresh the app - it will auto-create the business with correct permissions.
+## Need More Help?
+
+- **Browser Cache Issues:** See `/CACHE_CLEAR_INSTRUCTIONS.md`
+- **Password Reset Setup:** See `/PASSWORD_RESET_SETUP.md`
+- **All Errors:** See `/TROUBLESHOOTING.md`
+- **Complete Details:** See `/ERROR_FIX_SUMMARY.md`
+
+---
+
+## Quick Check: Is New Code Running?
+
+Press `F12`, go to Console tab, look for:
+
+✅ **Version 2.0.1** = New code running  
+❌ **No version message** = Still cached, hard refresh needed
+
+---
+
+**90% of issues = cached JavaScript → Just hard refresh!** 🔄

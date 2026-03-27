@@ -52,13 +52,39 @@ COMMIT;
 -- Done! Refresh your Tillsup app after running this.`;
 
   const copySQL = async () => {
-    try {
-      await navigator.clipboard.writeText(quickFixSQL);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+    // Method 1: Try Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(quickFixSQL);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+        return;
+      } catch (err) {
+        console.log("Clipboard API blocked, trying fallback...");
+      }
     }
+    
+    // Method 2: Fallback to execCommand
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = quickFixSQL;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+        return;
+      }
+    } catch (err) {
+      console.log("execCommand failed:", err);
+    }
+    
+    // Method 3: Silent fail - user can still manually select
   };
 
   return (

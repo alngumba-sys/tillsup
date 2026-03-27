@@ -2,12 +2,135 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    
+    <!-- ============================================ -->
+    <!-- NUCLEAR OPTION - SILENCE ALL FETCH ERRORS -->
+    <!-- ============================================ -->
+    <script>
+      // NUCLEAR SUPPRESSION - MOST AGGRESSIVE POSSIBLE
+      (function() {
+        'use strict';
+        
+        // Save originals
+        const _error = console.error;
+        const _warn = console.warn;
+        const _log = console.log;
+        
+        window.__suppressedCount = 0;
+        window.__suppressionActive = true;
+        
+        // ULTRA-AGGRESSIVE DETECTION
+        function shouldSuppress(args) {
+          try {
+            const combined = args.map(a => {
+              if (!a) return '';
+              if (typeof a === 'string') return a;
+              if (a.stack) return a.stack;
+              if (a.message) return a.message;
+              try { return JSON.stringify(a); } catch { return String(a); }
+            }).join(' ').toLowerCase();
+            
+            // Suppress anything related to Figma platform
+            return combined.includes('devtools_worker') ||
+                   combined.includes('figma.com') ||
+                   combined.includes('webpack-artifacts') ||
+                   (combined.includes('failed to fetch') && 
+                    (combined.includes('figma') || combined.includes('devtools'))) ||
+                   combined.includes('7f68a886400dcd44');
+          } catch {
+            return false;
+          }
+        }
+        
+        // Override ALL console methods
+        console.error = function(...args) {
+          if (shouldSuppress(args)) {
+            window.__suppressedCount++;
+            return;
+          }
+          _error.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+          if (shouldSuppress(args)) {
+            window.__suppressedCount++;
+            return;
+          }
+          _warn.apply(console, args);
+        };
+        
+        console.log = function(...args) {
+          if (shouldSuppress(args)) {
+            window.__suppressedCount++;
+            return;
+          }
+          _log.apply(console, args);
+        };
+        
+        // Override window.onerror
+        window.onerror = function(msg, url, line, col, error) {
+          const message = String(msg).toLowerCase();
+          const source = String(url).toLowerCase();
+          
+          if (source.includes('figma.com') || 
+              source.includes('devtools_worker') ||
+              (message.includes('failed to fetch') && source.includes('figma'))) {
+            window.__suppressedCount++;
+            return true; // Prevent default browser error handling
+          }
+          return false;
+        };
+        
+        // Capture ALL error events - EARLIEST PHASE
+        window.addEventListener('error', function(e) {
+          const src = (e.filename || '').toLowerCase();
+          const msg = (e.message || '').toLowerCase();
+          
+          if (src.includes('figma.com') || 
+              src.includes('devtools_worker') ||
+              src.includes('webpack-artifacts') ||
+              msg.includes('devtools_worker') ||
+              (msg.includes('failed to fetch') && src.includes('figma'))) {
+            window.__suppressedCount++;
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+        
+        // Capture ALL unhandled rejections - EARLIEST PHASE
+        window.addEventListener('unhandledrejection', function(e) {
+          try {
+            const reason = e.reason;
+            const stack = (reason?.stack || String(reason)).toLowerCase();
+            
+            if (stack.includes('figma.com') ||
+                stack.includes('devtools_worker') ||
+                stack.includes('webpack-artifacts') ||
+                stack.includes('7f68a886400dcd44')) {
+              window.__suppressedCount++;
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+            }
+          } catch {}
+        }, true);
+        
+        // Success message
+        _log.call(console, '%c🛡️ NUCLEAR SUPPRESSION ACTIVE', 'background:#dc2626;color:white;padding:8px 16px;font-weight:bold;font-size:16px');
+        _log.call(console, '%c   ALL Figma platform errors will be INVISIBLE', 'color:#dc2626;font-weight:bold');
+        _log.call(console, `%c   Suppression check: window.__suppressionActive = ${window.__suppressionActive}`, 'color:#10b981');
+      })();
+    </script>
+    
     <link rel="icon" type="image/x-icon" id="dynamic-favicon" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>Tillsup - Modern POS System</title>
+    
     <style>
       /* Ensure body and html have proper sizing */
       html, body {
@@ -128,14 +251,40 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Remove loader when React app loads
+      // Remove loader when React app loads - AGGRESSIVE REMOVAL
       window.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
+        // Remove immediately
+        const loader = document.getElementById('initial-loader');
+        if (loader) {
+          loader.style.display = 'none';
+        }
+      });
+      
+      // Also remove after a maximum of 2 seconds as a safety
+      setTimeout(function() {
+        const loader = document.getElementById('initial-loader');
+        if (loader) {
+          loader.style.display = 'none';
+          console.log('⚠️ Loader forcibly removed after 2s timeout');
+        }
+      }, 2000);
+      
+      // Watch for any React rendering
+      const observer = new MutationObserver(function(mutations) {
+        const root = document.getElementById('root');
+        if (root && root.children.length > 0) {
           const loader = document.getElementById('initial-loader');
           if (loader) {
             loader.style.display = 'none';
+            console.log('✅ Loader removed - React content detected');
           }
-        }, 100);
+          observer.disconnect();
+        }
+      });
+      
+      observer.observe(document.getElementById('root'), {
+        childList: true,
+        subtree: false
       });
     </script>
   </body>

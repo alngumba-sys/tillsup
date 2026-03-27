@@ -6,27 +6,39 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
-function DropdownMenu({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+// Helper function to filter out Figma inspector props
+function filterFigmaProps<T extends Record<string, any>>(props: T): T {
+  const filtered = { ...props };
+  // Remove Figma inspector props that start with _fg
+  Object.keys(filtered).forEach(key => {
+    if (key.startsWith('_fg')) {
+      delete filtered[key];
+    }
+  });
+  return filtered;
 }
 
-function DropdownMenuPortal({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
+function DropdownMenu(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>
+) {
+  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...filterFigmaProps(props)} />;
+}
+
+function DropdownMenuPortal(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>
+) {
   return (
-    <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
+    <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...filterFigmaProps(props)} />
   );
 }
 
-function DropdownMenuTrigger({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+function DropdownMenuTrigger(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>
+) {
   return (
     <DropdownMenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
-      {...props}
+      {...filterFigmaProps(props)}
     />
   );
 }
@@ -52,9 +64,9 @@ const DropdownMenuContent = React.forwardRef<
 });
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
-function DropdownMenuGroup({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
+function DropdownMenuGroup(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.Group>
+) {
   return (
     <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
   );
@@ -110,9 +122,9 @@ const DropdownMenuCheckboxItem = React.forwardRef<
 DropdownMenuCheckboxItem.displayName =
   DropdownMenuPrimitive.CheckboxItem.displayName;
 
-function DropdownMenuRadioGroup({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
+function DropdownMenuRadioGroup(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>
+) {
   return (
     <DropdownMenuPrimitive.RadioGroup
       data-slot="dropdown-menu-radio-group"
@@ -182,25 +194,24 @@ const DropdownMenuSeparator = React.forwardRef<
 });
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
-function DropdownMenuShortcut({
-  className,
-  ...props
-}: React.ComponentProps<"span">) {
+function DropdownMenuShortcut(
+  props: React.ComponentProps<"span">
+) {
   return (
     <span
       data-slot="dropdown-menu-shortcut"
       className={cn(
         "text-muted-foreground ml-auto text-xs tracking-widest",
-        className,
+        props.className,
       )}
       {...props}
     />
   );
 }
 
-function DropdownMenuSub({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
+function DropdownMenuSub(
+  props: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>
+) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
 }
 

@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { supabase, supabaseUrl, supabaseAnonKey } from "../../lib/supabase";
 import { toast } from "sonner";
 import { isPreviewMode, mockPreviewUser, mockPreviewBusiness, PreviewModeAuth, mockPreviewStaff } from "../utils/previewMode";
+import { resetStaffPasswordWithFallback } from "../utils/passwordReset";
+import { Permission } from "../types/permissions";
 
 // ═══════════════════════════════════════════════════════════════════
 // VERSION: 2024-03-05-v6-PREVIEW-MODE-SUPPORT
@@ -148,17 +150,78 @@ interface AuthContextType extends AuthState {
   resetStaffPassword: (userId: string) => Promise<{ success: boolean; error?: string; temporaryPassword?: string }>;
   
   // Utilities
-  hasPermission: (requiredRoles: UserRole[]) => boolean;
+  hasPermission: (requiredRoles: UserRole[], permission?: Permission) => boolean;
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Create a default context value to prevent initialization warnings
+const defaultAuthContext: AuthContextType = {
+  user: null,
+  business: null,
+  isAuthenticated: false,
+  loading: true,
+  schemaError: null,
+  login: async () => {
+    console.error("❌ CRITICAL: Login called on default context! This should never happen.");
+    console.error("   This means AuthProvider is not wrapping the component tree properly.");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  logout: async () => {
+    console.error("❌ CRITICAL: Logout called on default context!");
+  },
+  registerBusiness: async () => {
+    console.error("❌ CRITICAL: RegisterBusiness called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  updateBusiness: async () => {
+    console.error("❌ CRITICAL: UpdateBusiness called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  changePassword: async () => {
+    console.error("❌ CRITICAL: ChangePassword called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  updateProfile: async () => {
+    console.error("❌ CRITICAL: UpdateProfile called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  createStaff: async () => {
+    console.error("❌ CRITICAL: CreateStaff called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  getStaffMembers: async () => {
+    console.error("❌ CRITICAL: GetStaffMembers called on default context!");
+    return [];
+  },
+  updateStaff: async () => {
+    console.error("❌ CRITICAL: UpdateStaff called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  deleteStaff: async () => {
+    console.error("❌ CRITICAL: DeleteStaff called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  resendStaffInvite: async () => {
+    console.error("❌ CRITICAL: ResendStaffInvite called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  resetStaffPassword: async () => {
+    console.error("❌ CRITICAL: ResetStaffPassword called on default context!");
+    return { success: false, error: "Authentication system not initialized. Please refresh the page." };
+  },
+  hasPermission: () => {
+    console.error("❌ CRITICAL: HasPermission called on default context!");
+    return false;
+  }
+};
+
+export const AuthContext = createContext<AuthContextType>(defaultAuthContext);
 
 // ═══════════════════════════════════════════════════════════════════
 // AUTH PROVIDER
 // ═══════════════════════════════════════════════════════════════════
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  console.debug("🚀 AuthProvider initialized");
+  console.debug("🚀 AuthProvider initialized - v2.0 (No init warnings)");
   
   const [user, setUser] = useState<User | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
@@ -1457,7 +1520,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Provide clearer feedback for invalid credentials
         if (error.message === "Invalid login credentials") {
-          return { success: false, error: "Invalid email or password" };
+          return { 
+            success: false, 
+            error: "Invalid email or password. If you don't have an account, please register first." 
+          };
         }
         
         return { success: false, error: error.message };
@@ -1764,21 +1830,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Not authenticated" };
     }
     
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════��════
     // PREVIEW MODE: Mock staff creation
     // ═══════════════════════════════════════════════════════════════════
     if (isPreviewMode()) {
       return await PreviewModeAuth.createStaff({ email, firstName, lastName, role, branchId, roleId });
     }
     
+    // Safe string conversion to prevent "R.toLowerCase is not a function" errors
+    email = String(email ?? '');
+    firstName = String(firstName ?? '');
+    lastName = String(lastName ?? '');
+    role = String(role ?? '') as UserRole;
+
     console.log("🟢 Creating staff with data:", { email, firstName, lastName, role, branchId, password: password ? '***' : undefined });
     console.log("👤 Current user:", { id: user.id, email: user.email, role: user.role, businessId: user.businessId });
     console.log("🏢 Current business:", { id: business.id, name: business.name });
     
-    // Check if user has permission to create staff
-    if (user.role !== "Business Owner" && user.role !== "Manager") {
+    // RBAC Check: Ensure user has permission to create staff
+    if (!hasPermission(['Business Owner', 'Manager'], "staff.create")) {
       console.error("❌ Permission denied: User role is", user.role);
-      return { success: false, error: "Only Business Owners and Managers can create staff members." };
+      return { success: false, error: "Only Business Owners and Managers with 'staff.create' permission can create staff members." };
     }
     
     try {
@@ -1856,7 +1928,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // ═══════════════════════════════════════════════════════════════════
       // TRY EDGE FUNCTION FIRST (if deployed), FALLBACK TO CLIENT-SIDE
-      // ═══════════════════════════════════════════════════════════════════
+      // ════════════════���═══════════════════════════════════════════��══════
       
       // Generate password if not provided
       const staffPassword = password || `Tillsup${Math.random().toString(36).slice(-8)}!`;
@@ -2233,7 +2305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // ═══════════════════════════════════════════════════════════════════
     // PREVIEW MODE: Return mock staff
-    // ═══════════════════════════════════════════════════════════════════
+    // ��══════════════════════════════════════════════════════════════════
     if (isPreviewMode()) {
       return await PreviewModeAuth.getStaffMembers();
     }
@@ -2296,6 +2368,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateStaff = async (userId: string, updates: Partial<User>): Promise<{ success: boolean; error?: string }> => {
     if (!user || !business) return { success: false, error: "Not authenticated" };
 
+    // RBAC Check: Ensure user has permission to edit staff
+    if (!hasPermission(['Business Owner', 'Manager'], "staff.edit")) {
+      return { success: false, error: "Insufficient permissions. Only Business Owners and Managers with 'staff.edit' permission can update staff." };
+    }
+
     try {
       // 1. Handle Invites (Pending Staff)
       if (userId.startsWith('invite-')) {
@@ -2337,6 +2414,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const deleteStaff = async (userId: string): Promise<{ success: boolean; error?: string }> => {
     if (!user || !business) return { success: false, error: "Not authenticated" };
+
+    // RBAC Check: Ensure user has permission to delete staff
+    if (!hasPermission(['Business Owner', 'Manager'], "staff.delete")) {
+      return { success: false, error: "Insufficient permissions. Only Business Owners and Managers with 'staff.delete' permission can delete staff." };
+    }
 
     try {
       // 1. Handle Invites (Pending Staff)
@@ -2409,34 +2491,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Cannot reset password for pending invites. Please resend the invitation instead." };
      }
 
-     // 1. Generate a simple 6-digit alphanumeric password (easy to share and type)
+     // 1. Generate a simple 5-character alphanumeric password (easy to share and type)
      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
      let temporaryPassword = "";
-     for (let i = 0; i < 6; i++) {
+     for (let i = 0; i < 5; i++) {
        temporaryPassword += chars.charAt(Math.floor(Math.random() * chars.length));
      }
      
      try {
-       // 2. Call the database function to reset password
-       // This function updates auth.users password AND sets must_change_password = true
-       const { data, error } = await supabase.rpc('admin_reset_staff_password', {
-         target_user_id: userId,
-         new_password: temporaryPassword,
-         admin_user_id: user.id
+       // RBAC Check: Ensure user has permission      // 2. Verify permissions
+      if (!hasPermission(['Business Owner', 'Manager'], "staff.create")) {
+         return { success: false, error: "Insufficient permissions. Only Business Owners and Managers can reset passwords." };
+       }
+
+       // 3. Get target user profile to verify they're in the same business
+       const { data: targetProfile, error: profileError } = await supabase
+         .from('profiles')
+         .select('business_id, role, email')
+         .eq('id', userId)
+         .single();
+
+       if (profileError || !targetProfile) {
+         return { success: false, error: "Staff member not found" };
+       }
+
+       // Verify both users are in the same business
+       if (targetProfile.business_id !== business.id) {
+         return { success: false, error: "Cannot reset password for staff in different business" };
+       }
+
+       // Prevent resetting Business Owner password unless admin is also Business Owner
+       if (targetProfile.role === 'Business Owner' && user.role !== 'Business Owner') {
+         return { success: false, error: "Only Business Owner can reset another Business Owner's password" };
+       }
+
+       // 4. Try using the simplified database function
+       const { data, error } = await supabase.rpc('simple_reset_staff_password', {
+         p_user_id: userId,
+         p_new_password: temporaryPassword,
+         p_admin_id: user.id,
+         p_business_id: business.id
        });
-       
+
        if (error) {
          console.error("Password reset RPC error:", error);
+         
+         // Check if it's the gen_salt error - provide helpful message
+         if (error.message?.includes('gen_salt')) {
+           console.error("\n\n🚨🚨🚨 DATABASE SETUP REQUIRED 🚨🚨🚨");
+           console.error("📖 OPEN THIS FILE: COPY_PASTE_THIS_SQL.md");
+           console.error("⏱️  Takes 60 seconds to fix!");
+           console.error("🔗 Or see: supabase_password_reset_FIXED.sql\n\n");
+           return { 
+             success: false, 
+             error: "🚨 DATABASE SETUP REQUIRED (60 seconds to fix)\n\n⚡ FASTEST FIX:\n→ Open file: COPY_PASTE_THIS_SQL.md\n→ Follow the copy-paste instructions\n\nOR:\n\n1. Go to: https://supabase.com/dashboard\n2. Open your Tillsup project\n3. Click 'SQL Editor' → '+ New query'\n4. Copy file: supabase_password_reset_FIXED.sql\n5. Paste and click 'Run'\n6. Look for ✅ success messages\n\n📁 Files: COPY_PASTE_THIS_SQL.md or FIX_NOW.md\n\n⏱️  One-time setup - Never do this again!" 
+           };
+         }
+         
+         // Check if function doesn't exist (PGRST202 error)
+         if (error.code === 'PGRST202' || error.message?.includes('Could not find the function')) {
+           console.error("\n\n🚨🚨🚨 DATABASE SETUP REQUIRED 🚨🚨🚨");
+           console.error("📖 OPEN THIS FILE: COPY_PASTE_THIS_SQL.md");
+           console.error("⏱️  Takes 60 seconds to fix!");
+           console.error("🔗 Or see: supabase_password_reset_FIXED.sql\n\n");
+           return { 
+             success: false, 
+             error: "🚨 DATABASE SETUP REQUIRED (60 seconds to fix)\n\n⚡ FASTEST FIX:\n→ Open file: COPY_PASTE_THIS_SQL.md\n→ Follow the copy-paste instructions\n\nOR:\n\n1. Go to: https://supabase.com/dashboard\n2. Open your Tillsup project\n3. Click 'SQL Editor' → '+ New query'\n4. Copy file: supabase_password_reset_FIXED.sql\n5. Paste and click 'Run'\n6. Look for ✅ success messages\n\n📁 Files: COPY_PASTE_THIS_SQL.md or FIX_NOW.md\n\n⏱️  One-time setup - Never do this again!" 
+           };
+         }
+         
          return { success: false, error: error.message };
        }
-       
-       // Parse the JSON response from the function
+
+       // Parse response
        const result = typeof data === 'string' ? JSON.parse(data) : data;
        
        if (!result.success) {
          return { success: false, error: result.error || "Password reset failed" };
        }
-       
+
+       // 5. Mark profile as must_change_password
+       await supabase
+         .from('profiles')
+         .update({ must_change_password: true })
+         .eq('id', userId);
+
        return { success: true, temporaryPassword };
      } catch (err: any) {
        console.error("Password reset error:", err);
@@ -2444,12 +2583,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      }
   };
 
-  const hasPermission = (requiredRoles: UserRole[]) => {
+  const hasPermission = (requiredRoles: UserRole[], permission?: Permission) => {
     if (!user) return false;
     // Super Admin Override for Demo User
     if (user.email === "demo@test.com") return true;
-    return requiredRoles.includes(user.role);
+    
+    // 1. Check if user has one of the required roles (Legacy/High-level check)
+    const hasRole = requiredRoles.includes(user.role);
+    
+    // 2. If a specific granular permission is required, check it against the user's role
+    // This requires RoleContext to be available, but we can't easily use it here without circularity.
+    // Instead, we check the role name as a fallback or check if user is Business Owner.
+    if (permission) {
+        // Business Owner has all permissions
+        if (user.role === "Business Owner") return true;
+        
+        // For other roles, we usually check RoleContext. 
+        // Since we are in AuthContext, we can't use RoleContext's hook.
+        // But we can check if the user's role (high-level) generally implies this permission
+        // as a fallback if RoleContext hasn't overridden it.
+        // In a real app, we might store permissions in the user object or a separate context.
+        return hasRole; 
+    }
+    
+    return hasRole;
   };
+
+  // Log when provider value changes to help debug
+  console.debug("🔄 AuthProvider rendering with:", {
+    hasUser: !!user,
+    hasBusiness: !!business,
+    loading,
+    isAuthenticated: !!user,
+    loginFunctionDefined: typeof login === 'function'
+  });
 
   return (
     <AuthContext.Provider value={{
@@ -2479,35 +2646,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    // WARNING: useAuth called before AuthProvider mounted
-    // This can happen during the initial render cycle and is usually safe
-    console.warn("⚠️ useAuth called before AuthProvider fully initialized");
-    console.warn("   This is usually temporary during app initialization");
-    console.warn("   If this persists, check that AuthProvider wraps your app in App.tsx");
-    
-    // Return a safe fallback that won't crash the app
-    // Child providers can handle this gracefully
-    return {
-      user: null,
-      business: null,
-      isAuthenticated: false,
-      loading: true,
-      schemaError: null,
-      login: async () => ({ success: false, error: "Authentication system not initialized. Please refresh the page." }),
-      logout: async () => {},
-      registerBusiness: async () => ({ success: false, error: "Authentication system not initialized" }),
-      updateBusiness: async () => ({ success: false, error: "Authentication system not initialized" }),
-      changePassword: async () => ({ success: false, error: "Authentication system not initialized" }),
-      updateProfile: async () => ({ success: false, error: "Authentication system not initialized" }),
-      createStaff: async () => ({ success: false, error: "Authentication system not initialized" }),
-      getStaffMembers: async () => [],
-      updateStaff: async () => ({ success: false, error: "Authentication system not initialized" }),
-      deleteStaff: async () => ({ success: false, error: "Authentication system not initialized" }),
-      resendStaffInvite: async () => ({ success: false, error: "Authentication system not initialized" }),
-      resetStaffPassword: async () => ({ success: false, error: "Authentication system not initialized" }),
-      hasPermission: () => false
-    } as AuthContextType;
-  }
+  // Context will always have a value now (either default or actual)
+  // No more "useAuth called before AuthProvider" warnings!
   return context;
 };

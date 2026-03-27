@@ -18,7 +18,9 @@ import {
   Building2,
   Receipt,
   Crown,
-  Sparkles
+  Sparkles,
+  MapPin,
+  ArrowLeftRight
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { TopNavbar } from "./TopNavbar";
@@ -30,19 +32,22 @@ import { Toaster } from "./ui/sonner";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import { GlobalErrorHandler } from "./GlobalErrorHandler";
+import { useRole } from "../contexts/RoleContext";
+import { Permission } from "../types/permissions";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/app/dashboard", roles: ["Business Owner", "Manager", "Cashier", "Accountant", "Staff"] },
-  { icon: ShoppingCart, label: "POS Terminal", path: "/app/pos", roles: ["Business Owner", "Manager", "Cashier", "Staff"] },
-  { icon: Package, label: "Inventory", path: "/app/inventory", roles: ["Business Owner", "Manager"] },
-  { icon: Truck, label: "Supplier Management", path: "/app/supplier-management", roles: ["Business Owner", "Manager", "Staff"], feature: "supplierManagement" },
-  { icon: Users, label: "Staff", path: "/app/staff", roles: ["Business Owner", "Manager", "Cashier", "Accountant", "Staff"] },
-  { icon: Building2, label: "Branch Management", path: "/app/branch-management", roles: ["Business Owner"] },
-  { icon: BarChart3, label: "Reports", path: "/app/reports", roles: ["Business Owner", "Manager", "Accountant"] },
-  { icon: Sparkles, label: "AI Insights", path: "/app/ai-insights", roles: ["Business Owner", "Manager"], feature: "aiInsights" },
-  { icon: Receipt, label: "Expenses", path: "/app/expenses", roles: ["Business Owner", "Manager", "Accountant"], feature: "expenseTracking" },
-  { icon: Crown, label: "Subscription & Billing", path: "/app/subscription", roles: ["Business Owner"] },
-  { icon: Settings, label: "Business Settings", path: "/app/business-settings", roles: ["Business Owner"] }
+const menuItems: { icon: any, label: string, path: string, roles: string[], feature?: string, permission?: Permission }[] = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/app/dashboard", roles: ["Business Owner", "Manager", "Cashier", "Accountant", "Staff"] }, // ordered 1
+  { icon: ShoppingCart, label: "POS Terminal", path: "/app/pos", roles: ["Business Owner", "Manager", "Cashier", "Staff"], permission: "pos.access" }, // ordered 2
+  { icon: Building2, label: "Branch Management", path: "/app/branch-management", roles: ["Business Owner"], permission: "settings.manage_branches" }, // ordered 3
+  { icon: Truck, label: "Supplier Management", path: "/app/supplier-management", roles: ["Business Owner", "Manager", "Staff"], feature: "supplierManagement", permission: "suppliers.view" }, // ordered 4
+  { icon: Package, label: "Inventory", path: "/app/inventory", roles: ["Business Owner", "Manager"], permission: "inventory.view" }, // ordered 5
+  { icon: Users, label: "Staff", path: "/app/staff", roles: ["Business Owner", "Manager", "Cashier", "Accountant", "Staff"], permission: "staff.view" }, // ordered 6
+  { icon: Receipt, label: "Expenses", path: "/app/expenses", roles: ["Business Owner", "Manager", "Accountant"], feature: "expenseTracking", permission: "expenses.view" }, // ordered 7
+  { icon: BarChart3, label: "Reports", path: "/app/reports", roles: ["Business Owner", "Manager", "Accountant"], permission: "reports.view_sales" }, // ordered 8
+  { icon: Sparkles, label: "AI Insights", path: "/app/ai-insights", roles: ["Business Owner", "Manager"], feature: "aiInsights", permission: "reports.view_sales" }, // ordered 9
+  { icon: ArrowLeftRight, label: "Stock Transfers", path: "/app/stock-transfer-history", roles: ["Business Owner", "Manager"], permission: "inventory.view" }, // preserved extra item
+  { icon: Crown, label: "Subscription & Billing", path: "/app/subscription", roles: ["Business Owner"] }, // moved below Locations
+  { icon: Settings, label: "Business Settings", path: "/app/business-settings", roles: ["Business Owner"], permission: "settings.view" } // moved below Locations
 ];
 
 export function Layout() {
@@ -68,7 +73,18 @@ export function Layout() {
     navigate("/login");
   };
 
-  const hasAccess = (roles: string[]) => {
+  const { hasPermission: hasGranularPermission } = useRole();
+  
+  const hasAccess = (roles: string[], permission?: Permission) => {
+    // 1. Business Owner bypasses all checks
+    if (user?.role === "Business Owner") return true;
+    
+    // 2. If a specific granular permission is required, check it via RoleContext
+    if (permission && user?.roleId) {
+        return hasGranularPermission(user.roleId, permission);
+    }
+    
+    // 3. Fallback to legacy role-based check
     return hasPermission(roles as any);
   };
 
@@ -144,7 +160,7 @@ export function Layout() {
             <nav className="px-3 py-4 space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;
-                const accessible = hasAccess(item.roles);
+                const accessible = hasAccess(item.roles, item.permission);
                 const active = isActive(item.path);
                 
                 // Check feature access

@@ -1,24 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
+import { useAuth } from "../contexts/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
+import { isPreviewMode } from "../utils/previewMode";
+import { toast } from "sonner";
+import { TillsupLogo } from "../components/TillsupLogo";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Store, Mail, Lock, AlertCircle, Eye, EyeOff, Info } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
-import { useBranding } from "../contexts/BrandingContext";
+import { AlertCircle, Mail, Lock, Eye, EyeOff, Store, Info } from "lucide-react";
 import { ConnectionChecker } from "../components/ConnectionChecker";
-import { isPreviewMode } from "../utils/previewMode";
-import { toast } from "sonner";
-import { TillsupLogo } from "../components/TillsupLogo";
 
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { assets } = useBranding();
   const authContext = useAuth();
-  const { login, isAuthenticated, logout } = authContext;
+  const { login, isAuthenticated, logout, user } = authContext;
   
   // Debug: Check if auth context is valid
   console.debug("🔍 Login component - Auth context status:", {
@@ -37,13 +37,19 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Redirect authenticated users to dashboard
+
+  // Redirect authenticated users based on mustChangePassword flag
   useEffect(() => {
     if (isAuthenticated) {
-      console.log("✅ User already authenticated - redirecting to dashboard");
-      navigate("/app/dashboard", { replace: true });
+      if (user?.mustChangePassword) {
+        console.log("✅ User already authenticated but must change password - redirecting to change-password");
+        navigate("/change-password", { replace: true });
+      } else {
+        console.log("✅ User already authenticated - redirecting to dashboard");
+        navigate("/app/dashboard", { replace: true });
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user?.mustChangePassword, navigate]);
 
   // Show success message from registration
   useEffect(() => {
@@ -89,14 +95,24 @@ export function Login() {
 
     try {
       console.log("🔐 Login attempt:", { email: formData.email });
+      console.log("🔍 Auth context status:", {
+        hasLogin: typeof login === 'function',
+        loginName: login?.name,
+        isAuthenticated,
+        hasLogout: typeof logout === 'function',
+        contextKeys: Object.keys(authContext)
+      });
       
       // Ensure login is a function before calling
       if (typeof login !== 'function') {
+         console.error("❌ Login is not a function:", login);
          throw new Error("Authentication service is not ready. Please try again.");
       }
 
       // Call login directly - AuthContext handles all timeouts internally
+      console.log("🔵 Calling login function...");
       const result = await login(formData.email, formData.password);
+      console.log("🔵 Login function returned:", result);
 
       setLoading(false);
 
@@ -213,6 +229,17 @@ export function Login() {
                 </AlertDescription>
               </Alert>
             )}
+            
+            {/* Production Mode Notice - Only show if there's an error about invalid credentials */}
+            {!isPreviewMode() && error && error.includes("Invalid email or password") && (
+              <Alert className="border-blue-200 bg-blue-50">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm text-blue-900">
+                  <p className="font-semibold mb-1">Don't have an account yet?</p>
+                  <p>Click "Register Your Business" below to create a new account.</p>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Success Message */}
             {successMessage && (
@@ -288,6 +315,7 @@ export function Login() {
             >
               {loading ? "Signing in..." : "Sign In"}
             </Button>
+
 
             {/* Register Link */}
             <div className="text-center space-y-2">

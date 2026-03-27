@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+// Payment method uses custom mini-cards — no Select required
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
@@ -54,7 +55,7 @@ interface CartPanelProps {
   setCustomerName: (name: string) => void;
   generateFiscalReceipt: boolean;
   handleGenerateFiscalReceiptChange: (checked: boolean) => void;
-  handleCheckout: () => void;
+  handleCheckout: (paymentMethod: "Cash" | "MPesa" | "Credit") => void;
 }
 
 export function CartPanel({
@@ -76,6 +77,7 @@ export function CartPanel({
   handleCheckout,
 }: CartPanelProps) {
   const { formatCurrency } = useCurrency();
+  const [paymentMethod, setPaymentMethod] = useState<"Cash" | "MPesa" | "Credit">("Cash");
   // ═══════════════════════════════════════════════════════════════════
   // BRANCH STATUS VALIDATION - Disable checkout for deactivated branches
   // ═══════════════════════════════════════════════════════════════════
@@ -233,19 +235,35 @@ export function CartPanel({
             <span className="text-muted-foreground">Tax (16%)</span>
             <span>{formatCurrency(tax)}</span>
           </div>
-          <Separator />
-          <div className="flex justify-between">
-            <span className="font-semibold text-lg">Total</span>
-            <span className="font-semibold text-lg">{formatCurrency(total)}</span>
-          </div>
-        </div>
 
-        {/* CUSTOMER NAME INPUT */}
         {cart.length > 0 && (
-          <CustomerNameInput
-            value={customerName}
-            onChange={setCustomerName}
-          />
+          <>
+            <div>
+              <span className="text-muted-foreground text-sm">Payment Method</span>
+              <div className="mt-2 flex items-center gap-2">
+                {(["Cash", "MPesa", "Credit"] as const).map((m) => {
+                  const isSelected = paymentMethod === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setPaymentMethod(m)}
+                      aria-pressed={isSelected}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors focus:outline-none ${isSelected ? 'bg-foreground text-white border-foreground' : 'bg-white text-muted-foreground border-border'}`}
+                    >
+                      {/* simple icons could be added later */}
+                      <span className="font-medium">{m}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <CustomerNameInput
+              value={customerName}
+              onChange={setCustomerName}
+            />
+          </>
         )}
 
         {/* Fiscal Receipt Toggle */}
@@ -268,12 +286,13 @@ export function CartPanel({
         <Button
           className="w-full"
           size="lg"
-          onClick={handleCheckout}
+          onClick={() => handleCheckout(paymentMethod)}
           disabled={cart.length === 0 || !isPOSReady || isBranchDeactivated}
         >
           Checkout
         </Button>
       </div>
     </div>
+  </div>
   );
 }

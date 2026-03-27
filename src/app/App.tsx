@@ -10,6 +10,8 @@ import { BrandingProvider, useBranding } from "./contexts/BrandingContext";
 import { Toaster } from "./components/ui/sonner";
 import { isPreviewMode } from "./utils/previewMode";
 import { useEffect } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { FigmaErrorFilter } from "./components/FigmaErrorFilter";
 
 console.log("📦 App.tsx loaded - Initializing Tillsup POS");
 
@@ -38,6 +40,7 @@ function FaviconUpdater() {
 
 export default function App() {
   console.log("✅ App() component rendering");
+  console.log("📌 Tillsup Version: 2.0.1 - Auth Init Warning Fix Applied");
 
   // Log preview mode status
   useEffect(() => {
@@ -46,17 +49,29 @@ export default function App() {
     } else {
       console.log("🚀 PRODUCTION MODE - Using real Supabase connection");
     }
+    
+    // IMMEDIATE loader removal - don't wait
+    const loader = document.getElementById('initial-loader');
+    if (loader) {
+      loader.style.display = 'none';
+      console.log('✅ Loader hidden IMMEDIATELY from App.tsx');
+    }
   }, []);
 
+  // Add a safety render check
+  console.log("📋 App returning JSX...");
+
   return (
-    <>
+    <ErrorBoundary>
+      <FigmaErrorFilter />
+      
       <AuthProvider>
         <BrandingProvider>
-          <FaviconUpdater />
           <RouterProvider router={router} />
+          <FaviconUpdater />
           <Toaster position="top-right" />
         </BrandingProvider>
       </AuthProvider>
-    </>
+    </ErrorBoundary>
   );
 }

@@ -37,7 +37,7 @@ export function WorkScheduleTab() {
   // Check permissions
   if (!business || !user) return null;
 
-  if (!hasPermission(["Business Owner"])) {
+  if (!hasPermission(["Business Owner", "Manager"], "staff.manage_schedule")) {
     return (
       <Card className="border-red-200 bg-red-50">
         <CardContent className="pt-6">

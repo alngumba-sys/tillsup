@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { XIcon } from "lucide-react";
+import { XIcon, ChevronDown } from "lucide-react";
 
 import { cn } from "./utils";
 
@@ -53,6 +53,30 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  const [isScrollable, setIsScrollable] = React.useState(false);
+
+  React.useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    const update = () => {
+      setIsScrollable(el.scrollHeight > el.clientHeight + 1);
+    };
+
+    update();
+    el.addEventListener("scroll", update);
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -65,7 +89,19 @@ const DialogContent = React.forwardRef<
         )}
         {...props}
       >
-        {children}
+        <div ref={contentRef} className="overflow-auto max-h-[65vh]">
+          {children}
+        </div>
+
+        {isScrollable && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-none">
+            <div className="flex items-center gap-2 bg-background/80 text-muted-foreground text-xs px-3 py-1 rounded-full shadow-sm">
+              <ChevronDown className="w-3 h-3" />
+              <span>Scroll</span>
+            </div>
+          </div>
+        )}
+
         <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
           <XIcon />
           <span className="sr-only">Close</span>

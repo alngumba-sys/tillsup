@@ -57,18 +57,20 @@ export function SupabaseDiagnostic() {
 
       // Test 3: Try to ping the health endpoint
       try {
-        const response = await Promise.race([
-          fetch(`${supabaseUrl}/rest/v1/`, { method: 'HEAD' }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error("Health check timeout")), 5000)
-          )
-        ]);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(`${supabaseUrl}/rest/v1/`, { 
+          method: 'HEAD',
+          signal: controller.signal
+        }).finally(() => clearTimeout(timeoutId));
 
         if (response) {
           diagnosticResults.healthCheck = true;
         }
       } catch (err: any) {
-        if (!diagnosticResults.error) {
+        // Silently handle abort errors, only log real network errors
+        if (err.name !== 'AbortError' && !diagnosticResults.error) {
           diagnosticResults.error = `Health check failed: ${err.message}`;
         }
       }

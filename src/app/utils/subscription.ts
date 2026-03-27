@@ -22,6 +22,12 @@ export interface PlanFeatures {
   aiInsights: boolean;
   emailSupport: boolean;
   prioritySupport: boolean;
+  digitalReceipts: boolean;
+  customerDatabase: boolean;
+  roleBasedAccess: boolean;
+  dedicatedAccountManager: boolean;
+  auditLogs: boolean;
+  slaGuarantee: boolean;
 }
 
 export interface SubscriptionPlanDetails {
@@ -100,7 +106,13 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
       apiAccess: false,
       aiInsights: true,
       emailSupport: true,
-      prioritySupport: false
+      prioritySupport: false,
+      digitalReceipts: true,
+      customerDatabase: true,
+      roleBasedAccess: false,
+      dedicatedAccountManager: false,
+      auditLogs: false,
+      slaGuarantee: false
     },
     description: "Perfect for small businesses getting started",
     highlightedFeatures: [
@@ -109,8 +121,10 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
       "Up to 1,000 Transactions",
       "Full POS Terminal",
       "Inventory Management",
-      "Advanced Reports & Analytics",
+      "Basic Reports & Sales Insights",
       "Expense Tracking",
+      "Digital Receipts",
+      "Customer Database",
       "Email Support"
     ]
   },
@@ -135,10 +149,16 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
       supplierManagement: true,
       customBranding: true,
       exportData: true,
-      apiAccess: false,
+      apiAccess: true,
       aiInsights: true,
       emailSupport: true,
-      prioritySupport: true
+      prioritySupport: true,
+      digitalReceipts: true,
+      customerDatabase: true,
+      roleBasedAccess: true,
+      dedicatedAccountManager: false,
+      auditLogs: true,
+      slaGuarantee: false
     },
     description: "Ideal for growing businesses with multiple locations",
     highlightedFeatures: [
@@ -149,8 +169,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
       "Advanced Inventory & Forecasting",
       "Purchase Orders & Supplier Management",
       "Expense Management",
-      "Advanced Analytics",
-      "Custom Branding",
+      "Advanced Sales Analytics",
+      "Role-based Access",
       "Priority Support"
     ]
   },
@@ -178,7 +198,13 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
       apiAccess: true,
       aiInsights: true,
       emailSupport: true,
-      prioritySupport: true
+      prioritySupport: true,
+      digitalReceipts: true,
+      customerDatabase: true,
+      roleBasedAccess: true,
+      dedicatedAccountManager: true,
+      auditLogs: true,
+      slaGuarantee: true
     },
     description: "Complete solution for large enterprises",
     highlightedFeatures: [
@@ -187,10 +213,11 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
       "Unlimited Transactions",
       "Full POS Terminal",
       "AI-Powered Forecasting",
-      "Advanced Procurement",
+      "Advanced Procurement & Supplier Management",
       "White-Label Branding",
-      "Custom Integrations",
-      "24/7 Priority Support"
+      "API & Webhooks",
+      "Dedicated Account Manager",
+      "24/7 SLA + Audit Logs"
     ]
   }
 };

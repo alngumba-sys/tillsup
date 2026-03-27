@@ -8,6 +8,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useSubscription } from "../hooks/useSubscription";
 import { useBranch } from "../contexts/BranchContext";
 import { useExpense } from "../contexts/ExpenseContext";
+import { useCategory } from "../contexts/CategoryContext";
 import { Button } from "../components/ui/button";
 import { seedDemoSales } from "../utils/seedDemoSales";
 import { useState, useMemo } from "react";
@@ -15,6 +16,7 @@ import { useNavigate } from "react-router";
 import { useCurrency } from "../hooks/useCurrency";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "../components/ui/dialog";
 import { Package } from "lucide-react";
 import { Building2 } from "lucide-react";
 import { SchemaError } from "../components/inventory/SchemaError";
@@ -47,6 +49,7 @@ export function Dashboard() {
   const { usage } = useSubscription();
   const { branches, error: branchError } = useBranch();
   const { expenses } = useExpense();
+  const { categories } = useCategory();
   const navigate = useNavigate();
   const [isDemoDataLoaded, setIsDemoDataLoaded] = useState(false);
 
@@ -157,6 +160,58 @@ export function Dashboard() {
       todayNetProfit
     };
   }, [sales, expenses, businessId, staffId, getTotalRevenueToday, getTotalCustomersToday, user]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // TODAY'S SALES / CUSTOMERS / PRODUCTS - used by KPI detail dialog
+  // ═══════════════════════════════════════════════════════════════════
+  const todaySalesList = useMemo(() => {
+    const todayDate = new Date().toDateString();
+    return sales.filter(sale => {
+      const saleDate = new Date(sale.timestamp).toDateString();
+      if (saleDate !== todayDate) return false;
+      if (businessId && sale.businessId !== businessId) return false;
+      if (staffId && sale.staffId !== staffId) return false;
+      if (branchId && sale.branchId !== branchId) return false;
+      return true;
+    });
+  }, [sales, businessId, staffId, branchId]);
+
+  const customersSummary = useMemo(() => {
+    const map = new Map();
+    todaySalesList.forEach(sale => {
+      const name = sale.customerName || 'Walk-in';
+      const key = name;
+      const entry = map.get(key) || { name, count: 0, total: 0 };
+      entry.count += 1;
+      entry.total += (sale.total || 0);
+      map.set(key, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [todaySalesList]);
+
+  const productsSummary = useMemo(() => {
+    const map = new Map();
+    todaySalesList.forEach(sale => {
+      (sale.items || []).forEach(item => {
+        const name = item.name || item.productName || `Product ${item.productId || item.id || ''}`;
+        const key = name;
+        const entry = map.get(key) || { name, qty: 0, amount: 0 };
+        const qty = (item.quantity || 0);
+        entry.qty += qty;
+        // Prefer explicit totalPrice, then unitPrice * qty, then legacy fields
+        const itemAmount = (item.totalPrice !== undefined && item.totalPrice !== null)
+          ? item.totalPrice
+          : (item.unitPrice !== undefined && item.unitPrice !== null)
+            ? (item.unitPrice * qty)
+            : (item.total || item.price)
+              ? ((item.total || item.price) * qty)
+              : 0;
+        entry.amount += itemAmount;
+        map.set(key, entry);
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => b.qty - a.qty);
+  }, [todaySalesList]);
 
   // ═══════════════════════════════════════════════════════════════════
   // UNIVERSAL BASELINE & DATE LOGIC - Prevent fake growth percentages
@@ -336,6 +391,64 @@ export function Dashboard() {
     });
   }, [getDailySales, businessId, staffId, branchId]);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CATEGORY AGGREGATION (for Categories chart)
+  // ═══════════════════════════════════════════════════════════════════
+  const categoriesData = useMemo(() => {
+    // Aggregate revenue by category for the last 7 days (respecting role filters)
+    const now = Date.now();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const map = new Map();
+
+    sales.forEach((sale) => {
+      // Role & scope filters
+      if (businessId && sale.businessId !== businessId) return;
+      if (staffId && sale.staffId !== staffId) return;
+      if (branchId && sale.branchId !== branchId) return;
+
+      const saleTime = new Date(sale.timestamp).getTime();
+      if (saleTime < sevenDaysAgo.getTime()) return;
+
+      (sale.items || []).forEach((item: any) => {
+        // ═══════════════════════════════════════════════════════════════════
+        // FIX: Map category IDs to names and handle fallbacks
+        // ══════════════════════════════════════════════════════════════════
+        let categoryId = item.category || item.categoryId;
+        let categoryName = item.categoryName;
+
+        // Fallback 1: If no category info in sale item, check current inventory
+        if (!categoryId && !categoryName && inventory) {
+          const product = inventory.find(p => p.id === item.productId);
+          if (product) categoryId = product.category;
+        }
+
+        // Fallback 2: Map Category ID (UUID) to human-readable Name
+        let displayName = categoryName;
+        if (!displayName && categoryId && categories) {
+          const catObj = categories.find(c => c.id === categoryId);
+          if (catObj) displayName = catObj.name;
+        }
+
+        const categoryLabel = displayName || categoryId || 'Uncategorized';
+        
+        const revenue = (item.totalPrice !== undefined && item.totalPrice !== null)
+          ? Number(item.totalPrice)
+          : (item.unitPrice !== undefined && item.unitPrice !== null)
+            ? Number(item.unitPrice) * Number(item.quantity || 0)
+            : 0;
+
+        map.set(categoryLabel, (map.get(categoryLabel) || 0) + revenue);
+      });
+    });
+
+    const arr = Array.from(map.entries()).map(([category, revenue]) => ({ category, revenue }));
+    arr.sort((a, b) => b.revenue - a.revenue);
+    // Limit to top 8 categories for display
+    return arr.slice(0, 8);
+  }, [sales, businessId, staffId, branchId, categories, inventory]);
+
   // Helper function to calculate time ago
   function getTimeAgo(date: Date): string {
     const now = new Date();
@@ -392,6 +505,57 @@ export function Dashboard() {
       bgColor: "bg-orange-50"
     }
   ];
+
+  const [selectedKpi, setSelectedKpi] = useState<string | null>(null);
+  const [isKpiDialogOpen, setIsKpiDialogOpen] = useState(false);
+
+  const kpiDetails: Record<string, { description: string; insights: string; nextSteps: string }> = {
+    "Today's Customers": {
+      description: 'Total unique customers served today.',
+      insights: "This metric reflects today's footfall and purchase activity.",
+      nextSteps: 'Consider offering targeted promotions to retain frequent customers.'
+    },
+    "Your Customers Today": {
+      description: 'Total customers you served today (staff/cashier view).',
+      insights: 'Track personal performance and comparing volumes helps with shift planning.',
+      nextSteps: 'Use this insight to balance staff allocation for peak periods.'
+    },
+    "Today's Total Sales": {
+      description: 'Total sales amount today across all transactions.',
+      insights: 'Revenue trends give a quick signal of business momentum.',
+      nextSteps: 'Evaluate item-level performance and adjust pricing or placement accordingly.'
+    },
+    "Your Total Sales": {
+      description: 'Total sales amount you processed today (staff/cashier view).',
+      insights: 'Helps gauge individual contribution to daily revenue.',
+      nextSteps: 'Use this data to incentivize high-performing staff.'
+    },
+    "Average Transaction": {
+      description: 'Average ticket value for today.',
+      insights: 'Higher values may indicate successful upselling or product mix improvements.',
+      nextSteps: 'Focus on cross-sell bundles and add-on offers to boost this value.'
+    },
+    "Products Sold": {
+      description: 'Total quantity of products sold today.',
+      insights: 'Volume-focused metric to measure sales throughput and inventory velocity.',
+      nextSteps: 'Ensure high inventory availability for fast-moving products.'
+    },
+    "Products You Sold": {
+      description: 'Quantity of products you sold today (staff/cashier view).',
+      insights: 'Useful for performance reviews and commission tracking.',
+      nextSteps: 'Review your sales interactions to identify coaching points.'
+    },
+    "Today's Expenses": {
+      description: 'Total expenses recorded today.',
+      insights: 'Understand the outgoing costs that impact daily profitability.',
+      nextSteps: 'Monitor expense categories and cut non-essential spending where possible.'
+    },
+    "Net Profit Today": {
+      description: 'Revenue minus COGS and expenses for today.',
+      insights: 'A key health metric for daily financial performance.',
+      nextSteps: 'If profit is low, examine pricing, inventory cost, and expense leaks.'
+    }
+  };
 
   // Calculate trial days remaining
   const getTrialDaysRemaining = () => {
@@ -493,7 +657,7 @@ export function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
           
@@ -505,69 +669,216 @@ export function Dashboard() {
           const displayColor = showNeutralStyle ? "text-gray-600" : kpi.color;
           
           return (
-            <Card key={kpi.title}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground leading-tight truncate">{kpi.title}</p>
-                    <p className="font-semibold text-lg leading-tight break-words">{kpi.value}</p>
-                    {/* Only show change text if it exists (not null) */}
-                    {kpi.change && (
-                      <p className={`text-[10px] leading-tight ${showNeutralStyle ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
-                        {kpi.change}
-                      </p>
-                    )}
+            <button
+              key={kpi.title}
+              type="button"
+              className="text-left h-full"
+              onClick={() => {
+                setSelectedKpi(kpi.title);
+                setIsKpiDialogOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedKpi(kpi.title);
+                  setIsKpiDialogOpen(true);
+                }
+              }}
+            >
+              <Card className="h-full">
+                <CardContent className="p-3 h-full">
+                  <div className="flex flex-col justify-between h-full">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground leading-tight whitespace-normal">{kpi.title}</p>
+                      <p className="font-semibold text-base leading-tight whitespace-nowrap">{kpi.value}</p>
+                      {/* Only show change text if it exists (not null) */}
+                      {kpi.change && (
+                        <p className={`text-[10px] leading-tight ${showNeutralStyle ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
+                          {kpi.change}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-end">
+                      <div className={`w-8 h-8 rounded-lg ${displayBgColor} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className={`w-4 h-4 ${displayColor}`} />
+                      </div>
+                    </div>
                   </div>
-                  <div className={`w-10 h-10 rounded-lg ${displayBgColor} flex items-center justify-center flex-shrink-0`}>
-                    <Icon className={`w-5 h-5 ${displayColor}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </button>
           );
         })}
 
         {/* Expense & Profit KPI Cards - Business Owner & Manager Only */}
         {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
           <>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground leading-tight truncate">Today's Expenses</p>
-                    <p className="font-semibold text-red-600 text-lg leading-tight break-words">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
-                    <p className="text-[10px] text-muted-foreground leading-tight">Total expenses recorded</p>
+            <button
+              type="button"
+              className="text-left h-full"
+              onClick={() => {
+                setSelectedKpi("Today's Expenses");
+                setIsKpiDialogOpen(true);
+              }}
+            >
+              <Card className="h-full">
+                <CardContent className="p-3 h-full">
+                  <div className="flex flex-col justify-between h-full">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground leading-tight whitespace-normal">Today's Expenses</p>
+                      <p className="font-semibold text-red-600 text-base leading-tight whitespace-nowrap">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">Total expenses recorded</p>
+                    </div>
+                    <div className="flex items-center justify-end">
+                      <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                        <Receipt className="w-4 h-4 text-red-600" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                    <Receipt className="w-5 h-5 text-red-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </button>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground leading-tight truncate">Net Profit Today</p>
-                    <p className={`font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'} text-lg leading-tight break-words`}>
-                      {formatCurrency(roleBasedKPIs.todayNetProfit)}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground leading-tight">Revenue - COGS - Expenses</p>
+            <button
+              type="button"
+              className="text-left h-full"
+              onClick={() => {
+                setSelectedKpi("Net Profit Today");
+                setIsKpiDialogOpen(true);
+              }}
+            >
+              <Card className="h-full">
+                <CardContent className="p-3 h-full">
+                  <div className="flex flex-col justify-between h-full">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground leading-tight whitespace-normal">Net Profit Today</p>
+                      <p className={`font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'} text-base leading-tight whitespace-nowrap`}>
+                        {formatCurrency(roleBasedKPIs.todayNetProfit)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">Revenue - COGS - Expenses</p>
+                    </div>
+                    <div className={`flex items-center justify-end`}>
+                      <div className={`w-8 h-8 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center flex-shrink-0`}>
+                        {roleBasedKPIs.todayNetProfit >= 0 ? (
+                          <TrendingUp className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-red-600" />
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className={`w-10 h-10 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center flex-shrink-0`}>
-                    {roleBasedKPIs.todayNetProfit >= 0 ? (
-                      <TrendingUp className="w-5 h-5 text-green-600" />
-                    ) : (
-                      <TrendingDown className="w-5 h-5 text-red-600" />
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </button>
           </>
         )}
       </div>
+
+      <Dialog open={isKpiDialogOpen} onOpenChange={(open) => {
+        setIsKpiDialogOpen(open);
+        if (!open) setSelectedKpi(null);
+      }}>
+        <DialogContent className="sm:max-w-lg bg-white text-slate-900 border border-slate-200 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle>{selectedKpi || 'Metric Details'}</DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Deep-dive insights for the selected KPI card.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-slate-700">
+              {selectedKpi ? kpiDetails[selectedKpi]?.description : 'Click a card to see details.'}
+            </p>
+            <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Insight</h4>
+              <p className="text-sm text-slate-700 mt-1">{selectedKpi ? kpiDetails[selectedKpi]?.insights : '-'}</p>
+            </div>
+            <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested Next Steps</h4>
+              <p className="text-sm text-slate-700 mt-1">{selectedKpi ? kpiDetails[selectedKpi]?.nextSteps : '-'}</p>
+            </div>
+
+            {/* Additional detailed lists for certain KPIs */}
+            {selectedKpi && (selectedKpi === "Today's Customers" || selectedKpi === 'Your Customers Today') && (
+              <div className="bg-white rounded-md p-3 border border-slate-200">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customers (Today)</h4>
+                {customersSummary.length === 0 ? (
+                  <p className="text-sm text-slate-600 mt-2">No customers recorded today.</p>
+                ) : (
+                  <div className="mt-2 max-h-[168px] overflow-auto">
+                    {customersSummary.map((c: any, idx: number) => (
+                      <div key={c.name + idx} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div>
+                          <p className="font-medium text-sm">{c.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Visits: {c.count}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(c.total || 0)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedKpi && (selectedKpi === "Products Sold" || selectedKpi === 'Products You Sold') && (
+              <div className="bg-white rounded-md p-3 border border-slate-200">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Products Sold (Today)</h4>
+                {productsSummary.length === 0 ? (
+                  <p className="text-sm text-slate-600 mt-2">No products sold today.</p>
+                ) : (
+                  <div className="mt-2 max-h-[168px] overflow-auto">
+                    {productsSummary.map((p: any, idx: number) => (
+                      <div key={p.name + idx} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div>
+                          <p className="font-medium text-sm">{p.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Qty: {p.qty}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(p.amount || 0)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedKpi && (selectedKpi === "Today's Total Sales" || selectedKpi === 'Your Total Sales') && (
+              <div className="bg-white rounded-md p-3 border border-slate-200">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Transactions (Today)</h4>
+                {todaySalesList.length === 0 ? (
+                  <p className="text-sm text-slate-600 mt-2">No transactions recorded today.</p>
+                ) : (
+                  <div className="mt-2 max-h-[168px] overflow-auto">
+                    {todaySalesList.map((sale: any) => {
+                      const timeAgo = getTimeAgo(new Date(sale.timestamp));
+                      const displayId = sale.readableId ? `Order #${sale.readableId.toString().padStart(5, '0')}` : `Order #${sale.id.substring(0, 8).toUpperCase()}`;
+                      return (
+                        <div key={sale.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                          <div>
+                            <p className="font-medium text-sm">{sale.customerName || 'Walk-in'}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{displayId} • {timeAgo}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">{formatCurrency(sale.total || 0)}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <DialogClose asChild>
+              <Button className="w-full" onClick={() => setSelectedKpi(null)}>Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -620,6 +931,31 @@ export function Dashboard() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Categories Chart (placed to the right of Weekly Sales on lg screens) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales by Category</CardTitle>
+            <CardDescription>Top categories by revenue (last 7 days)</CardDescription>
+          </CardHeader>
+          <CardContent style={{ minHeight: '350px' }}>
+            <div className="h-[300px] min-h-[300px] w-full flex items-center justify-center" style={{ minHeight: '300px', height: '300px', minWidth: '100%', width: '100%' }}>
+              {categoriesData.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No category data available for the selected period.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300} minHeight={300} key="categories-chart-container">
+                  <BarChart data={categoriesData} margin={{ left: 10, right: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="category" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => [formatCurrency(value), 'Revenue']} />
+                    <Bar dataKey="revenue" fill="hsl(var(--primary))" isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>

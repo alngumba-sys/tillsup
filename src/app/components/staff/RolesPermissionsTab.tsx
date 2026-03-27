@@ -30,7 +30,8 @@ import {
   AccordionTrigger,
 } from "../ui/accordion";
 import { Plus, Edit, Ban, CheckCircle2, Shield, Users } from "lucide-react";
-import { useRole, Permission, PERMISSION_GROUPS } from "../../contexts/RoleContext";
+import { useRole } from "../../contexts/RoleContext";
+import { Permission, PERMISSION_GROUPS } from "../../types/permissions";
 import { toast } from "sonner";
 
 export function RolesPermissionsTab() {
