@@ -94,41 +94,57 @@ export function LandingSimple() {
         left: 0,
         right: 0,
         bottom: 0,
-        opacity: 0.25,
+        opacity: 0.28875,
         pointerEvents: 'none',
         zIndex: 0,
-        color: '#64748b'
+        color: '#232f4a'
       }}>
-        {Array.from({ length: 150 }).map((_, i) => {
-          const Icon = backgroundIcons[i % backgroundIcons.length];
-          // Use seeded random for uneven distribution
-          const random1 = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
-          const random2 = Math.sin(i * 93.9898 + 12.233) * 43758.5453;
-          const left = ((random1 - Math.floor(random1)) * 100);
-          const top = ((random2 - Math.floor(random2)) * 100);
-          
-          return (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                left: `${left}%`,
-                top: `${top}%`,
-                animation: `float ${12 + (i % 8)}s infinite ease-in-out ${i * 0.5}s`
-              }}
-            >
-              <Icon size={24} />
-            </div>
-          );
-        })}
+        {(() => {
+          const ICON_SIZE = 24;
+          const GRID_COLS = 12;
+          const GRID_ROWS = 12;
+          const cellW = 100 / GRID_COLS;
+          const cellH = 100 / GRID_ROWS;
+          const icons: { x: number; y: number; iconIdx: number; seed: number }[] = [];
+
+          for (let i = 0; i < 150; i++) {
+            const r1 = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+            const r2 = Math.sin(i * 93.9898 + 12.233) * 43758.5453;
+            const cell = Math.floor((r1 - Math.floor(r1)) * GRID_COLS * GRID_ROWS);
+            const col = cell % GRID_COLS;
+            const row = Math.floor(cell / GRID_COLS);
+            const subX = ((Math.sin(i * 17.13 + 3.77) * 43758.5453) % 1);
+            const subY = ((Math.sin(i * 29.47 + 9.11) * 43758.5453) % 1);
+            const x = col * cellW + (((subX < 0 ? subX + 1 : subX) * 0.6 + 0.2) * cellW);
+            const y = row * cellH + (((subY < 0 ? subY + 1 : subY) * 0.6 + 0.2) * cellH);
+            icons.push({ x, y, iconIdx: i % backgroundIcons.length, seed: i });
+          }
+
+          return icons.map(({ x, y, iconIdx, seed }) => {
+            const Icon = backgroundIcons[iconIdx];
+            return (
+              <div
+                key={seed}
+                style={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  animation: `float ${14 + (seed % 8)}s infinite ease-in-out ${seed * 0.4}s`
+                }}
+              >
+                <Icon size={ICON_SIZE} />
+              </div>
+            );
+          });
+        })()}
       </div>
 
       <style>{`
         @keyframes float {
           0%, 100% { transform: translate(0, 0) rotate(0deg); }
-          25% { transform: translate(12px, -12px) rotate(5deg); }
-          50% { transform: translate(-6px, -24px) rotate(-5deg); }
-          75% { transform: translate(-12px, -12px) rotate(3deg); }
+          25% { transform: translate(45px, -36px) rotate(10deg); }
+          50% { transform: translate(-30px, -72px) rotate(-9deg); }
+          75% { transform: translate(-45px, -36px) rotate(7deg); }
         }
         @keyframes scroll {
           0% { transform: translateX(0); }

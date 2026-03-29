@@ -1380,7 +1380,8 @@ export function StaffManagementTab({
                           id="new-staff-password-input"
                           value={generatedCredentials.password} 
                           readOnly 
-                          className="font-mono text-lg font-bold cursor-pointer select-all bg-white border-2 border-primary/20"
+                          className="font-mono text-lg font-bold cursor-pointer select-all bg-white border-2"
+                          style={{ borderColor: '#00719C40', color: '#00719C' }}
                           onClick={(e) => e.currentTarget.select()}
                         />
                         <Button 
@@ -2204,11 +2205,12 @@ export function StaffManagementTab({
                 <div>
                   <Label className="text-xs text-muted-foreground">Temporary Password</Label>
                   <div className="flex items-center gap-2 mt-1">
-                    <Input 
+                    <Input
                       id="temp-password-input"
-                      value={resetPasswordDialog.temporaryPassword} 
-                      readOnly 
-                      className="font-mono text-lg font-bold select-all cursor-pointer bg-white border-2 border-primary/20"
+                      value={resetPasswordDialog.temporaryPassword}
+                      readOnly
+                      className="font-mono text-lg font-bold select-all cursor-pointer bg-white border-2"
+                      style={{ borderColor: '#00719C40', color: '#00719C' }}
                       onClick={(e) => {
                         // Auto-select on click for easy manual copying
                         e.currentTarget.select();
@@ -2240,7 +2242,11 @@ export function StaffManagementTab({
             </div>
 
             <DialogFooter>
-              <Button onClick={() => setResetPasswordDialog(null)} className="w-full">
+              <Button
+                onClick={() => setResetPasswordDialog(null)}
+                className="w-full"
+                style={{ backgroundColor: '#00719C', borderColor: '#00719C' }}
+              >
                 Done
               </Button>
             </DialogFooter>

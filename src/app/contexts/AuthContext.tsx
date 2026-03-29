@@ -1963,8 +1963,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // TRY EDGE FUNCTION FIRST (if deployed), FALLBACK TO CLIENT-SIDE
       // ════════════════���═══════════════════════════════════════════��══════
       
-      // Generate password if not provided
-      const staffPassword = password || `Tillsup${Math.random().toString(36).slice(-8)}!`;
+      // Generate password if not provided: 4-digit numeric code
+      const staffPassword = password || String(Math.floor(1000 + Math.random() * 9000));
       
       // APPROACH 1: Try Edge Function (bypasses browser blocking)
       console.log("🚀 Attempting Edge Function for staff creation...");
@@ -2337,14 +2337,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetStaffPassword = async (userId: string): Promise<{ success: boolean; error?: string; temporaryPassword?: string }> => {
     console.log("🔑 Resetting staff password:", userId);
     if (!user || !business) return { success: false, error: "Not authenticated" };
-    
+
     try {
-      // Use the imported password reset utility
-      const result = await resetStaffPasswordWithFallback(userId, user, business, hasPermission);
-      return result;
-    } catch (err) {
+      // Generate a 4-digit numeric temporary password
+      const tempPassword = String(Math.floor(1000 + Math.random() * 9000));
+
+      // Find the target user's email from staffMembers
+      const targetStaff = staffMembers.find(s => s.id === userId);
+      const targetEmail = targetStaff?.email || "";
+
+      // Use the imported password reset utility with correct object parameter
+      const result = await resetStaffPasswordWithFallback({
+        userId,
+        temporaryPassword: tempPassword,
+        adminId: user.id,
+        businessId: business.id,
+        targetEmail,
+        supabase,
+      });
+
+      if (result.success) {
+        return { success: true, temporaryPassword: tempPassword };
+      }
+
+      return { success: false, error: result.error };
+    } catch (err: any) {
       console.error("❌ Unexpected error resetting staff password:", err);
-      return { success: false, error: "An unexpected error occurred" };
+      return { success: false, error: err.message || "An unexpected error occurred" };
     }
   };
 

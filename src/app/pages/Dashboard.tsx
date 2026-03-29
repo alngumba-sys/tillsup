@@ -971,69 +971,121 @@ export function Dashboard() {
           );
         })}
 
-        {/* Expense & Profit KPI Cards - Business Owner & Manager Only */}
-        {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
-          <>
-            <button
-              type="button"
-              className="text-left h-full"
-              onClick={() => {
-                setSelectedKpi("Today's Expenses");
-                setIsKpiDialogOpen(true);
-              }}
-            >
-              <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
-                <CardContent className="p-3 h-full flex flex-col justify-center">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-medium text-slate-500 truncate">Today's Expenses</span>
-                    <div className="w-5 h-5 rounded-md bg-rose-50 flex items-center justify-center flex-shrink-0">
-                      <Receipt className="w-2.5 h-2.5 text-rose-600" />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className="text-lg font-bold text-slate-900 leading-none truncate">{formatCurrency(roleBasedKPIs.todayExpenses)}</span>
-                  </div>
-                  <p className="text-[9px] text-slate-400">vs yesterday</p>
-                </CardContent>
-              </Card>
-            </button>
+      {/* Summary Cards — single horizontal row */}
+      {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
+        <div
+          className="flex flex-row flex-nowrap items-stretch gap-4 overflow-x-auto pb-1"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          {/* Revenue Card */}
+          <Card className="flex-1 min-w-[280px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+            <CardContent className="p-4 flex flex-1 flex-col justify-center">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Today's Revenue</span>
+                <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="w-3 h-3 text-blue-600" />
+                </div>
+              </div>
+              <span className="text-lg font-bold text-slate-900 leading-none truncate">
+                {formatCurrency(roleBasedKPIs.todayRevenue)}
+              </span>
+            </CardContent>
+          </Card>
 
-            <button
-              type="button"
-              className="text-left h-full"
-              onClick={() => {
-                setSelectedKpi("Net Profit Today");
-                setIsKpiDialogOpen(true);
-              }}
-            >
-              <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
-                <CardContent className="p-3 h-full flex flex-col justify-center">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-medium text-slate-500 truncate">Net Profit Today</span>
-                    <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}`}>
-                      {roleBasedKPIs.todayNetProfit >= 0 ? (
-                        <TrendingUp className="w-2.5 h-2.5 text-emerald-600" />
-                      ) : (
-                        <TrendingDown className="w-2.5 h-2.5 text-rose-600" />
-                      )}
-                    </div>
+          {/* Branches Card */}
+          <Card className="flex-1 min-w-[280px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+            <CardContent className="p-4 flex flex-1 flex-col justify-center">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Branches</span>
+                <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-3 h-3 text-blue-600" />
+                </div>
+              </div>
+              <span className="text-lg font-bold text-slate-900 leading-none truncate">
+                {branches?.filter(b => b.status === "active").length || 0}
+                <span className="text-sm font-medium text-slate-400 ml-1">/ {branches?.length || 0}</span>
+              </span>
+            </CardContent>
+          </Card>
+
+          {/* Staff Card */}
+          <Card className="flex-1 min-w-[280px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+            <CardContent className="p-4 flex flex-1 flex-col justify-center">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Staff</span>
+                <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Users className="w-3 h-3 text-blue-600" />
+                </div>
+              </div>
+              <span className="text-lg font-bold text-slate-900 leading-none truncate">
+                {staffMembers?.length || 0}
+                <span className="text-sm font-medium text-slate-400 ml-1">/ {usage.staff}</span>
+              </span>
+            </CardContent>
+          </Card>
+
+          {/* Today's Expenses Card */}
+          <Card className="flex-1 min-w-[280px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+            <CardContent className="p-4 flex flex-1 flex-col justify-center">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Expenses</span>
+                <div className="w-6 h-6 rounded-md bg-rose-50 flex items-center justify-center flex-shrink-0">
+                  <Receipt className="w-3 h-3 text-rose-600" />
+                </div>
+              </div>
+              <span className="text-lg font-bold text-slate-900 leading-none truncate">
+                {formatCurrency(roleBasedKPIs.todayExpenses)}
+              </span>
+            </CardContent>
+          </Card>
+
+          {/* Profitability / Loss Card */}
+          <Card className="flex-1 min-w-[280px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+            <CardContent className="p-4 flex flex-1 flex-col justify-center">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Profitability / Loss</span>
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-blue-50' : 'bg-rose-50'}`}>
+                  {roleBasedKPIs.todayNetProfit >= 0 ? (
+                    <TrendingUp className="w-3 h-3 text-blue-600" />
+                  ) : (
+                    <TrendingDown className="w-3 h-3 text-rose-600" />
+                  )}
+                </div>
+              </div>
+              <span className={`text-lg font-bold leading-none truncate ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-[#00719C]' : 'text-rose-600'}`}>
+                {formatCurrency(roleBasedKPIs.todayRevenue - roleBasedKPIs.todayCOGS - roleBasedKPIs.todayExpenses)}
+              </span>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Expense & Profit KPI Cards - Business Owner & Manager Only */}
+      {user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant") && (
+          <button
+            type="button"
+            className="text-left h-full"
+            onClick={() => {
+              setSelectedKpi("Today's Expenses");
+              setIsKpiDialogOpen(true);
+            }}
+          >
+            <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+              <CardContent className="p-3 h-full flex flex-col justify-center">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-medium text-slate-500 truncate">Today's Expenses</span>
+                  <div className="w-5 h-5 rounded-md bg-rose-50 flex items-center justify-center flex-shrink-0">
+                    <Receipt className="w-2.5 h-2.5 text-rose-600" />
                   </div>
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className={`text-lg font-bold leading-none truncate ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {formatCurrency(roleBasedKPIs.todayNetProfit)}
-                    </span>
-                    {roleBasedKPIs.todayNetProfit >= 0 && (
-                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[8px] font-semibold bg-emerald-50 text-emerald-700 flex-shrink-0">
-                        ↑ Profitable
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[9px] text-slate-400">Revenue - COGS - Expenses</p>
-                </CardContent>
-              </Card>
-            </button>
-          </>
-        )}
+                </div>
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span className="text-lg font-bold text-slate-900 leading-none truncate">{formatCurrency(roleBasedKPIs.todayExpenses)}</span>
+                </div>
+                <p className="text-[9px] text-slate-400">vs yesterday</p>
+              </CardContent>
+            </Card>
+          </button>
+      )}
       </div>
 
       <Dialog open={isKpiDialogOpen} onOpenChange={(open) => {
