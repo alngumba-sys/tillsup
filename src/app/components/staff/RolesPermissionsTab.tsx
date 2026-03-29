@@ -29,7 +29,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "../ui/accordion";
-import { Plus, Edit, Ban, CheckCircle2, Shield, Users } from "lucide-react";
+import { Plus, Edit, Ban, CircleCheck, Shield, Users } from "lucide-react";
 import { useRole } from "../../contexts/RoleContext";
 import { Permission, PERMISSION_GROUPS } from "../../types/permissions";
 import { toast } from "sonner";
@@ -412,7 +412,7 @@ export function RolesPermissionsTab() {
                     <TableCell>
                       {role.status === "active" ? (
                         <Badge variant="default" className="gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
+                          <CircleCheck className="w-3 h-3" />
                           Active
                         </Badge>
                       ) : (
@@ -447,7 +447,7 @@ export function RolesPermissionsTab() {
                             size="sm"
                             onClick={() => handleEnableRole(role.id, role.name)}
                           >
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            <CircleCheck className="w-3 h-3 mr-1" />
                             Enable
                           </Button>
                         )}

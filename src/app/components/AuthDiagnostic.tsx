@@ -26,7 +26,7 @@ export function AuthDiagnostic() {
       boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
       border: '1px solid #334155'
     }}>
-      <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#0891b2' }}>
+      <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#00719C' }}>
         🔍 Auth Context Status
       </div>
       <div style={{ display: 'grid', gap: '4px' }}>

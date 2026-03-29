@@ -29,7 +29,7 @@ export function TopNavbar() {
         )}
         {/* Preview Mode Badge */}
         {isPreviewMode() && (
-          <Badge variant="outline" className="bg-[#0891b2]/10 text-[#0891b2] border-[#0891b2] text-xs px-2 py-0.5">
+          <Badge variant="outline" className="bg-[#00719C]/10 text-[#00719C] border-[#00719C] text-xs px-2 py-0.5">
             Preview Mode
           </Badge>
         )}
@@ -118,7 +118,7 @@ export function TopNavbar() {
           className="group relative flex items-center justify-center w-10 h-8 bg-white hover:bg-gray-100 rounded-lg transition-all hover:scale-105 active:scale-95"
           aria-label="Start tutorial walkthrough"
         >
-          <HelpCircle className="w-5 h-5 text-[#0891b2]" strokeWidth={2.5} />
+          <HelpCircle className="w-5 h-5 text-[#00719C]" strokeWidth={2.5} />
         </button>
 
         {/* Profile Dropdown */}

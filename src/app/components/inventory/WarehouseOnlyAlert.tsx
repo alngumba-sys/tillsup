@@ -17,13 +17,13 @@ export function WarehouseOnlyAlert({
   return (
     <Alert className={
       variant === "info" 
-        ? "border-[#0891b2] bg-[#0891b2]/10" 
+        ? "border-[#00719C] bg-[#00719C]/10" 
         : variant === "warning"
         ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30"
         : ""
     }>
       <div className="flex items-start gap-2">
-        <Warehouse className="w-4 h-4 text-[#0891b2] mt-0.5 flex-shrink-0" />
+        <Warehouse className="w-4 h-4 text-[#00719C] mt-0.5 flex-shrink-0" />
         <div className="flex-1">
           <AlertTitle className="text-sm font-semibold mb-1">
             Warehouse-First Inventory Model
@@ -35,7 +35,7 @@ export function WarehouseOnlyAlert({
               </div>
               <div className="space-y-1">
                 <div className="flex items-start gap-2">
-                  <Warehouse className="w-3 h-3 text-[#0891b2] mt-0.5" />
+                  <Warehouse className="w-3 h-3 text-[#00719C] mt-0.5" />
                   <span><strong>Step 1:</strong> Add new products to a warehouse</span>
                 </div>
                 <div className="flex items-start gap-2">
@@ -43,7 +43,7 @@ export function WarehouseOnlyAlert({
                   <span><strong>Step 2:</strong> Transfer stock from warehouse to shops as needed</span>
                 </div>
               </div>
-              <div className="text-[#0891b2] font-medium">
+              <div className="text-[#00719C] font-medium">
                 → To add inventory to a shop, use "Add from Warehouse" button
               </div>
             </AlertDescription>

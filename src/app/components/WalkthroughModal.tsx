@@ -159,7 +159,7 @@ export function WalkthroughModal({ isOpen, onClose }: WalkthroughModalProps) {
           onClick={(e) => e.stopPropagation()}
         >
           {/* Tillsup Blue Header Accent */}
-          <div className="h-1 bg-[#0891b2]" />
+          <div className="h-1 bg-[#00719C]" />
 
           {/* Close Button */}
           <button
@@ -174,7 +174,7 @@ export function WalkthroughModal({ isOpen, onClose }: WalkthroughModalProps) {
           <div className="p-8 pb-6">
             {/* Step Counter */}
             <div className="text-center mb-5">
-              <span className="inline-block px-4 py-1.5 bg-[#0891b2] text-white rounded-full text-xs font-bold tracking-wide">
+              <span className="inline-block px-4 py-1.5 bg-[#00719C] text-white rounded-full text-xs font-bold tracking-wide">
                 Step {currentStep + 1} of {totalSteps}
               </span>
             </div>
@@ -195,13 +195,13 @@ export function WalkthroughModal({ isOpen, onClose }: WalkthroughModalProps) {
             </p>
 
             {/* Action Box */}
-            <div className="bg-[#f0f9ff] border border-[#0891b2]/30 rounded-xl p-3.5 mb-3">
+            <div className="bg-[#f0f9ff] border border-[#00719C]/30 rounded-xl p-3.5 mb-3">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#0891b2] flex items-center justify-center">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#00719C] flex items-center justify-center">
                   <Info className="w-4 h-4 text-white" strokeWidth={2.5} />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xs font-bold text-[#0891b2] mb-1 uppercase tracking-wide">Next Action</h3>
+                  <h3 className="text-xs font-bold text-[#00719C] mb-1 uppercase tracking-wide">Next Action</h3>
                   <p className="text-gray-800 text-sm leading-relaxed">{currentStepData.action}</p>
                 </div>
               </div>
@@ -246,7 +246,7 @@ export function WalkthroughModal({ isOpen, onClose }: WalkthroughModalProps) {
                     className={`
                       w-12 h-12 rounded-full font-bold text-sm transition-all duration-300 flex items-center justify-center
                       ${isCurrent
-                        ? 'bg-[#0891b2] text-white scale-110 shadow-lg ring-4 ring-[#0891b2]/20' 
+                        ? 'bg-[#00719C] text-white scale-110 shadow-lg ring-4 ring-[#00719C]/20' 
                         : isCompleted
                         ? 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
                         : 'bg-white text-gray-400 hover:bg-gray-100 border-2 border-gray-300'
@@ -286,7 +286,7 @@ export function WalkthroughModal({ isOpen, onClose }: WalkthroughModalProps) {
               {currentStep === totalSteps - 1 ? (
                 <button
                   onClick={handleComplete}
-                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-bold text-sm bg-[#0891b2] text-white hover:bg-[#0e7490] transition-all shadow-md hover:shadow-lg hover:scale-105"
+                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-bold text-sm bg-[#00719C] text-white hover:bg-[#0e7490] transition-all shadow-md hover:shadow-lg hover:scale-105"
                   aria-label="Complete tutorial"
                 >
                   <Check className="w-4 h-4" strokeWidth={3} />
@@ -295,7 +295,7 @@ export function WalkthroughModal({ isOpen, onClose }: WalkthroughModalProps) {
               ) : (
                 <button
                   onClick={handleNext}
-                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-bold text-sm bg-[#0891b2] text-white hover:bg-[#0e7490] transition-all shadow-md hover:shadow-lg hover:scale-105"
+                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-bold text-sm bg-[#00719C] text-white hover:bg-[#0e7490] transition-all shadow-md hover:shadow-lg hover:scale-105"
                   aria-label="Next step"
                 >
                   <span>Next Step</span>

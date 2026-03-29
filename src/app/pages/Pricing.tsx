@@ -206,19 +206,30 @@ export function Pricing() {
                 <ArrowLeft className="w-5 h-5" />
                 <span className="hidden sm:inline">Back</span>
               </button>
-              <div 
-                className="flex items-center gap-3 cursor-pointer" 
+              <div
+                className="flex items-center cursor-pointer"
                 onClick={() => navigate("/")}
+                style={{
+                  width: 'clamp(120px, 18vw, 160px)',
+                  height: '40px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
               >
                 {assets.logoMain ? (
-                  <img src={assets.logoMain} alt="Logo" className="h-10 w-auto object-contain" />
+                  <img
+                    src={assets.logoMain}
+                    alt="Tillsup"
+                    className="h-10 w-auto object-contain"
+                    style={{ background: 'transparent' }}
+                  />
                 ) : (
-                  <>
-                    <div className="bg-[#0891b2] p-2 rounded-lg">
+                  <div className="flex items-center gap-3" style={{ opacity: 0, pointerEvents: 'none' }}>
+                    <div className="bg-[#00719C] p-2 rounded-lg">
                       <Store className="w-6 h-6" />
                     </div>
                     <span className="text-xl font-bold">Tillsup</span>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
@@ -231,7 +242,7 @@ export function Pricing() {
               </button>
               <button 
                 onClick={() => navigate("/register")}
-                className="px-6 py-2 bg-[#0891b2] hover:bg-[#0e7490] rounded-lg font-semibold transition-all shadow-md hover:shadow-lg font-[Mulish]"
+                className="px-6 py-2 bg-[#00719C] hover:bg-[#0e7490] rounded-lg font-semibold transition-all shadow-md hover:shadow-lg font-[Mulish]"
               >
                 Start Free Trial
               </button>
@@ -280,7 +291,7 @@ export function Pricing() {
               onClick={() => setBillingPeriod('monthly')}
               className={`px-6 py-2.5 rounded-lg font-medium transition-all font-[Mulish] ${
                 billingPeriod === 'monthly'
-                  ? 'bg-[#0891b2] text-white shadow-lg'
+                  ? 'bg-[#00719C] text-white shadow-lg'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -290,7 +301,7 @@ export function Pricing() {
               onClick={() => setBillingPeriod('quarterly')}
               className={`px-6 py-2.5 rounded-lg font-medium transition-all font-[Mulish] ${
                 billingPeriod === 'quarterly'
-                  ? 'bg-[#0891b2] text-white shadow-lg'
+                  ? 'bg-[#00719C] text-white shadow-lg'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -301,7 +312,7 @@ export function Pricing() {
               onClick={() => setBillingPeriod('annual')}
               className={`px-6 py-2.5 rounded-lg font-medium transition-all font-[Mulish] ${
                 billingPeriod === 'annual'
-                  ? 'bg-[#0891b2] text-white shadow-lg'
+                  ? 'bg-[#00719C] text-white shadow-lg'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -327,7 +338,7 @@ export function Pricing() {
                 }`}
               >
                 {tier.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0891b2] px-4 py-1 rounded-full text-sm font-semibold">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#00719C] px-4 py-1 rounded-full text-sm font-semibold">
                     Most Popular
                   </div>
                 )}
@@ -357,7 +368,7 @@ export function Pricing() {
                   }
                   className={`w-full py-3 rounded-xl font-semibold transition-all mb-8 font-[Mulish] ${
                     tier.popular
-                      ? 'bg-[#0891b2] hover:bg-[#0e7490] text-white shadow-lg'
+                      ? 'bg-[#00719C] hover:bg-[#0e7490] text-white shadow-lg'
                       : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
                   }`}
                 >
@@ -481,7 +492,7 @@ export function Pricing() {
               <img src={assets.logoMain} alt="Tillsup Logo" className="h-8 w-auto object-contain" />
             ) : (
               <>
-                <div className="bg-[#0891b2] p-1.5 rounded">
+                <div className="bg-[#00719C] p-1.5 rounded">
                   <Store className="w-4 h-4" />
                 </div>
                 <span className="text-slate-400 text-sm font-semibold">Tillsup</span>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CircleCheck, AlertCircle } from 'lucide-react';
 
 /**
  * Subtle health indicator showing app status
@@ -54,7 +54,7 @@ export function AppHealthIndicator() {
       `}>
         {isHealthy ? (
           <>
-            <CheckCircle2 className="h-4 w-4" />
+            <CircleCheck className="h-4 w-4" />
             <span>Tillsup Running</span>
           </>
         ) : (

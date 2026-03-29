@@ -53,7 +53,7 @@ function LocationSelectorInner() {
 
   const getLocationIcon = (type: "shop" | "warehouse") => {
     return type === "shop" ? (
-      <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+      <StoreIcon className="w-4 h-4 text-[#00719C]" />
     ) : (
       <Warehouse className="w-4 h-4 text-purple-600" />
     );
@@ -66,7 +66,7 @@ function LocationSelectorInner() {
         variant="outline" 
         className={cn(
           "ml-2",
-          location.type === "shop" ? "border-[#0891b2] text-[#0891b2]" : "border-purple-600 text-purple-600"
+          location.type === "shop" ? "border-[#00719C] text-[#00719C]" : "border-purple-600 text-purple-600"
         )}
       >
         {location.type === "shop" ? "Shop" : "Warehouse"}
@@ -84,7 +84,7 @@ function LocationSelectorInner() {
             <div className="flex items-center gap-2">
               {selectedLocationId === "all" ? (
                 <>
-                  <Building2 className="w-4 h-4 text-[#0891b2]" />
+                  <Building2 className="w-4 h-4 text-[#00719C]" />
                   <span className="font-medium">All Locations</span>
                   <Badge variant="secondary" className="ml-1">
                     {visibleLocations.length}
@@ -109,7 +109,7 @@ function LocationSelectorInner() {
             <>
               <SelectItem value="all" className="font-medium">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-[#0891b2]" />
+                  <Building2 className="w-4 h-4 text-[#00719C]" />
                   <span>All Locations</span>
                   <Badge variant="secondary" className="ml-auto">
                     {locations.filter(loc => loc.isActive).length}
@@ -129,7 +129,7 @@ function LocationSelectorInner() {
               {shops.map((shop) => (
                 <SelectItem key={shop.id} value={shop.id}>
                   <div className="flex items-center gap-2">
-                    <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+                    <StoreIcon className="w-4 h-4 text-[#00719C]" />
                     <div className="flex-1">
                       <div className="font-medium">{shop.name}</div>
                       {shop.city && (

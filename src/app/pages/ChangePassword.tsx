@@ -5,7 +5,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Lock, AlertCircle, CheckCircle2, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Lock, AlertCircle, CircleCheck, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { TillsupLogo } from "../components/TillsupLogo";
 
@@ -183,11 +183,11 @@ export function ChangePassword() {
               <p className="text-sm font-medium">Password Requirements:</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <CircleCheck className="w-4 h-4 text-green-600" />
                   <span>At least 6 characters long</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <CircleCheck className="w-4 h-4 text-green-600" />
                   <span>Must be different from your current password</span>
                 </div>
               </div>

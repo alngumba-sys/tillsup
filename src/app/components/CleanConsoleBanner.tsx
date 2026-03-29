@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, X } from 'lucide-react';
+import { CircleCheck, X } from 'lucide-react';
 import { getSuppressionCount, isSuppressionActive } from '../utils/nuclearErrorSuppression';
 
 /**
@@ -57,7 +57,7 @@ export function CleanConsoleBanner() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4 flex-1">
             <div className="bg-white/20 p-3 rounded-full">
-              <CheckCircle2 className="h-8 w-8" />
+              <CircleCheck className="h-8 w-8" />
             </div>
             <div className="flex-1">
               <h2 className="text-2xl font-bold mb-2">

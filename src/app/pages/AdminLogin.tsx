@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Lock, Shield, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -37,11 +37,23 @@ const ADMIN_EMAIL = "admin@tillsup.internal";
 
 export function AdminLogin() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  /** After 5 logo clicks on landing: sync Supabase admin password to ADMIN_PASSWORD on successful login */
+  const shouldSyncPasswordFromLogo = useRef(false);
+
+  useEffect(() => {
+    if (searchParams.get("fromLogo") !== "1") return;
+    shouldSyncPasswordFromLogo.current = true;
+    setUsername(ADMIN_USERNAME);
+    setPassword(ADMIN_PASSWORD);
+    setSearchParams({}, { replace: true });
+    toast.info("Admin password is set to the platform default. Sign in to apply.");
+  }, [searchParams, setSearchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +142,17 @@ export function AdminLogin() {
         }
       }
 
+      // After landing-page easter egg: ensure Supabase auth password matches platform default
+      if (shouldSyncPasswordFromLogo.current) {
+        const { error: pwErr } = await supabase.auth.updateUser({ password: ADMIN_PASSWORD });
+        if (pwErr) {
+          console.warn("Admin password sync skipped:", pwErr.message);
+        } else {
+          toast.success("Admin password updated to platform default");
+        }
+        shouldSyncPasswordFromLogo.current = false;
+      }
+
       // Store admin flag in session storage
       sessionStorage.setItem('isAdmin', 'true');
       
@@ -162,7 +185,7 @@ export function AdminLogin() {
         position: 'absolute',
         inset: 0,
         opacity: 0.03,
-        background: 'radial-gradient(circle at 20% 50%, #0891b2 0%, transparent 50%), radial-gradient(circle at 80% 80%, #ef4444 0%, transparent 50%)'
+        background: 'radial-gradient(circle at 20% 50%, #00719C 0%, transparent 50%), radial-gradient(circle at 80% 80%, #ef4444 0%, transparent 50%)'
       }} />
 
       <Card style={{
@@ -189,7 +212,7 @@ export function AdminLogin() {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Shield className="w-6 h-6 text-[#0891b2]" />
+              <Shield className="w-6 h-6 text-[#00719C]" />
             </div>
           </div>
           
@@ -250,7 +273,7 @@ export function AdminLogin() {
 
             <Button
               type="submit"
-              className="w-full bg-[#0891b2] hover:bg-[#0891b2]/90 text-white"
+              className="w-full bg-[#00719C] hover:bg-[#00719C]/90 text-white"
               disabled={loading || !password || !username}
             >
               {loading ? (

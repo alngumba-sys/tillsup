@@ -19,7 +19,7 @@ export function SimpleLandingDirect() {
       textAlign: 'center'
     }}>
       <div style={{
-        background: '#0891b2',
+        background: '#00719C',
         padding: '20px 40px',
         borderRadius: '12px',
         marginBottom: '32px'
@@ -58,8 +58,8 @@ export function SimpleLandingDirect() {
           style={{
             padding: '16px 32px',
             background: 'transparent',
-            border: '2px solid #0891b2',
-            color: '#0891b2',
+            border: '2px solid #00719C',
+            color: '#00719C',
             borderRadius: '8px',
             cursor: 'pointer',
             fontSize: '16px',

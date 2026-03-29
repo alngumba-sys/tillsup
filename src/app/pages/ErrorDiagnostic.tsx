@@ -69,7 +69,7 @@ export function ErrorDiagnostic() {
 
           {status.length === 0 && (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0891b2]"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00719C]"></div>
               <span className="ml-3 text-slate-600">Running diagnostics...</span>
             </div>
           )}
@@ -92,7 +92,7 @@ export function ErrorDiagnostic() {
           <div className="mt-6 flex gap-4">
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-[#0891b2] text-white rounded-lg hover:bg-[#0891b2]/90 transition-colors"
+              className="px-4 py-2 bg-[#00719C] text-white rounded-lg hover:bg-[#00719C]/90 transition-colors"
             >
               Reload App
             </button>

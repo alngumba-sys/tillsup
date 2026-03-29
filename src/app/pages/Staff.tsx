@@ -1,15 +1,18 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Button } from "../components/ui/button";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Users, Calendar, Settings, Shield, Activity } from "lucide-react";
+import { Users, Calendar, Settings, Shield, Upload, UserPlus } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { StaffManagementTab } from "../components/staff/StaffManagementTab";
 import { WorkScheduleTab } from "../components/staff/WorkScheduleTab";
 import { AttendanceTab } from "../components/staff/AttendanceTab";
 import { RolesPermissionsTab } from "../components/staff/RolesPermissionsTab";
-import { SupabaseConnectionTest } from "../components/SupabaseConnectionTest";
 
 export function Staff() {
   const { user } = useAuth();
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Check if user exists
   if (!user) {
@@ -30,16 +33,39 @@ export function Staff() {
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl mb-1">
-          {isManagerOrOwner ? "Staff Management" : "My Attendance"}
-        </h1>
-        <p className="text-muted-foreground">
-          {isManagerOrOwner 
-            ? "Manage team members, attendance, and work schedules"
-            : "View your attendance records and clock-in history"}
-        </p>
+      {/* Page Header - Title and Buttons on same row */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 border-b pb-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {isManagerOrOwner ? "Staff Management" : "My Attendance"}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {isManagerOrOwner 
+              ? "Manage team members, attendance, and work schedules"
+              : "View your attendance records and clock-in history"}
+          </p>
+        </div>
+        
+        {/* Action buttons on the right */}
+        {isManagerOrOwner && (
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => setShowImportDialog(true)}
+            >
+              <Upload className="w-4 h-4" />
+              Import Staff
+            </Button>
+            <Button 
+              className="gap-2"
+              onClick={() => setShowAddDialog(true)}
+            >
+              <UserPlus className="w-4 h-4" />
+              Add Staff Member
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Tabbed Interface */}
@@ -67,17 +93,16 @@ export function Staff() {
               Roles & Permissions
             </TabsTrigger>
           )}
-          {isOwner && (
-            <TabsTrigger value="diagnostic" className="gap-2">
-              <Activity className="w-4 h-4" />
-              Connection Test
-            </TabsTrigger>
-          )}
         </TabsList>
 
         {isManagerOrOwner && (
           <TabsContent value="staff">
-            <StaffManagementTab />
+            <StaffManagementTab 
+              showImportDialog={showImportDialog}
+              setShowImportDialog={setShowImportDialog}
+              showAddDialog={showAddDialog}
+              setShowAddDialog={setShowAddDialog}
+            />
           </TabsContent>
         )}
 
@@ -97,11 +122,6 @@ export function Staff() {
           </TabsContent>
         )}
 
-        {isOwner && (
-          <TabsContent value="diagnostic">
-            <SupabaseConnectionTest />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

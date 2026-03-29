@@ -84,7 +84,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
   },
   "Basic": {
     name: "Starter",
-    price: 29,
+    price: 2000,
     period: "month",
     limits: {
       maxBranches: 2,
@@ -130,7 +130,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
   },
   "Pro": {
     name: "Professional",
-    price: 79,
+    price: 4000,
     period: "month",
     limits: {
       maxBranches: 10,
@@ -176,7 +176,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
   },
   "Enterprise": {
     name: "Enterprise",
-    price: 199,
+    price: 6000,
     period: "month",
     limits: {
       maxBranches: 999, // Effectively unlimited

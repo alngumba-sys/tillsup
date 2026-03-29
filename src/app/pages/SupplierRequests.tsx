@@ -18,7 +18,7 @@ import {
   Building2,
   User,
   Calendar,
-  CheckCircle2,
+  CircleCheck,
   XCircle,
   AlertTriangle,
   Info,
@@ -654,7 +654,7 @@ export function SupplierRequests() {
                         )}
                       </div>
                       {communicationMethods.includes("Email") && (
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                        <CircleCheck className="w-5 h-5 text-primary" />
                       )}
                     </div>
                   </CardContent>
@@ -679,7 +679,7 @@ export function SupplierRequests() {
                         )}
                       </div>
                       {communicationMethods.includes("SMS") && (
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                        <CircleCheck className="w-5 h-5 text-primary" />
                       )}
                     </div>
                   </CardContent>
@@ -704,7 +704,7 @@ export function SupplierRequests() {
                         )}
                       </div>
                       {communicationMethods.includes("WhatsApp") && (
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                        <CircleCheck className="w-5 h-5 text-primary" />
                       )}
                     </div>
                   </CardContent>
@@ -830,7 +830,7 @@ export function SupplierRequests() {
                       <div className="mt-2">
                         {request.status === "Sent" && (
                           <Badge className="bg-green-100 text-green-700 border-green-300">
-                            <CheckCircle2 className="w-4 h-4 mr-1" />
+                            <CircleCheck className="w-4 h-4 mr-1" />
                             Sent
                           </Badge>
                         )}
@@ -956,7 +956,7 @@ export function SupplierRequests() {
                               <p className="text-xs text-muted-foreground truncate">{request.supplierName}</p>
                             </div>
                             {request.status === "Sent" ? (
-                              <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                              <CircleCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
                             ) : (
                               <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
                             )}

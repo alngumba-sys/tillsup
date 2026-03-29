@@ -72,7 +72,7 @@ export function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
-              <div className="bg-[#0891b2] p-2 rounded-lg">
+              <div className="bg-[#00719C] p-2 rounded-lg">
                 <Store className="w-6 h-6" />
               </div>
               <span className="text-xl font-bold">Tillsup</span>
@@ -81,7 +81,7 @@ export function Landing() {
               {isAuthenticated ? (
                 <button
                   onClick={() => navigate("/app/dashboard")}
-                  className="px-6 py-2 bg-[#0891b2] hover:bg-[#0e7490] rounded-lg font-semibold transition-all shadow-md hover:shadow-lg font-[Mulish]"
+                  className="px-6 py-2 bg-[#00719C] hover:bg-[#0e7490] rounded-lg font-semibold transition-all shadow-md hover:shadow-lg font-[Mulish]"
                 >
                   Go to Dashboard
                 </button>
@@ -200,7 +200,7 @@ export function Landing() {
       <footer className="border-t border-white/10 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-[#0891b2] p-1.5 rounded">
+            <div className="bg-[#00719C] p-1.5 rounded">
               <Store className="w-4 h-4" />
             </div>
             <span className="text-slate-400 text-sm font-semibold">Tillsup</span>

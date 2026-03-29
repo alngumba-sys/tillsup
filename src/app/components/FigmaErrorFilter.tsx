@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, CheckCircle2 } from 'lucide-react';
+import { X, CircleCheck } from 'lucide-react';
 
 /**
  * Component that monitors for Figma platform errors and shows a dismissible banner
@@ -60,7 +60,7 @@ export function FigmaErrorFilter() {
     <div className="fixed top-4 right-4 z-[100] max-w-md animate-in slide-in-from-top-5">
       <div className="bg-blue-50 border border-blue-200 rounded-lg shadow-lg p-4">
         <div className="flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <CircleCheck className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <h4 className="font-semibold text-blue-900 mb-1">
               App is Working Correctly

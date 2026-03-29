@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { supabase, supabaseUrl } from "../../lib/supabase";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { CheckCircle2, XCircle, Loader2, Info } from "lucide-react";
+import { CircleCheck, XCircle, Loader2, Info } from "lucide-react";
 import { Button } from "./ui/button";
 
 export function SupabaseDiagnostic() {
@@ -123,7 +123,7 @@ export function SupabaseDiagnostic() {
               <div className="space-y-1 pt-2">
                 <div className="flex items-center gap-2">
                   {results.urlValid ? (
-                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    <CircleCheck className="h-3 w-3 text-green-600" />
                   ) : (
                     <XCircle className="h-3 w-3 text-red-600" />
                   )}
@@ -132,7 +132,7 @@ export function SupabaseDiagnostic() {
                 
                 <div className="flex items-center gap-2">
                   {results.sessionCheck ? (
-                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    <CircleCheck className="h-3 w-3 text-green-600" />
                   ) : (
                     <XCircle className="h-3 w-3 text-red-600" />
                   )}
@@ -141,7 +141,7 @@ export function SupabaseDiagnostic() {
                 
                 <div className="flex items-center gap-2">
                   {results.healthCheck ? (
-                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    <CircleCheck className="h-3 w-3 text-green-600" />
                   ) : (
                     <XCircle className="h-3 w-3 text-red-600" />
                   )}

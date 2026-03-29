@@ -125,8 +125,8 @@ export function UltraSimpleLanding() {
             style={{
               padding: '16px 32px',
               background: 'transparent',
-              border: '2px solid #0891b2',
-              color: '#0891b2',
+              border: '2px solid #00719C',
+              color: '#00719C',
               borderRadius: '8px',
               cursor: 'pointer',
               fontSize: '17px',
@@ -259,7 +259,7 @@ export function UltraSimpleLanding() {
         fontSize: '14px',
         marginTop: '80px'
       }}>
-        <div style={{ marginBottom: '16px', fontSize: '24px', fontWeight: 'bold', color: '#0891b2' }}>
+        <div style={{ marginBottom: '16px', fontSize: '24px', fontWeight: 'bold', color: '#00719C' }}>
           Tillsup
         </div>
         <div>

@@ -124,7 +124,7 @@ export function DiagnosticLanding() {
           disabled={auth.loading}
           style={{
             padding: '1rem 2rem',
-            background: '#0891b2',
+            background: '#00719C',
             color: 'white',
             border: 'none',
             borderRadius: '8px',

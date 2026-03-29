@@ -91,7 +91,7 @@ export function ProfileDropdown() {
               {currentBranch && (
                 <p className="text-xs text-muted-foreground">
                   <Building2 className="w-4 h-4 mr-1 inline-block" />
-                  {currentBranch.name}
+                  {currentBranch?.name ?? '—'}
                 </p>
               )}
             </div>

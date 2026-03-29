@@ -4,12 +4,16 @@ import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 // Payment method uses custom mini-cards — no Select required
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
+import { Input } from "../ui/input";
 import { CustomerNameInput } from "../CustomerNameInput";
 import { useCurrency } from "../../hooks/useCurrency";
-import { ShoppingCart, Building2, AlertTriangle, Trash2, Minus, Plus, Receipt } from "lucide-react";
+import { ShoppingCart, Building2, AlertTriangle, Trash2, Minus, Plus, Receipt, Smartphone, Loader2 } from "lucide-react";
+import { supabase } from "../../../lib/supabase";
+import { toast } from "sonner";
 
 export interface Product {
   id: string;
@@ -56,6 +60,8 @@ interface CartPanelProps {
   generateFiscalReceipt: boolean;
   handleGenerateFiscalReceiptChange: (checked: boolean) => void;
   handleCheckout: (paymentMethod: "Cash" | "MPesa" | "Credit") => void;
+  businessId?: string;
+  branchId?: string;
 }
 
 export function CartPanel({
@@ -75,13 +81,115 @@ export function CartPanel({
   generateFiscalReceipt,
   handleGenerateFiscalReceiptChange,
   handleCheckout,
+  businessId,
+  branchId,
 }: CartPanelProps) {
   const { formatCurrency } = useCurrency();
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "MPesa" | "Credit">("Cash");
+  const [mpesaPhone, setMpesaPhone] = useState("");
+  const [isMPesaProcessing, setIsMPesaProcessing] = useState(false);
   // ═══════════════════════════════════════════════════════════════════
   // BRANCH STATUS VALIDATION - Disable checkout for deactivated branches
   // ═══════════════════════════════════════════════════════════════════
   const isBranchDeactivated = activeBranch?.status === "inactive";
+
+  /**
+   * M-PESA STK Push Payment Handler
+   * Initiates an M-PESA STK Push to the customer's phone
+   */
+  const handleMPesaPayment = async () => {
+    if (!mpesaPhone) {
+      toast.error("Phone Number Required", {
+        description: "Please enter the customer's phone number"
+      });
+      return;
+    }
+
+    if (!businessId) {
+      toast.error("Error", { description: "Business ID is missing" });
+      return;
+    }
+
+    // Validate phone number format
+    const cleanedPhone = mpesaPhone.replace(/[\s\-\+]/g, '');
+    if (!/^(07|01|2547|2541)\d{7,8}$/.test(cleanedPhone)) {
+      toast.error("Invalid Phone Number", {
+        description: "Please enter a valid Kenyan phone number (e.g., 07XXXXXXXX or 254XXXXXXXXX)"
+      });
+      return;
+    }
+
+    setIsMPesaProcessing(true);
+
+    try {
+      // Call M-PESA STK Push edge function
+      const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
+        body: {
+          phoneNumber: cleanedPhone,
+          amount: total,
+          businessId,
+          branchId,
+          description: `POS Sale - ${cart.length} item(s)`,
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'M-PESA payment failed');
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'M-PESA payment initiation failed');
+      }
+
+      toast.success("M-PESA Request Sent", {
+        description: `STK Push sent to ${cleanedPhone}. Ask customer to enter M-PESA PIN.`
+      });
+
+      // Start polling for transaction status
+      const checkoutRequestId = data.checkoutRequestId;
+      let attempts = 0;
+      const maxAttempts = 60; // Poll for up to 60 seconds
+
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        
+        const { data: txData } = await supabase
+          .from('mpesa_transactions')
+          .select('status, result_description, mpesa_receipt_number')
+          .eq('checkout_request_id', checkoutRequestId)
+          .single();
+
+        if (txData?.status === 'completed') {
+          clearInterval(pollInterval);
+          setIsMPesaProcessing(false);
+          toast.success("Payment Successful!", {
+            description: `M-PESA Receipt: ${txData.mpesa_receipt_number}`
+          });
+          // Proceed with checkout
+          handleCheckout("MPesa");
+          setMpesaPhone("");
+        } else if (txData?.status === 'failed' || txData?.status === 'cancelled') {
+          clearInterval(pollInterval);
+          setIsMPesaProcessing(false);
+          toast.error("Payment Failed", {
+            description: txData.result_description || "M-PESA payment was not completed"
+          });
+        } else if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          setIsMPesaProcessing(false);
+          toast.error("Payment Timeout", {
+            description: "M-PESA payment timed out. Please try again."
+          });
+        }
+      }, 1000);
+
+    } catch (err: any) {
+      setIsMPesaProcessing(false);
+      toast.error("M-PESA Error", {
+        description: err.message || "Failed to initiate M-PESA payment"
+      });
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -99,7 +207,7 @@ export function CartPanel({
             <Building2 className="w-4 h-4 text-blue-600" />
             <div className="flex-1">
               <p className="text-xs text-blue-600 font-medium">Active Branch</p>
-              <p className="text-sm font-semibold text-blue-900">{activeBranch.name}</p>
+              <p className="text-sm font-semibold text-blue-900">{activeBranch?.name ?? "—"}</p>
             </div>
             {!canChangeBranch && (
               <Badge variant="secondary" className="text-xs">
@@ -134,93 +242,80 @@ export function CartPanel({
             <p>Cart is empty</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300">
             {cart.map((item) => (
-              <div key={item.id} className="bg-slate-50 rounded-lg p-3 flex gap-3">
+              <div key={item.id} className="bg-slate-50 rounded-lg p-2 flex gap-2 items-center">
                 {/* Image Thumbnail */}
-                <div className="w-12 h-12 rounded-md bg-white border overflow-hidden shrink-0 flex items-center justify-center mt-1">
-                  {item.image ? (
-                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                <div className="w-10 h-10 rounded-md bg-white border overflow-hidden shrink-0 flex items-center justify-center">
+                  {item?.image ? (
+                    <img src={item.image} alt={item?.name ?? 'Product'} className="w-full h-full object-cover" />
                   ) : (
-                    <ShoppingCart className="w-5 h-5 text-slate-300" />
+                    <ShoppingCart className="w-4 h-4 text-slate-300" />
                   )}
                 </div>
 
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <p className="font-medium line-clamp-2 text-sm">{item.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-sm font-semibold text-foreground">
-                        {formatCurrency(item.selectedPrice)}
-                      </p>
-                      {item.wholesalePrice && (
-                        <Badge variant="outline" className="text-xs">
-                          {item.priceType === "retail" ? "Retail" : "Wholesale"}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => removeFromCart(item.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-                
-                {/* ═══════════════════════════════════════════════════════════════════
-                    PRICING EXTENSION: Price Tier Selector (only if wholesale exists)
-                    ═══════════════════════════════════════════════════════════════════ */}
-                {item.wholesalePrice && (
-                  <div className="mb-2">
-                    <Select
-                      value={item.priceType}
-                      onValueChange={(value) => updatePriceTier(item.id, value as "retail" | "wholesale")}
+                {/* Product Info & Controls - All in one row */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-xs truncate flex-1 min-w-0">{item?.name ?? 'Unknown'}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive shrink-0"
+                      onClick={() => removeFromCart(item?.id || '')}
                     >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="retail">
-                          Retail - {formatCurrency(item.retailPrice || item.price)}
-                        </SelectItem>
-                        <SelectItem value="wholesale">
-                          Wholesale - {formatCurrency(item.wholesalePrice)}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
                   </div>
-                )}
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => updateQuantity(item.id, -1)}
-                  >
-                    <Minus className="w-3 h-3" />
-                  </Button>
-                  <span className="w-12 text-center font-medium">{item.quantity}</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => updateQuantity(item.id, 1)}
-                    disabled={item.quantity >= item.stock}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
-                  <span className="ml-auto font-semibold">
-                    {formatCurrency(item.selectedPrice * item.quantity)}
-                  </span>
+                  
+                  {/* Price Tier Selector (only if wholesale exists) */}
+                  {item?.wholesalePrice && (
+                    <div className="mt-1">
+                      <Select
+                        value={item?.priceType || "retail"}
+                        onValueChange={(value) => updatePriceTier(item?.id || '', value as "retail" | "wholesale")}
+                      >
+                        <SelectTrigger className="h-6 text-[10px] w-full max-w-[120px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="retail" className="text-xs">
+                            Retail - {formatCurrency(item?.retailPrice || item?.price || 0)}
+                          </SelectItem>
+                          <SelectItem value="wholesale" className="text-xs">
+                            Wholesale - {formatCurrency(item?.wholesalePrice || 0)}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  
+                  {/* Quantity, Price, and Subtotal - All in one row */}
+                  <div className="flex items-center gap-1 mt-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => updateQuantity(item?.id || '', -1)}
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <span className="w-8 text-center text-xs font-medium">{item?.quantity ?? 0}</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => updateQuantity(item?.id || '', 1)}
+                      disabled={(item?.quantity ?? 0) >= (item?.stock ?? 0)}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground ml-1">@{formatCurrency(item?.selectedPrice ?? item?.price ?? 0)}</span>
+                    <span className="ml-auto text-xs font-semibold">{formatCurrency((item?.selectedPrice ?? item?.price ?? 0) * (item?.quantity ?? 0))}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
           </div>
         )}
       </ScrollArea>
@@ -238,9 +333,9 @@ export function CartPanel({
 
         {cart.length > 0 && (
           <>
-            <div>
-              <span className="text-muted-foreground text-sm">Payment Method</span>
-              <div className="mt-2 flex items-center gap-2">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Payment Method</p>
+              <div className="flex w-full gap-2">
                 {(["Cash", "MPesa", "Credit"] as const).map((m) => {
                   const isSelected = paymentMethod === m;
                   return (
@@ -249,15 +344,52 @@ export function CartPanel({
                       type="button"
                       onClick={() => setPaymentMethod(m)}
                       aria-pressed={isSelected}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors focus:outline-none ${isSelected ? 'bg-foreground text-white border-foreground' : 'bg-white text-muted-foreground border-border'}`}
+                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors focus:outline-none ${isSelected ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white text-muted-foreground border-border hover:bg-slate-50'}`}
                     >
-                      {/* simple icons could be added later */}
+                      {m === "MPesa" && <Smartphone className="w-4 h-4" />}
                       <span className="font-medium">{m}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
+
+            {/* M-PESA Phone Number Input */}
+            {paymentMethod === "MPesa" && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Customer Phone Number</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="tel"
+                    placeholder="07XXXXXXXX or 254XXXXXXXXX"
+                    value={mpesaPhone}
+                    onChange={(e) => setMpesaPhone(e.target.value)}
+                    className="flex-1"
+                    disabled={isMPesaProcessing}
+                  />
+                  <Button
+                    onClick={handleMPesaPayment}
+                    disabled={isMPesaProcessing || !mpesaPhone}
+                    className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
+                  >
+                    {isMPesaProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Smartphone className="w-4 h-4 mr-1" />
+                        Pay Now
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  STK Push will be sent to the customer's phone. They must enter their M-PESA PIN to complete.
+                </p>
+              </div>
+            )}
 
             <CustomerNameInput
               value={customerName}
@@ -286,10 +418,29 @@ export function CartPanel({
         <Button
           className="w-full"
           size="lg"
-          onClick={() => handleCheckout(paymentMethod)}
-          disabled={cart.length === 0 || !isPOSReady || isBranchDeactivated}
+          onClick={() => {
+            if (paymentMethod === "MPesa") {
+              // MPesa handles checkout internally via handleMPesaPayment
+              if (!isMPesaProcessing && mpesaPhone) {
+                handleMPesaPayment();
+              }
+            } else {
+              handleCheckout(paymentMethod);
+            }
+          }}
+          disabled={
+            cart.length === 0 || 
+            !isPOSReady || 
+            isBranchDeactivated ||
+            isMPesaProcessing ||
+            (paymentMethod === "MPesa" && !mpesaPhone)
+          }
         >
-          Checkout
+          {paymentMethod === "MPesa" ? (
+            isMPesaProcessing ? "Processing M-PESA..." : "Process M-PESA Payment"
+          ) : (
+            "Checkout"
+          )}
         </Button>
       </div>
     </div>

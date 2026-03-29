@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -27,8 +27,33 @@ export function AttendanceTab() {
     getActiveSessionsForToday
   } = useAttendance();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [staffMembers, setStaffMembers] = useState<any[]>([]);
 
   if (!business || !user) return null;
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadStaff = async () => {
+      try {
+        const members = await getStaffMembers();
+        if (mounted) {
+          setStaffMembers(Array.isArray(members) ? members : []);
+        }
+      } catch (error) {
+        console.error("Failed to load staff members for attendance:", error);
+        if (mounted) {
+          setStaffMembers([]);
+        }
+      }
+    };
+
+    loadStaff();
+
+    return () => {
+      mounted = false;
+    };
+  }, [getStaffMembers]);
 
   // Role-based filtering
   const isStaff = user.role === "Staff" || user.role === "Cashier" || user.role === "Accountant";
@@ -42,8 +67,6 @@ export function AttendanceTab() {
   
   // Show only staff's own records if they are not manager/owner
   const records = isStaff ? staffRecords : allRecords;
-  const staffMembers = getStaffMembers();
-  
   // Get active sessions (currently clocked in staff)
   const activeSessions = getActiveSessionsForToday();
   

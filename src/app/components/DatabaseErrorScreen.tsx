@@ -1,4 +1,4 @@
-import { AlertTriangle, Copy, CheckCircle2, ExternalLink, Database } from "lucide-react";
+import { AlertTriangle, Copy, CircleCheck, ExternalLink, Database } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
 
@@ -130,8 +130,8 @@ COMMIT;
 
             {/* Step-by-step */}
             <div>
-              <h2 className="text-2xl font-bold mb-4 text-[#0891b2] flex items-center gap-2">
-                <span className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
+              <h2 className="text-2xl font-bold mb-4 text-[#00719C] flex items-center gap-2">
+                <span className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
                   1
                 </span>
                 Copy This SQL Script
@@ -144,11 +144,11 @@ COMMIT;
                 <Button
                   onClick={copySQL}
                   size="lg"
-                  className="absolute top-4 right-4 bg-[#0891b2] hover:bg-[#0891b2]/90 shadow-lg"
+                  className="absolute top-4 right-4 bg-[#00719C] hover:bg-[#00719C]/90 shadow-lg"
                 >
                   {copied ? (
                     <>
-                      <CheckCircle2 className="w-5 h-5 mr-2" />
+                      <CircleCheck className="w-5 h-5 mr-2" />
                       Copied!
                     </>
                   ) : (
@@ -162,8 +162,8 @@ COMMIT;
             </div>
 
             <div className="border-t-2 border-gray-200 pt-6">
-              <h2 className="text-2xl font-bold mb-4 text-[#0891b2] flex items-center gap-2">
-                <span className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
+              <h2 className="text-2xl font-bold mb-4 text-[#00719C] flex items-center gap-2">
+                <span className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
                   2
                 </span>
                 Open Supabase SQL Editor
@@ -199,8 +199,8 @@ COMMIT;
             </div>
 
             <div className="border-t-2 border-gray-200 pt-6">
-              <h2 className="text-2xl font-bold mb-4 text-[#0891b2] flex items-center gap-2">
-                <span className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
+              <h2 className="text-2xl font-bold mb-4 text-[#00719C] flex items-center gap-2">
+                <span className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
                   3
                 </span>
                 Paste and Run
@@ -208,7 +208,7 @@ COMMIT;
               
               <div className="space-y-3 text-gray-700">
                 <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
-                  <div className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
                     ✓
                   </div>
                   <div>
@@ -217,7 +217,7 @@ COMMIT;
                 </div>
                 
                 <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
-                  <div className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
                     ✓
                   </div>
                   <div>
@@ -226,7 +226,7 @@ COMMIT;
                 </div>
                 
                 <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
-                  <div className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
                     ✓
                   </div>
                   <div>
@@ -237,8 +237,8 @@ COMMIT;
             </div>
 
             <div className="border-t-2 border-gray-200 pt-6">
-              <h2 className="text-2xl font-bold mb-4 text-[#0891b2] flex items-center gap-2">
-                <span className="bg-[#0891b2] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
+              <h2 className="text-2xl font-bold mb-4 text-[#00719C] flex items-center gap-2">
+                <span className="bg-[#00719C] text-white w-8 h-8 rounded-full flex items-center justify-center text-lg">
                   4
                 </span>
                 Refresh This Page
@@ -249,7 +249,7 @@ COMMIT;
                 size="lg"
                 className="w-full bg-green-600 hover:bg-green-700 text-white text-lg py-6"
               >
-                <CheckCircle2 className="w-6 h-6 mr-3" />
+                <CircleCheck className="w-6 h-6 mr-3" />
                 I Ran the SQL - Reload Tillsup Now
               </Button>
             </div>
@@ -265,7 +265,7 @@ COMMIT;
                   • <strong>Complete SQL script:</strong> <code className="bg-gray-200 px-2 py-1 rounded">FIX_INFINITE_RECURSION.sql</code> in your project
                 </p>
                 <p>
-                  • <strong>Supabase RLS Docs:</strong> <a href="https://supabase.com/docs/guides/auth/row-level-security" target="_blank" rel="noopener noreferrer" className="text-[#0891b2] hover:underline">supabase.com/docs/guides/auth/row-level-security</a>
+                  • <strong>Supabase RLS Docs:</strong> <a href="https://supabase.com/docs/guides/auth/row-level-security" target="_blank" rel="noopener noreferrer" className="text-[#00719C] hover:underline">supabase.com/docs/guides/auth/row-level-security</a>
                 </p>
               </div>
             </div>

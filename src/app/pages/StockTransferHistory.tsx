@@ -97,7 +97,7 @@ export function StockTransferHistory() {
     const location = locations.find(l => l.id === locationId);
     if (!location) return <Package className="w-4 h-4" />;
     return location.type === "shop" ? (
-      <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+      <StoreIcon className="w-4 h-4 text-[#00719C]" />
     ) : (
       <Warehouse className="w-4 h-4 text-purple-600" />
     );
@@ -135,7 +135,7 @@ export function StockTransferHistory() {
           <CardContent className="pt-6">
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Total Transfers</p>
-              <p className="text-2xl font-bold text-[#0891b2] mt-1">{stats.total}</p>
+              <p className="text-2xl font-bold text-[#00719C] mt-1">{stats.total}</p>
             </div>
           </CardContent>
         </Card>
@@ -222,7 +222,7 @@ export function StockTransferHistory() {
               </CardDescription>
             </div>
             <Button
-              className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+              className="bg-[#00719C] hover:bg-[#00719C]/90"
               onClick={() => setIsTransferModalOpen(true)}
             >
               <Plus className="w-4 h-4 mr-2" />

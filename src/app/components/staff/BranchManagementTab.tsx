@@ -26,6 +26,7 @@ import { useBranch } from "../../contexts/BranchContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { validateSubscriptionForImport } from "../../utils/subscriptionGuard";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
 export function BranchManagementTab() {
@@ -291,6 +292,18 @@ export function BranchManagementTab() {
       return;
     }
 
+    // Check subscription status before allowing import
+    if (business?.id) {
+      try {
+        await validateSubscriptionForImport(business.id);
+      } catch (error: any) {
+        toast.error("Import Blocked", {
+          description: error.message || "Subscription Inactive: Please renew your subscription to perform bulk imports."
+        });
+        return;
+      }
+    }
+
     setIsProcessingImport(true);
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -361,14 +374,14 @@ export function BranchManagementTab() {
             continue;
           }
 
-          // Check for existing branch with same name
+          // Check for existing branch with same name (case-insensitive, trimmed)
           const existingBranch = branches.find(
-            b => b.name.toLowerCase() === branchName.toLowerCase()
+            b => b.name.trim().toLowerCase() === branchName.toLowerCase()
           );
 
           if (existingBranch) {
-            // Update existing branch
-            const result = updateBranch(existingBranch.id, {
+            // Update existing branch (upsert behavior)
+            const result = await updateBranch(existingBranch.id, {
               location: location || existingBranch.location,
               status: statusValue.toLowerCase() === "inactive" ? "inactive" : "active"
             });
@@ -376,25 +389,29 @@ export function BranchManagementTab() {
             if (result.success) {
               warnings.push(`Row ${rowNum}: Branch "${branchName}" already exists, updated instead`);
             } else {
-              errors.push(`Row ${rowNum}: Failed to update branch "${branchName}"`);
+              errors.push(`Row ${rowNum}: Failed to update branch "${branchName}" — ${result.error || "Unknown error"}${result.errorCode ? ` (${result.errorCode})` : ""}`);
             }
           } else {
             // Create new branch
-            const result = createBranch(branchName, location);
+            const result = await createBranch(branchName, location);
 
             if (result.success) {
               // Set status if different from default
               if (statusValue.toLowerCase() === "inactive" && result.branchId) {
-                updateBranch(result.branchId, { status: "inactive" });
+                await updateBranch(result.branchId, { status: "inactive" });
               }
               success.push(`Row ${rowNum}: Created branch "${branchName}"`);
             } else {
-              errors.push(`Row ${rowNum}: ${result.error || "Failed to create branch"}`);
+              // Provide detailed error including Supabase error code
+              const errorDetail = result.error || "Failed to create branch";
+              const errorCode = result.errorCode ? ` [${result.errorCode}]` : "";
+              errors.push(`Row ${rowNum}: ${errorDetail}${errorCode} — "${branchName}"`);
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error processing row ${rowNum}:`, error);
-          errors.push(`Row ${rowNum}: Failed to process row`);
+          const errMsg = error?.message || error?.toString() || "Unknown error";
+          errors.push(`Row ${rowNum}: Failed to process row — ${errMsg}`);
         }
       }
 
@@ -460,7 +477,7 @@ export function BranchManagementTab() {
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <Upload className="w-4 h-4" />
-                Import Excel
+                Import Branches
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -471,16 +488,16 @@ export function BranchManagementTab() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-4">
+              <div className="space-y-4 py-6">
                 {/* Template Download */}
                 <Alert>
                   <FileSpreadsheet className="h-4 w-4" />
                   <AlertTitle>Need a template?</AlertTitle>
                   <AlertDescription className="space-y-2">
                     <p>Download our Excel template to get started</p>
-                    <Button variant="outline" size="sm" className="gap-2" onClick={downloadImportTemplate}>
-                      <Download className="w-3.5 h-3.5" />
-                      Download Template
+                    <Button variant="outline" size="sm" className="flex items-center gap-2" onClick={downloadImportTemplate}>
+                      <Download className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>Download Template</span>
                     </Button>
                   </AlertDescription>
                 </Alert>
@@ -559,9 +576,9 @@ export function BranchManagementTab() {
 
                 {/* Instructions */}
                 {!importValidation && (
-                  <div className="space-y-2 text-sm text-muted-foreground border rounded-lg p-4 bg-muted/30">
+                  <div className="space-y-2 text-sm border rounded-lg p-4 bg-muted/30">
                     <p className="font-medium text-foreground">📋 Import Guidelines:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
+                    <ul className="list-disc list-inside space-y-1 ml-2 text-slate-800">
                       <li>Required column: Branch Name</li>
                       <li>Optional columns: Location, Status</li>
                       <li>Status can be 'Active' or 'Inactive'</li>

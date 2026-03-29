@@ -22,10 +22,15 @@ import {
   DialogTrigger,
   DialogFooter
 } from "../components/ui/dialog";
-import { Search, Plus, Edit, Trash2, Phone, Mail, MapPin, User, Building2, FileText, Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Search, Plus, Edit, Trash2, Phone, Mail, MapPin, User, Building2, FileText, Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle, Truck, Package, CreditCard } from "lucide-react";
 import { useSupplier } from "../contexts/SupplierContext";
+import { usePurchaseOrder } from "../contexts/PurchaseOrderContext";
+import { useCurrency } from "../hooks/useCurrency";
+import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { validateSubscriptionForImport } from "../utils/subscriptionGuard";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { SchemaError } from "../components/inventory/SchemaError";
 
@@ -51,12 +56,17 @@ const emptyForm: SupplierFormData = {
 
 export function Suppliers() {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier, error } = useSupplier();
+  const { purchaseOrders } = usePurchaseOrder();
+  const { formatCurrency } = useCurrency();
+  const { business } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [formData, setFormData] = useState<SupplierFormData>(emptyForm);
+  const [contactFilter, setContactFilter] = useState<"all" | "with-contact" | "no-contact">("all");
+  const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "contact-asc">("name-asc");
 
   // ═══════════════════════════════════════════════════════════════════
   // IMPORT/EXPORT STATE
@@ -72,15 +82,65 @@ export function Suppliers() {
   } | null>(null);
 
   // Filter suppliers based on search query
-  const filteredSuppliers = suppliers.filter((supplier) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      supplier.name.toLowerCase().includes(query) ||
-      supplier.contactPerson.toLowerCase().includes(query) ||
-      supplier.phone.includes(query) ||
-      supplier.email.toLowerCase().includes(query)
-    );
-  });
+  const filteredSuppliers = suppliers
+    .filter((supplier) => {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch =
+        supplier.name.toLowerCase().includes(query) ||
+        supplier.contactPerson.toLowerCase().includes(query) ||
+        supplier.phone.includes(query) ||
+        supplier.email.toLowerCase().includes(query);
+
+      const hasContact = Boolean(supplier.phone || supplier.email);
+      const matchesContactFilter =
+        contactFilter === "all" ||
+        (contactFilter === "with-contact" && hasContact) ||
+        (contactFilter === "no-contact" && !hasContact);
+
+      return matchesSearch && matchesContactFilter;
+    })
+    .sort((a, b) => {
+      if (sortBy === "name-desc") {
+        return b.name.localeCompare(a.name);
+      }
+      if (sortBy === "contact-asc") {
+        return (a.contactPerson || "").localeCompare(b.contactPerson || "");
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SUPPLIER STATISTICS — Derived from Purchase Orders
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Card 1: Active Suppliers — suppliers with deliveries (POs) in last 30 days
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const activeSupplierIds = new Set(
+    purchaseOrders
+      .filter(po => {
+        const poDate = new Date(po.createdAt);
+        return poDate >= thirtyDaysAgo;
+      })
+      .map(po => po.supplierId)
+  );
+  const activeSupplierCount = activeSupplierIds.size;
+
+  // Card 2: Pending Deliveries — POs with status 'Sent' or 'Approved' (i.e. pending/shipped delivery)
+  const pendingDeliveryCount = purchaseOrders.filter(
+    po => po.status === "Sent" || po.status === "Approved"
+  ).length;
+
+  // Card 3: Monthly Spend (MTD) — total KES value of completed ('Delivered') POs this month
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthlySpend = purchaseOrders
+    .filter(po => {
+      const poDate = new Date(po.createdAt);
+      return po.status === "Delivered" && poDate >= monthStart;
+    })
+    .reduce((sum, po) => sum + (po.totalAmount || 0), 0);
 
   const handleAddSupplier = async () => {
     if (!formData.name.trim()) {
@@ -278,6 +338,18 @@ export function Suppliers() {
       return;
     }
 
+    // Check subscription status before allowing import
+    if (business?.id) {
+      try {
+        await validateSubscriptionForImport(business.id);
+      } catch (error: any) {
+        toast.error("Import Blocked", {
+          description: error.message || "Subscription Inactive: Please renew your subscription to perform bulk imports."
+        });
+        return;
+      }
+    }
+
     setIsProcessingImport(true);
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -289,24 +361,31 @@ export function Suppliers() {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-      // Find header row
+      // Find header row (case-insensitive, trimmed)
       let headerRowIndex = -1;
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
-        if (row && row.length > 0 && row.includes("Supplier Name")) {
+        if (row && row.length > 0 && row.some((cell: any) => cell && typeof cell === "string" && cell.trim().toLowerCase() === "supplier name")) {
           headerRowIndex = i;
           break;
         }
       }
 
       if (headerRowIndex === -1) {
-        errors.push("Could not find header row. Please use the template format.");
+        errors.push("Could not find header row. Make sure your file has a 'Supplier Name' column header.");
         setImportValidation({ errors, warnings, success, totalRows: 0 });
         setIsProcessingImport(false);
         return;
       }
 
-      const headers = jsonData[headerRowIndex];
+      // Normalize headers: trim and lowercase for mapping
+      const rawHeaders = jsonData[headerRowIndex];
+      const headerMap: Record<string, number> = {};
+      rawHeaders.forEach((header: string, index: number) => {
+        if (header) headerMap[header.toString().trim()] = index;
+      });
+
+      // Extract data rows (skip header row, filter empty rows)
       const dataRows = jsonData.slice(headerRowIndex + 1).filter(row =>
         row && row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== "")
       );
@@ -318,33 +397,40 @@ export function Suppliers() {
         return;
       }
 
-      // Create header map
-      const headerMap: Record<string, number> = {};
-      headers.forEach((header: string, index: number) => {
-        if (header) headerMap[header.trim()] = index;
-      });
-
-      // Validate headers
-      if (!("Supplier Name" in headerMap)) {
-        errors.push("Missing required column: Supplier Name");
+      // Validate headers — check both trimmed key and lowercase for robustness
+      const headerKeys = Object.keys(headerMap).map(k => k.toLowerCase());
+      if (!headerKeys.includes("supplier name")) {
+        errors.push("Missing required column: 'Supplier Name'. Found columns: " + Object.keys(headerMap).join(", "));
         setImportValidation({ errors, warnings, success, totalRows: 0 });
         setIsProcessingImport(false);
         return;
       }
 
       // Process each row
+      // Helper: find column index by flexible name matching
+      const findCol = (name: string): number | undefined => {
+        // Try exact match first
+        if (headerMap[name] !== undefined) return headerMap[name];
+        // Try case-insensitive match
+        const lowered = name.toLowerCase();
+        for (const [key, idx] of Object.entries(headerMap)) {
+          if (key.toLowerCase() === lowered) return idx;
+        }
+        return undefined;
+      };
+
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
         const rowNum = headerRowIndex + i + 2;
 
         try {
-          const supplierName = row[headerMap["Supplier Name"]]?.toString().trim() || "";
-          const contactPerson = row[headerMap["Contact Person"]]?.toString().trim() || "";
-          const phone = row[headerMap["Phone"]]?.toString().trim() || "";
-          const email = row[headerMap["Email"]]?.toString().trim() || "";
-          const address = row[headerMap["Address"]]?.toString().trim() || "";
-          const notes = row[headerMap["Notes"]]?.toString().trim() || "";
-          const pinNumber = row[headerMap["PIN Number"]]?.toString().trim() || "";
+          const supplierName = (findCol("Supplier Name") !== undefined ? row[findCol("Supplier Name")] : row[findCol("Supplier Name")])?.toString().trim() || "";
+          const contactPerson = (findCol("Contact Person") !== undefined ? row[findCol("Contact Person")] : "")?.toString().trim() || "";
+          const phone = (findCol("Phone") !== undefined ? row[findCol("Phone")] : "")?.toString().trim() || "";
+          const email = (findCol("Email") !== undefined ? row[findCol("Email")] : "")?.toString().trim() || "";
+          const address = (findCol("Address") !== undefined ? row[findCol("Address")] : "")?.toString().trim() || "";
+          const notes = (findCol("Notes") !== undefined ? row[findCol("Notes")] : "")?.toString().trim() || "";
+          const pinNumber = (findCol("PIN Number") !== undefined ? row[findCol("PIN Number")] : "")?.toString().trim() || "";
 
           // Validation
           if (!supplierName) {
@@ -358,9 +444,9 @@ export function Suppliers() {
             continue;
           }
 
-          // Check for duplicate supplier name
+          // Check for duplicate supplier name (case-insensitive, trimmed)
           const existingSupplier = suppliers.find(
-            s => s.name.toLowerCase() === supplierName.toLowerCase()
+            s => s.name.trim().toLowerCase() === supplierName.toLowerCase()
           );
 
           if (existingSupplier) {
@@ -368,27 +454,37 @@ export function Suppliers() {
             continue;
           }
 
-          // Add supplier
-          addSupplier({
-            name: supplierName,
-            contactPerson: contactPerson,
-            phone: phone,
-            email: email,
-            address: address,
-            notes: notes,
-            pinNumber: pinNumber
-          });
-
-          success.push(`Row ${rowNum}: Added supplier "${supplierName}"`);
-        } catch (error) {
+          // Add supplier (awaited — addSupplier throws on DB errors)
+          try {
+            await addSupplier({
+              name: supplierName,
+              contactPerson: contactPerson,
+              phone: phone,
+              email: email,
+              address: address,
+              notes: notes,
+              pinNumber: pinNumber
+            });
+            success.push(`Row ${rowNum}: Added supplier "${supplierName}"`);
+          } catch (addErr: any) {
+            const errMsg = addErr?.message || addErr?.toString() || "Unknown error";
+            // Duplicate from DB (unique constraint) — treat as warning, not error
+            if (errMsg.toLowerCase().includes("duplicate")) {
+              warnings.push(`Row ${rowNum}: Supplier "${supplierName}" already exists (duplicate), skipped`);
+            } else {
+              errors.push(`Row ${rowNum}: Failed to add "${supplierName}" — ${errMsg}`);
+            }
+          }
+        } catch (error: any) {
           console.error(`Error processing row ${rowNum}:`, error);
-          errors.push(`Row ${rowNum}: Failed to process row`);
+          const errMsg = error?.message || error?.toString() || "Unknown error";
+          errors.push(`Row ${rowNum}: Failed to process row — ${errMsg}`);
         }
       }
 
       setImportValidation({ errors, warnings, success, totalRows: dataRows.length });
 
-      if (errors.length === 0 && success.length > 0) {
+      if (errors.length === 0 && (success.length > 0 || warnings.length > 0)) {
         toast.success(`Successfully imported ${success.length} suppliers`);
         setTimeout(() => {
           setIsImportDialogOpen(false);
@@ -419,164 +515,151 @@ export function Suppliers() {
   return (
     <div className="space-y-6 px-[24px] py-[0px]">
       {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Supplier Management</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage your suppliers and vendor contacts
-            </p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4 mb-2">
+        <div>
+          <h1 className="text-2xl font-semibold">Supplier Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage your suppliers and vendor contacts
+          </p>
         </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Import from Excel Button */}
+          <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
+            if (!open) resetImportDialog();
+            setIsImportDialogOpen(open);
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Upload className="w-4 h-4" />
+                Import Suppliers
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Import Suppliers from Excel</DialogTitle>
+                <DialogDescription>
+                  Upload an Excel file to bulk import suppliers
+                </DialogDescription>
+              </DialogHeader>
 
-        {/* Schema Error */}
-        {error && <SchemaError error={error} />}
-
-        {/* Action Buttons */}
-        <div className="flex justify-between items-center gap-3 flex-wrap">
-          <div className="flex gap-3">
-            {/* Import from Excel Button */}
-            <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
-              if (!open) resetImportDialog();
-              setIsImportDialogOpen(open);
-            }}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Upload className="w-4 h-4" />
-                  Import Excel
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Import Suppliers from Excel</DialogTitle>
-                  <DialogDescription>
-                    Upload an Excel file to bulk import suppliers
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 py-4">
-                  {/* Template Download */}
-                  <Alert>
-                    <FileSpreadsheet className="h-4 w-4" />
-                    <AlertTitle>Need a template?</AlertTitle>
-                    <AlertDescription>
-                      Download our Excel template with instructions
-                    </AlertDescription>
-                    <Button variant="outline" size="sm" className="mt-2 gap-2" onClick={downloadImportTemplate}>
-                      <Download className="w-3.5 h-3.5" />
-                      Download Template
-                    </Button>
-                  </Alert>
-
-                  {/* File Upload */}
-                  <div className="grid gap-2">
-                    <Label htmlFor="file-upload">Upload Excel File (.xlsx)</Label>
-                    <Input id="file-upload" type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="cursor-pointer" />
-                    {importFile && (
-                      <p className="text-sm text-muted-foreground flex items-center gap-2">
-                        <FileSpreadsheet className="w-4 h-4" />
-                        {importFile.name}
-                      </p>
-                    )}
+              <div className="space-y-4 py-6">
+                {/* Template Download */}
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-[#00719C]/5 border border-[#00719C]/20">
+                  <FileSpreadsheet className="w-5 h-5 text-[#00719C] flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#00719C]">Need a template?</p>
+                    <p className="text-xs text-slate-500">Download our Excel template with instructions</p>
                   </div>
+                  <Button size="sm" className="flex items-center gap-2 bg-[#00719C] hover:bg-[#005d81] text-white flex-shrink-0" onClick={downloadImportTemplate}>
+                    <Download className="w-4 h-4" />
+                    <span className="font-semibold">Download Template</span>
+                  </Button>
+                </div>
 
-                  {/* Validation Results */}
-                  {importValidation && (
-                    <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4">
-                      {importValidation.success.length > 0 && (
-                        <Alert className="border-green-200 bg-green-50">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <AlertTitle className="text-green-900">Success ({importValidation.success.length})</AlertTitle>
-                          <AlertDescription className="text-green-800">
-                            <ul className="list-disc list-inside space-y-1 text-xs mt-2">
-                              {importValidation.success.slice(0, 5).map((msg, idx) => (
-                                <li key={idx}>{msg}</li>
-                              ))}
-                              {importValidation.success.length > 5 && (
-                                <li className="italic">... and {importValidation.success.length - 5} more</li>
-                              )}
-                            </ul>
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {importValidation.warnings.length > 0 && (
-                        <Alert className="border-amber-200 bg-amber-50">
-                          <AlertTriangle className="h-4 w-4 text-amber-600" />
-                          <AlertTitle className="text-amber-900">Warnings ({importValidation.warnings.length})</AlertTitle>
-                          <AlertDescription className="text-amber-800">
-                            <ul className="list-disc list-inside space-y-1 text-xs mt-2">
-                              {importValidation.warnings.slice(0, 5).map((msg, idx) => (
-                                <li key={idx}>{msg}</li>
-                              ))}
-                              {importValidation.warnings.length > 5 && (
-                                <li className="italic">... and {importValidation.warnings.length - 5} more</li>
-                              )}
-                            </ul>
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {importValidation.errors.length > 0 && (
-                        <Alert variant="destructive">
-                          <XCircle className="h-4 w-4" />
-                          <AlertTitle>Errors ({importValidation.errors.length})</AlertTitle>
-                          <AlertDescription>
-                            <ul className="list-disc list-inside space-y-1 text-xs mt-2">
-                              {importValidation.errors.slice(0, 5).map((msg, idx) => (
-                                <li key={idx}>{msg}</li>
-                              ))}
-                              {importValidation.errors.length > 5 && (
-                                <li className="italic">... and {importValidation.errors.length - 5} more</li>
-                              )}
-                            </ul>
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      <div className="text-sm text-muted-foreground border-t pt-2">
-                        Processed {importValidation.totalRows} rows from Excel file
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Instructions */}
-                  {!importValidation && (
-                    <div className="space-y-2 text-sm text-muted-foreground border rounded-lg p-4 bg-muted/30">
-                      <p className="font-medium text-foreground">📋 Import Guidelines:</p>
-                      <ul className="list-disc list-inside space-y-1 ml-2">
-                        <li>Required column: Supplier Name</li>
-                        <li>Optional columns: Contact Person, Phone, Email, Address, Notes, PIN Number</li>
-                        <li>Email format must be valid if provided</li>
-                        <li>Duplicate supplier names will be skipped</li>
-                      </ul>
-                    </div>
+                {/* File Upload */}
+                <div className="grid gap-2">
+                  <Label htmlFor="file-upload">Upload Excel File (.xlsx)</Label>
+                  <div className="p-2">
+                    <Input id="file-upload" type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="cursor-pointer" />
+                  </div>
+                  {importFile && (
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4" />
+                      {importFile.name}
+                    </p>
                   )}
                 </div>
 
-                <DialogFooter>
-                  <Button variant="outline" onClick={resetImportDialog}>Cancel</Button>
-                  <Button onClick={validateAndImportExcel} disabled={!importFile || isProcessingImport} className="gap-2">
-                    {isProcessingImport ? "Processing..." : (
-                      <>
-                        <Upload className="w-4 h-4" />
-                        Import Suppliers
-                      </>
+                {/* Validation Results */}
+                {importValidation && (
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4">
+                    {importValidation.success.length > 0 && (
+                      <Alert className="border-green-200 bg-green-50">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <AlertTitle className="text-green-900">Success ({importValidation.success.length})</AlertTitle>
+                        <AlertDescription className="text-green-800">
+                          <ul className="list-disc list-inside space-y-1 text-xs mt-2">
+                            {importValidation.success.slice(0, 5).map((msg, idx) => (
+                              <li key={idx}>{msg}</li>
+                            ))}
+                            {importValidation.success.length > 5 && (
+                              <li className="italic">... and {importValidation.success.length - 5} more</li>
+                            )}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
                     )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
 
-            {/* Export to Excel Button */}
-            <Button variant="outline" onClick={exportSuppliersToExcel} className="gap-2" disabled={filteredSuppliers.length === 0}>
-              <Download className="w-4 h-4" />
-              Export Excel
-            </Button>
-          </div>
-          <div className="flex gap-3">
-            {/* Add Supplier Button */}
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                    {importValidation.warnings.length > 0 && (
+                      <Alert className="border-amber-200 bg-amber-50">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <AlertTitle className="text-amber-900">Warnings ({importValidation.warnings.length})</AlertTitle>
+                        <AlertDescription className="text-amber-800">
+                          <ul className="list-disc list-inside space-y-1 text-xs mt-2">
+                            {importValidation.warnings.slice(0, 5).map((msg, idx) => (
+                              <li key={idx}>{msg}</li>
+                            ))}
+                            {importValidation.warnings.length > 5 && (
+                              <li className="italic">... and {importValidation.warnings.length - 5} more</li>
+                            )}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {importValidation.errors.length > 0 && (
+                      <Alert variant="destructive">
+                        <XCircle className="h-4 w-4" />
+                        <AlertTitle>Errors ({importValidation.errors.length})</AlertTitle>
+                        <AlertDescription>
+                          <ul className="list-disc list-inside space-y-1 text-xs mt-2">
+                            {importValidation.errors.slice(0, 5).map((msg, idx) => (
+                              <li key={idx}>{msg}</li>
+                            ))}
+                            {importValidation.errors.length > 5 && (
+                              <li className="italic">... and {importValidation.errors.length - 5} more</li>
+                            )}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div className="text-sm text-muted-foreground border-t pt-2">
+                      Processed {importValidation.totalRows} rows from Excel file
+                    </div>
+                  </div>
+                )}
+
+                {/* Instructions */}
+                {!importValidation && (
+                  <div className="space-y-2 text-sm border rounded-lg p-4 bg-muted/30">
+                    <p className="font-medium text-foreground">📋 Import Guidelines:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2 text-slate-800">
+                      <li>Required column: Supplier Name</li>
+                      <li>Optional columns: Contact Person, Phone, Email, Address, Notes, PIN Number</li>
+                      <li>Email format must be valid if provided</li>
+                      <li>Duplicate supplier names will be skipped</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={resetImportDialog}>Cancel</Button>
+                <Button onClick={validateAndImportExcel} disabled={!importFile || isProcessingImport} className="gap-2">
+                  {isProcessingImport ? "Processing..." : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Import Suppliers
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Supplier Button */}
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2">
                   <Plus className="w-4 h-4" />
@@ -711,31 +794,55 @@ export function Suppliers() {
             </Dialog>
           </div>
         </div>
-      </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Suppliers</CardDescription>
-            <CardTitle className="text-3xl">{suppliers.length}</CardTitle>
-          </CardHeader>
+      <div className="grid gap-3 md:grid-cols-3">
+        {/* Card 1: Active Suppliers (blue) */}
+        <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+          <CardContent className="p-3 h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-slate-500 truncate">Active Suppliers</span>
+              <div className="w-5 h-5 rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Truck className="w-2.5 h-2.5 text-blue-600" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-base font-bold text-slate-900 leading-none truncate">{activeSupplierCount}</span>
+            </div>
+            <p className="text-[9px] text-slate-400">Deliveries in last 30 days</p>
+          </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Active Contacts</CardDescription>
-            <CardTitle className="text-3xl">
-              {suppliers.filter((s) => s.email || s.phone).length}
-            </CardTitle>
-          </CardHeader>
+
+        {/* Card 2: Pending Deliveries (orange) */}
+        <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+          <CardContent className="p-3 h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-slate-500 truncate">Pending Deliveries</span>
+              <div className="w-5 h-5 rounded-md bg-orange-50 flex items-center justify-center flex-shrink-0">
+                <Package className="w-2.5 h-2.5 text-orange-500" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-base font-bold text-slate-900 leading-none truncate">{pendingDeliveryCount}</span>
+            </div>
+            <p className="text-[9px] text-slate-400">Sent or Approved POs</p>
+          </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>With Notes</CardDescription>
-            <CardTitle className="text-3xl">
-              {suppliers.filter((s) => s.notes).length}
-            </CardTitle>
-          </CardHeader>
+
+        {/* Card 3: Procurement MTD (green) */}
+        <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+          <CardContent className="p-3 h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-slate-500 truncate">Procurement (MTD)</span>
+              <div className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center flex-shrink-0">
+                <CreditCard className="w-2.5 h-2.5 text-green-600" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-base font-bold text-slate-900 leading-none truncate">{formatCurrency(monthlySpend)}</span>
+            </div>
+            <p className="text-[9px] text-slate-400">Completed deliveries this month</p>
+          </CardContent>
         </Card>
       </div>
 
@@ -758,6 +865,26 @@ export function Suppliers() {
                 className="pl-10"
               />
             </div>
+            <Select value={contactFilter} onValueChange={(value: "all" | "with-contact" | "no-contact") => setContactFilter(value)}>
+              <SelectTrigger className="w-full sm:w-[170px]">
+                <SelectValue placeholder="Contact Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Contacts</SelectItem>
+                <SelectItem value="with-contact">With Contact</SelectItem>
+                <SelectItem value="no-contact">No Contact</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={(value: "name-asc" | "name-desc" | "contact-asc") => setSortBy(value)}>
+              <SelectTrigger className="w-full sm:w-[170px]">
+                <SelectValue placeholder="Sort By" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                <SelectItem value="contact-asc">Contact Person (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>

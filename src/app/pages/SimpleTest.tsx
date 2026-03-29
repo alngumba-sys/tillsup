@@ -26,7 +26,7 @@ export function SimpleTest() {
       <div style={{ marginBottom: '1rem' }}>Pathname: {window.location.pathname}</div>
       <div style={{ marginBottom: '2rem' }}>This proves routing is working</div>
       <a href="/" style={{ 
-        background: '#0891b2', 
+        background: '#00719C', 
         padding: '1rem 2rem', 
         borderRadius: '8px',
         textDecoration: 'none',

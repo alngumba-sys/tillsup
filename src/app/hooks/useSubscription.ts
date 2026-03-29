@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranch } from "../contexts/BranchContext";
 import { getPlanDetails, hasFeature, PlanFeatures, SubscriptionPlanDetails } from "../utils/subscription";
+import { isFeatureAccessAllowed } from "../utils/subscriptionStatus";
 
 export interface SubscriptionContextType {
   plan: SubscriptionPlanDetails;
@@ -100,8 +101,8 @@ export function useSubscription(): SubscriptionContextType {
     // Override for Demo User
     if (user?.email === "demo@test.com") return true;
 
-    // Override for Trial Users - give full access
-    if (business?.subscriptionStatus === "trial") return true;
+    // Override for Trial Users - give full access using unified status check
+    if (isFeatureAccessAllowed(business?.subscriptionStatus as any)) return true;
 
     return hasFeature(currentPlanName, feature);
   };

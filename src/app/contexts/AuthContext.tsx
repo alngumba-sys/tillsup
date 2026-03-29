@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { isPreviewMode, mockPreviewUser, mockPreviewBusiness, PreviewModeAuth, mockPreviewStaff } from "../utils/previewMode";
 import { resetStaffPasswordWithFallback } from "../utils/passwordReset";
 import { Permission } from "../types/permissions";
+import { calculateSubscriptionStatus } from "../utils/subscriptionStatus";
 
 // ═══════════════════════════════════════════════════════════════════
 // VERSION: 2024-03-05-v6-PREVIEW-MODE-SUPPORT
@@ -22,7 +23,15 @@ import { Permission } from "../types/permissions";
 // ══════════════════════════════════════════════════════════════════
 
 export type SubscriptionPlan = "Free Trial" | "Basic" | "Pro" | "Enterprise";
-export type SubscriptionStatus = "active" | "trial" | "expired" | "cancelled";
+export type SubscriptionStatus = 
+  | "active"           // Paid & Current
+  | "trial"            // New users
+  | "trial_expired"    // Automatic lock
+  | "trial_extended"   // Manual admin override
+  | "past_due"         // Payment failed, grace period active
+  | "suspended"        // Admin-initiated hard lock
+  | "cancelled"        // Pending end of cycle
+  | "expired";         // Legacy/expired
 
 export interface TaxConfiguration {
   enabled: boolean;
@@ -50,6 +59,9 @@ export interface Business {
   subscriptionPlan: SubscriptionPlan;
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: Date;
+  subscriptionEndDate?: Date; // New field for subscription end date
+  requiresExtensionNotice?: boolean; // Flag for first login after extension
+  extensionNotifiedAt?: Date; // When the notice was shown
   maxBranches: number;
   maxStaff: number;
   
@@ -144,6 +156,9 @@ interface AuthContextType extends AuthState {
   // Staff Management
   createStaff: (email: string, firstName: string, lastName: string, role: UserRole, branchId?: string, roleId?: string, password?: string) => Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string }; errorCode?: string }>;
   getStaffMembers: () => Promise<User[]>;
+  staffMembers: User[];
+  isLoadingStaff: boolean;
+  refreshStaffMembers: () => Promise<void>;
   updateStaff: (userId: string, updates: Partial<User>) => Promise<{ success: boolean; error?: string }>;
   deleteStaff: (userId: string) => Promise<{ success: boolean; error?: string }>;
   resendStaffInvite: (inviteId: string) => Promise<{ success: boolean; error?: string }>;
@@ -211,10 +226,20 @@ const defaultAuthContext: AuthContextType = {
   hasPermission: () => {
     console.error("❌ CRITICAL: HasPermission called on default context!");
     return false;
-  }
+  },
+  staffMembers: [],
+  isLoadingStaff: false,
+  refreshStaffMembers: async () => {
+    console.error("❌ CRITICAL: RefreshStaffMembers called on default context!");
+  },
 };
 
 export const AuthContext = createContext<AuthContextType>(defaultAuthContext);
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
 
 // ═══════════════════════════════════════════════════════════════════
 // AUTH PROVIDER
@@ -225,6 +250,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   const [user, setUser] = useState<User | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
+  const [staffMembers, setStaffMembers] = useState<User[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [schemaError, setSchemaError] = useState<any>(null);
   const isRegistering = useRef(false);
@@ -241,13 +268,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (globalTimeoutId) {
         clearTimeout(globalTimeoutId);
         globalTimeoutId = null;
-      }
-    };
-
-    const clearEmergencyTimeout = () => {
-      if (emergencyTimeoutId) {
-        clearTimeout(emergencyTimeoutId);
-        emergencyTimeoutId = null;
       }
     };
 
@@ -567,6 +587,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   subscriptionPlan: businessData.subscription_plan || "Free Trial",
                   subscriptionStatus: businessData.subscription_status || "trial",
                   trialEndsAt: new Date(businessData.trial_ends_at),
+                  subscriptionEndDate: businessData.subscription_end_date ? new Date(businessData.subscription_end_date) : undefined,
+                  requiresExtensionNotice: businessData.requires_extension_notice || false,
+                  extensionNotifiedAt: businessData.extension_notified_at ? new Date(businessData.extension_notified_at) : undefined,
                   maxBranches: businessData.max_branches || 1,
                   maxStaff: businessData.max_staff || 5,
                   currency: businessData.currency || "KES",
@@ -1159,14 +1182,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("🏢 Business fetch result:", { businessData: !!businessData, error: businessError });
               
             if (businessData) {
+              // Use unified status calculation for consistency
+              const statusResult = calculateSubscriptionStatus({
+                subscription_status: businessData.subscription_status || businessData.subscriptionStatus,
+                trial_ends_at: businessData.trial_ends_at || businessData.trialEndsAt,
+                subscription_end_date: businessData.subscription_end_date
+              });
+
               return {
                 id: businessData.id,
                 name: (mappedUser.email === "demo@test.com" && (businessData.name === "My Business (Restored)" || businessData.name === "Complete Setup")) ? "Tillsup Demo Store" : businessData.name,
                 ownerId: businessData.owner_id || businessData.ownerId,
                 createdAt: new Date(businessData.created_at || businessData.createdAt),
                 subscriptionPlan: businessData.subscription_plan || businessData.subscriptionPlan || "Free Trial",
-                subscriptionStatus: businessData.subscription_status || businessData.subscriptionStatus || "trial",
+                subscriptionStatus: statusResult.status,
                 trialEndsAt: new Date(businessData.trial_ends_at || businessData.trialEndsAt),
+                subscriptionEndDate: businessData.subscription_end_date ? new Date(businessData.subscription_end_date) : undefined,
+                requiresExtensionNotice: businessData.requires_extension_notice || false,
+                extensionNotifiedAt: businessData.extension_notified_at ? new Date(businessData.extension_notified_at) : undefined,
                 maxBranches: businessData.max_branches || businessData.maxBranches || 1,
                 maxStaff: businessData.max_staff || businessData.maxStaff || 5,
                 currency: businessData.currency || "KES",
@@ -2127,526 +2160,292 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /* OLD CLIENT-SIDE CODE REMOVED - Now handled by Edge Function
-        console.log("🔑 Creating staff with password (direct signup)");
-        console.log("📊 Debug - Current user business_id:", business.id);
-        console.log("📊 Debug - Current user role:", user.role);
-        
-        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false,
-            storageKey: 'sb-temp-staff-creation', // Unique storage key to avoid conflicts
-            storage: undefined // Don't persist anything
-          }
-        });
-        
-        console.log("🔐 Signing up new user via tempClient...");
-        const { data: authData, error: authError } = await tempClient.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              first_name: firstName,
-              last_name: lastName,
-              role: role
-            }
-          }
-        });
-        
-        if (authError) {
-           console.error("❌ Auth signup error:", authError);
-           console.error("❌ Auth error code:", authError.code);
-           console.error("❌ Auth error status:", authError.status);
-           console.error("❌ Full auth error:", JSON.stringify(authError, null, 2));
-           
-           // Handle "User already registered" error specifically
-           if (authError.message && authError.message.includes("User already registered")) {
-             return { success: false, error: "This email is already registered in the system. Please use a different email address." };
-           }
-           
-           return { success: false, error: authError.message };
-        }
-        
-        console.log("DEBUG: authData received:", { hasUser: !!authData.user, hasSession: !!authData.session });
-        
-        // Check if user data is null (email confirmation might be enabled)
-        if (!authData.user) {
-          console.error("CRITICAL: authData.user is NULL - email confirmation likely enabled");
-          console.error("authData:", authData);
-          return { 
-            success: false, 
-            error: "Staff creation failed: Supabase email confirmation must be disabled. Go to: Dashboard → Authentication → Providers → Email → Set 'Confirm email' to OFF" 
-          };
-        }
-        
-        if (authData.user) {
-           console.log("✅ Auth user created:", authData.user.id);
-           console.log("📧 Auth user email:", authData.user.email);
-           
-           // Create profile manually using the MAIN client (which has admin's authenticated session)
-           const newProfile = {
-             id: authData.user.id,
-             email,
-             first_name: firstName,
-             last_name: lastName,
-             role,
-             role_id: roleId,
-             business_id: business.id,
-             branch_id: branchId || null,
-             can_create_expense: false,
-             must_change_password: true,
-             created_at: new Date().toISOString()
-           };
-           
-           console.log("📝 Creating profile record with MAIN client (admin session)");
-           console.log("📊 Profile data:", newProfile);
-           console.log("🔑 Current auth.uid() should be:", user.id);
-           console.log("🏢 Business ID being used:", business.id);
-           
-           // Use the main supabase client (admin's session) instead of tempClient
-           const { data: insertedProfile, error: profileError } = await supabase
-             .from('profiles')
-             .insert(newProfile)
-             .select()
-             .single();
-           
-           if (profileError) {
-             console.error("❌ Profile creation error:", profileError);
-             console.error("❌ Error code:", profileError.code);
-             console.error("❌ Error message:", profileError.message);
-             console.error("❌ Error details:", profileError.details);
-             console.error("❌ Error hint:", profileError.hint);
-             
-             // If profile already exists (e.g. via trigger), try update
-             if (profileError.code === '23505') { 
-                console.log("⚠️ Profile exists, updating instead...");
-                const { error: updateError } = await supabase
-                  .from('profiles')
-                  .update(newProfile)
-                  .eq('id', authData.user.id);
-                
-                if (updateError) {
-                  console.error("❌ Update also failed:", updateError);
-                  return { success: false, error: "User created but profile failed: " + updateError.message };
-                }
-                console.log("�� Profile updated successfully");
-                return { success: true, credentials: { email, password } };
-             } else if (profileError.code === '42501') {
-                // RLS policy violation - provide clear instructions
-                return { 
-                  success: false, 
-                  error: "RLS Policy Error: Please run the FIX_RLS_FINAL.sql script in your Supabase SQL Editor to fix permissions." 
-                };
-             } else {
-                return { success: false, error: "User created but profile failed: " + profileError.message };
-             }
-           }
-           
-           console.log("✅ Profile created successfully:", insertedProfile);
-           console.log("✅ Staff created successfully with password");
-           return { success: true, credentials: { email, password } };
-        }
+  const getStaffMembers = async (): Promise<User[]> => {
+    if (!user || !business) {
+      console.warn("Cannot get staff members without user or business context.");
+      return [];
+    }
+    
+    // PREVIEW MODE: Use mock staff
+    if (isPreviewMode()) {
+      return mockPreviewStaff;
+    }
+
+    try {
+      // RBAC: Non-owner staff should only see staff in their branch
+      let query = supabase
+        .from('profiles')
+        .select('*')
+        .eq('business_id', business.id);
+
+      if (user && user.role !== 'Business Owner' && user.branchId) {
+        query = query.eq('branch_id', user.branchId);
       }
 
-      // 2. Create Invitation in 'staff_invites' table
-      console.log("📧 Creating staff invitation (email flow)");
-      const invitation = {
-        business_id: business.id,
-        branch_id: branchId || business.id, // Fallback to business ID if no branch
-        email,
-        role,
-        first_name: firstName,
-        last_name: lastName,
-        status: 'pending',
-        invited_by: user.id,
-        created_at: new Date().toISOString() // Ensure created_at is present for local storage
-      };
-
-      console.log("📤 Inserting invitation:", invitation);
-      const { error } = await supabase.from('staff_invites').insert(invitation);
+      const { data, error } = await query;
 
       if (error) {
-        console.error("Error inserting into staff_invites:", error);
-        console.error("Error code:", error.code);
-        console.error("Error details:", error.details);
-        console.error("Error hint:", error.hint);
-        
-        // Provide specific error messages
-        if (['PGRST205', 'PGRST204', '42703', '23502', '22P02', '42P01'].includes(error.code)) {
-            return { 
-              success: false, 
-              error: "Database schema error: staff_invites table not properly set up. Please run the database setup SQL.", 
-              errorCode: error.code 
-            };
-        } else if (error.code === 'PGRST116' || error.message.includes('violates row-level security')) {
-            return { 
-              success: false, 
-              error: "Permission error: You don't have permission to create staff. Please check RLS policies.", 
-              errorCode: error.code 
-            };
-        } else if (error.code === '23505') {
-            return { 
-              success: false, 
-              error: "A staff member with this email already exists.", 
-              errorCode: error.code 
-            };
-        }
-        
-        // Pass through the error code so SchemaError can catch it
-        return { success: false, error: error.message, errorCode: error.code };
+        console.error("Error fetching staff members:", error);
+        return [];
       }
 
-  END OF OLD CLIENT-SIDE CODE - All handled by Edge Function now */
-
-  const getStaffMembers = async (): Promise<User[]> => {
-    if (!business) return [];
-    
-    // ═══════════════════════════════════════════════════════════════════
-    // PREVIEW MODE: Return mock staff
-    // ��══════════════════════════════════════════════════════════════════
-    if (isPreviewMode()) {
-      return await PreviewModeAuth.getStaffMembers();
-    }
-    
-    // 1. Fetch Profiles
-    const { data: profiles } = await supabase.from('profiles').select('*').eq('business_id', business.id);
-    
-    // 2. Fetch Pending Invites (DB only)
-    let dbInvites: any[] = [];
-    try {
-        const { data } = await supabase.from('staff_invites').select('*').eq('business_id', business.id).eq('status', 'pending');
-        if (data) dbInvites = data;
-    } catch (e) {
-        console.warn("Failed to fetch DB invites", e);
-    }
-
-    const invites = [...dbInvites];
-    
-    let users: User[] = [];
-    
-    if (profiles) {
-      const mappedProfiles = profiles.map((p: any) => ({
-        id: p.id,
-        email: p.email,
-        phone: p.phone_number,
-        firstName: p.first_name,
-        lastName: p.last_name,
-        role: p.role,
-        roleId: p.role_id,
-        businessId: p.business_id,
-        branchId: p.branch_id,
-        mustChangePassword: p.must_change_password,
-        createdAt: new Date(p.created_at),
-        canCreateExpense: p.can_create_expense,
-        salary: p.salary, // If salary is stored in profiles (usually separate table or jsonb)
+      // Map snake_case to camelCase
+      return data.map((profile: any) => ({
+        id: profile.id,
+        email: profile.email,
+        phone: profile.phone_number,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        role: profile.role,
+        roleId: profile.role_id,
+        businessId: profile.business_id,
+        branchId: profile.branch_id,
+        mustChangePassword: profile.must_change_password,
+        createdAt: new Date(profile.created_at),
+        canCreateExpense: profile.can_create_expense,
+        salary: profile.salary,
       }));
-      users = [...users, ...mappedProfiles];
+    } catch (err) {
+      console.error("Unexpected error in getStaffMembers:", err);
+      return [];
     }
-    
-    if (invites) {
-       const mappedInvites = invites.map((inv: any) => ({
-         id: `invite-${inv.id}`,
-         email: inv.email,
-         firstName: inv.first_name || "Invited",
-         lastName: inv.last_name || "(Pending)",
-         role: inv.role as UserRole,
-         roleId: null,
-         businessId: inv.business_id,
-         branchId: inv.branch_id,
-         mustChangePassword: true,
-         createdAt: new Date(inv.created_at),
-         canCreateExpense: false
-       }));
-       users = [...users, ...mappedInvites];
-    }
-    
-    return users;
   };
 
   const updateStaff = async (userId: string, updates: Partial<User>): Promise<{ success: boolean; error?: string }> => {
+    console.log("📝 Updating staff member:", userId, updates);
     if (!user || !business) return { success: false, error: "Not authenticated" };
-
-    // RBAC Check: Ensure user has permission to edit staff
-    if (!hasPermission(['Business Owner', 'Manager'], "staff.edit")) {
-      return { success: false, error: "Insufficient permissions. Only Business Owners and Managers with 'staff.edit' permission can update staff." };
-    }
-
+    
     try {
-      // 1. Handle Invites (Pending Staff)
-      if (userId.startsWith('invite-')) {
-        const rawId = userId.replace('invite-', '');
-        
-        const inviteUpdates: any = {};
-        if (updates.email !== undefined) inviteUpdates.email = updates.email;
-        if (updates.firstName !== undefined) inviteUpdates.first_name = updates.firstName;
-        if (updates.lastName !== undefined) inviteUpdates.last_name = updates.lastName;
-        if (updates.role !== undefined) inviteUpdates.role = updates.role;
-        if (updates.branchId !== undefined) inviteUpdates.branch_id = updates.branchId;
-        
-        // Update staff_invites table
-        const { error } = await supabase.from('staff_invites').update(inviteUpdates).eq('id', rawId);
-        
-        if (error) return { success: false, error: error.message };
-        return { success: true };
+      // Map camelCase to snake_case for database
+      const dbUpdates: any = {};
+      if (updates.firstName) dbUpdates.first_name = updates.firstName;
+      if (updates.lastName) dbUpdates.last_name = updates.lastName;
+      if (updates.email) dbUpdates.email = updates.email;
+      if (updates.phone) dbUpdates.phone_number = updates.phone;
+      if (updates.role) dbUpdates.role = updates.role;
+      if (updates.roleId) dbUpdates.role_id = updates.roleId;
+      if (updates.branchId) dbUpdates.branch_id = updates.branchId;
+      if (updates.mustChangePassword !== undefined) dbUpdates.must_change_password = updates.mustChangePassword;
+      if (updates.canCreateExpense !== undefined) dbUpdates.can_create_expense = updates.canCreateExpense;
+      if (updates.salary !== undefined) dbUpdates.salary = updates.salary;
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(dbUpdates)
+        .eq('id', userId)
+        .eq('business_id', business.id);
+
+      if (error) {
+        console.error("❌ Error updating staff:", error);
+        return { success: false, error: error.message };
       }
 
-      // 2. Handle Real Users (Profiles)
-      const profileUpdates: any = {};
-      if (updates.email !== undefined) profileUpdates.email = updates.email;
-      if (updates.firstName !== undefined) profileUpdates.first_name = updates.firstName;
-      if (updates.lastName !== undefined) profileUpdates.last_name = updates.lastName;
-      if (updates.role !== undefined) profileUpdates.role = updates.role;
-      if (updates.branchId !== undefined) profileUpdates.branch_id = updates.branchId;
-      if (updates.salary !== undefined) profileUpdates.salary = updates.salary;
-
-      // Update profiles table
-      const { error } = await supabase.from('profiles').update(profileUpdates).eq('id', userId);
-
-      if (error) return { success: false, error: error.message };
+      // Refresh staff members list
+      await refreshStaffMembers();
+      console.log("✅ Staff member updated successfully");
       return { success: true };
-
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    } catch (err) {
+      console.error("❌ Unexpected error updating staff:", err);
+      return { success: false, error: "An unexpected error occurred" };
     }
   };
 
   const deleteStaff = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    console.log("🗑️ Deleting staff member:", userId);
     if (!user || !business) return { success: false, error: "Not authenticated" };
-
-    // RBAC Check: Ensure user has permission to delete staff
-    if (!hasPermission(['Business Owner', 'Manager'], "staff.delete")) {
-      return { success: false, error: "Insufficient permissions. Only Business Owners and Managers with 'staff.delete' permission can delete staff." };
-    }
-
+    
     try {
-      // 1. Handle Invites (Pending Staff)
-      if (userId.startsWith('invite-')) {
-        const rawId = userId.replace('invite-', '');
-        
-        // Handle DB invite deletion
-        const { error } = await supabase.from('staff_invites').delete().eq('id', rawId);
-        if (error) return { success: false, error: error.message };
-        return { success: true };
+      // Check permissions
+      if (!hasPermission(['Business Owner', 'Manager'])) {
+        return { success: false, error: "Insufficient permissions" };
       }
 
-      // 2. Handle Real Users (Profiles)
-      // Prevent deleting yourself
+      // Prevent deleting self
       if (userId === user.id) {
-          return { success: false, error: "You cannot remove yourself." };
-      }
-      
-      // Prevent deleting the business owner if you are not them (though RBAC prevents this in UI)
-      if (userId === business.ownerId) {
-          return { success: false, error: "Cannot remove the Business Owner." };
+        return { success: false, error: "Cannot delete your own account" };
       }
 
-      const { error } = await supabase.from('profiles').delete().eq('id', userId);
-      if (error) return { success: false, error: error.message };
-      
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId)
+        .eq('business_id', business.id);
+
+      if (error) {
+        console.error("❌ Error deleting staff:", error);
+        return { success: false, error: error.message };
+      }
+
+      // Refresh staff members list
+      await refreshStaffMembers();
+      console.log("✅ Staff member deleted successfully");
       return { success: true };
-
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    } catch (err) {
+      console.error("❌ Unexpected error deleting staff:", err);
+      return { success: false, error: "An unexpected error occurred" };
     }
   };
 
   const resendStaffInvite = async (inviteId: string): Promise<{ success: boolean; error?: string }> => {
+    console.log("📧 Resending staff invite:", inviteId);
     if (!user || !business) return { success: false, error: "Not authenticated" };
     
     try {
-        const rawId = inviteId.startsWith('invite-') ? inviteId.replace('invite-', '') : inviteId;
-        
-        // Check if invite exists
-        const { data, error } = await supabase
-            .from('staff_invites')
-            .select('*')
-            .eq('id', rawId)
-            .single();
-            
-        if (error || !data) {
-            return { success: false, error: "Invitation not found" };
+      // Check permissions
+      if (!hasPermission(['Business Owner', 'Manager'])) {
+        return { success: false, error: "Insufficient permissions" };
+      }
+
+      // Get the invite details
+      const { data: invite, error: inviteError } = await supabase
+        .from('invites')
+        .select('*')
+        .eq('id', inviteId)
+        .eq('business_id', business.id)
+        .single();
+
+      if (inviteError || !invite) {
+        console.error("❌ Error fetching invite:", inviteError);
+        return { success: false, error: "Invite not found" };
+      }
+
+      // Resend the invite email
+      const { error: emailError } = await supabase.auth.admin.generateLink({
+        type: 'invite',
+        email: invite.email,
+        data: {
+          role: invite.role,
+          business_id: business.id,
+          branch_id: invite.branch_id,
+          role_id: invite.role_id
         }
-        
-        // Update the invitation timestamp to "resend" it (in a real app this triggers email)
-        const { error: updateError } = await supabase
-            .from('staff_invites')
-            .update({ created_at: new Date().toISOString() })
-            .eq('id', rawId);
-            
-        if (updateError) return { success: false, error: updateError.message };
-        
-        return { success: true };
-    } catch (err: any) {
-        return { success: false, error: err.message };
+      });
+
+      if (emailError) {
+        console.error("❌ Error resending invite:", emailError);
+        return { success: false, error: emailError.message };
+      }
+
+      console.log("✅ Invite resent successfully");
+      return { success: true };
+    } catch (err) {
+      console.error("❌ Unexpected error resending invite:", err);
+      return { success: false, error: "An unexpected error occurred" };
     }
   };
 
   const resetStaffPassword = async (userId: string): Promise<{ success: boolean; error?: string; temporaryPassword?: string }> => {
-     if (!user || !business) return { success: false, error: "Not authenticated" };
-     
-     // Handle Invites
-     if (userId.startsWith('invite-')) {
-        return { success: false, error: "Cannot reset password for pending invites. Please resend the invitation instead." };
-     }
-
-     // 1. Generate a simple 5-character alphanumeric password (easy to share and type)
-     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-     let temporaryPassword = "";
-     for (let i = 0; i < 5; i++) {
-       temporaryPassword += chars.charAt(Math.floor(Math.random() * chars.length));
-     }
-     
-     try {
-       // RBAC Check: Ensure user has permission      // 2. Verify permissions
-      if (!hasPermission(['Business Owner', 'Manager'], "staff.create")) {
-         return { success: false, error: "Insufficient permissions. Only Business Owners and Managers can reset passwords." };
-       }
-
-       // 3. Get target user profile to verify they're in the same business
-       const { data: targetProfile, error: profileError } = await supabase
-         .from('profiles')
-         .select('business_id, role, email')
-         .eq('id', userId)
-         .single();
-
-       if (profileError || !targetProfile) {
-         return { success: false, error: "Staff member not found" };
-       }
-
-       // Verify both users are in the same business
-       if (targetProfile.business_id !== business.id) {
-         return { success: false, error: "Cannot reset password for staff in different business" };
-       }
-
-       // Prevent resetting Business Owner password unless admin is also Business Owner
-       if (targetProfile.role === 'Business Owner' && user.role !== 'Business Owner') {
-         return { success: false, error: "Only Business Owner can reset another Business Owner's password" };
-       }
-
-       // 4. Try using the simplified database function
-       const { data, error } = await supabase.rpc('simple_reset_staff_password', {
-         p_user_id: userId,
-         p_new_password: temporaryPassword,
-         p_admin_id: user.id,
-         p_business_id: business.id
-       });
-
-       if (error) {
-         console.error("Password reset RPC error:", error);
-         
-         // Check if it's the gen_salt error - provide helpful message
-         if (error.message?.includes('gen_salt')) {
-           console.error("\n\n🚨🚨🚨 DATABASE SETUP REQUIRED 🚨🚨🚨");
-           console.error("📖 OPEN THIS FILE: COPY_PASTE_THIS_SQL.md");
-           console.error("⏱️  Takes 60 seconds to fix!");
-           console.error("🔗 Or see: supabase_password_reset_FIXED.sql\n\n");
-           return { 
-             success: false, 
-             error: "🚨 DATABASE SETUP REQUIRED (60 seconds to fix)\n\n⚡ FASTEST FIX:\n→ Open file: COPY_PASTE_THIS_SQL.md\n→ Follow the copy-paste instructions\n\nOR:\n\n1. Go to: https://supabase.com/dashboard\n2. Open your Tillsup project\n3. Click 'SQL Editor' → '+ New query'\n4. Copy file: supabase_password_reset_FIXED.sql\n5. Paste and click 'Run'\n6. Look for ✅ success messages\n\n📁 Files: COPY_PASTE_THIS_SQL.md or FIX_NOW.md\n\n⏱️  One-time setup - Never do this again!" 
-           };
-         }
-         
-         // Check if function doesn't exist (PGRST202 error)
-         if (error.code === 'PGRST202' || error.message?.includes('Could not find the function')) {
-           console.error("\n\n🚨🚨🚨 DATABASE SETUP REQUIRED 🚨🚨🚨");
-           console.error("📖 OPEN THIS FILE: COPY_PASTE_THIS_SQL.md");
-           console.error("⏱️  Takes 60 seconds to fix!");
-           console.error("🔗 Or see: supabase_password_reset_FIXED.sql\n\n");
-           return { 
-             success: false, 
-             error: "🚨 DATABASE SETUP REQUIRED (60 seconds to fix)\n\n⚡ FASTEST FIX:\n→ Open file: COPY_PASTE_THIS_SQL.md\n→ Follow the copy-paste instructions\n\nOR:\n\n1. Go to: https://supabase.com/dashboard\n2. Open your Tillsup project\n3. Click 'SQL Editor' → '+ New query'\n4. Copy file: supabase_password_reset_FIXED.sql\n5. Paste and click 'Run'\n6. Look for ✅ success messages\n\n📁 Files: COPY_PASTE_THIS_SQL.md or FIX_NOW.md\n\n⏱️  One-time setup - Never do this again!" 
-           };
-         }
-         
-         return { success: false, error: error.message };
-       }
-
-       // Parse response
-       const result = typeof data === 'string' ? JSON.parse(data) : data;
-       
-       if (!result.success) {
-         return { success: false, error: result.error || "Password reset failed" };
-       }
-
-       // 5. Mark profile as must_change_password
-       await supabase
-         .from('profiles')
-         .update({ must_change_password: true })
-         .eq('id', userId);
-
-       return { success: true, temporaryPassword };
-     } catch (err: any) {
-       console.error("Password reset error:", err);
-       return { success: false, error: err.message };
-     }
+    console.log("🔑 Resetting staff password:", userId);
+    if (!user || !business) return { success: false, error: "Not authenticated" };
+    
+    try {
+      // Use the imported password reset utility
+      const result = await resetStaffPasswordWithFallback(userId, user, business, hasPermission);
+      return result;
+    } catch (err) {
+      console.error("❌ Unexpected error resetting staff password:", err);
+      return { success: false, error: "An unexpected error occurred" };
+    }
   };
 
-  const hasPermission = (requiredRoles: UserRole[], permission?: Permission) => {
+  const hasPermission = (requiredRoles: UserRole[], permission?: Permission): boolean => {
     if (!user) return false;
-    // Super Admin Override for Demo User
-    if (user.email === "demo@test.com") return true;
     
-    // 1. Check if user has one of the required roles (Legacy/High-level check)
+    // Check role
     const hasRole = requiredRoles.includes(user.role);
+    if (!hasRole) return false;
     
-    // 2. If a specific granular permission is required, check it against the user's role
-    // This requires RoleContext to be available, but we can't easily use it here without circularity.
-    // Instead, we check the role name as a fallback or check if user is Business Owner.
-    if (permission) {
-        // Business Owner has all permissions
-        if (user.role === "Business Owner") return true;
-        
-        // For other roles, we usually check RoleContext. 
-        // Since we are in AuthContext, we can't use RoleContext's hook.
-        // But we can check if the user's role (high-level) generally implies this permission
-        // as a fallback if RoleContext hasn't overridden it.
-        // In a real app, we might store permissions in the user object or a separate context.
-        return hasRole; 
+    // If no specific permission required, role check is sufficient
+    if (!permission) return true;
+    
+    // Check specific permissions based on user role
+    // Business Owner has all permissions
+    if (user.role === 'Business Owner') return true;
+    
+    // Manager has most permissions
+    if (user.role === 'Manager') {
+      const managerPermissions: Permission[] = [
+        'staff.create', 'staff.view', 'staff.edit', 'staff.delete',
+        'inventory.create', 'inventory.view', 'inventory.edit', 'inventory.delete',
+        'pos.access', 'pos.process_sales', 'pos.apply_discounts', 'pos.void_sales',
+        'reports.view_sales', 'reports.view_inventory', 'reports.view_expenses', 'reports.view_staff', 'reports.export',
+        'settings.view', 'settings.edit_business', 'settings.manage_branches', 'settings.manage_roles'
+      ];
+      return managerPermissions.includes(permission);
     }
     
-    return hasRole;
+    // Other roles have limited permissions
+    const rolePermissions: Record<UserRole, Permission[]> = {
+      'Business Owner': [], // Handled above
+      'Manager': [], // Handled above
+      'Cashier': ['pos.access', 'pos.process_sales', 'pos.apply_discounts', 'inventory.view'],
+      'Accountant': ['reports.view_sales', 'reports.view_inventory', 'reports.view_expenses', 'reports.export', 'expenses.view'],
+      'Staff': ['inventory.view', 'pos.access']
+    };
+    
+    return rolePermissions[user.role]?.includes(permission) || false;
   };
 
-  // Log when provider value changes to help debug
-  console.debug("🔄 AuthProvider rendering with:", {
-    hasUser: !!user,
-    hasBusiness: !!business,
-    loading,
-    isAuthenticated: !!user,
-    loginFunctionDefined: typeof login === 'function'
-  });
+  const refreshStaffMembers = async () => {
+    console.log("🔄 Refreshing staff members...");
+    if (isLoadingStaff) {
+      console.log("⚠️ Staff refresh already in progress, skipping");
+      return;
+    }
+    setIsLoadingStaff(true);
+    try {
+      const staff = await getStaffMembers();
+      setStaffMembers(staff);
+      console.log(`✅ Found ${staff.length} staff members.`);
+    } catch (error) {
+      console.error("Error refreshing staff members:", error);
+      toast.error("Could not load staff", {
+        description: "There was a problem fetching the staff list.",
+      });
+    } finally {
+      setIsLoadingStaff(false);
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      business,
-      isAuthenticated: !!user,
-      loading,
-      schemaError,
-      login,
-      logout,
-      registerBusiness,
-      updateBusiness,
-      changePassword,
-      updateProfile,
-      createStaff,
-      getStaffMembers,
-      updateStaff,
-      deleteStaff,
-      resendStaffInvite,
-      resetStaffPassword,
-      hasPermission
-    }}>
+    <AuthContext.Provider
+      value={{
+        // AuthState
+        user,
+        business,
+        isAuthenticated: !!user,
+        loading,
+        schemaError,
+        
+        // Business Management
+        registerBusiness,
+        updateBusiness,
+        
+        // Authentication
+        login,
+        logout,
+        changePassword,
+        
+        // Profile Management
+        updateProfile,
+        
+        // Staff Management
+        createStaff,
+        getStaffMembers,
+        staffMembers,
+        isLoadingStaff,
+        refreshStaffMembers,
+        updateStaff,
+        deleteStaff,
+        resendStaffInvite,
+        resetStaffPassword,
+        
+        // Utilities
+        hasPermission,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  // Context will always have a value now (either default or actual)
-  // No more "useAuth called before AuthProvider" warnings!
-  return context;
-};

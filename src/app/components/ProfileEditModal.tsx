@@ -13,7 +13,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Alert, AlertDescription } from "./ui/alert";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { CircleCheck, AlertTriangle } from "lucide-react";
 
 interface ProfileEditModalProps {
   open: boolean;
@@ -114,7 +114,7 @@ export function ProfileEditModal({ open, onClose }: ProfileEditModalProps) {
             {/* Success Message */}
             {success && (
               <Alert className="border-green-200 bg-green-50">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <CircleCheck className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800">
                   Profile updated successfully!
                 </AlertDescription>

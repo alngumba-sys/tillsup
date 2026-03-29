@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle, Copy, CheckCircle2, ExternalLink } from "lucide-react";
+import { AlertTriangle, Copy, CircleCheck, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
 
 /**
@@ -135,12 +135,12 @@ FOR DELETE USING (
 
             {/* Solution Steps */}
             <div>
-              <h3 className="font-semibold text-lg mb-3 text-[#0891b2]">
+              <h3 className="font-semibold text-lg mb-3 text-[#00719C]">
                 🛠️ How to Fix (5 minutes)
               </h3>
               <ol className="space-y-3 text-gray-700">
                 <li className="flex gap-3">
-                  <span className="font-semibold text-[#0891b2] flex-shrink-0">1.</span>
+                  <span className="font-semibold text-[#00719C] flex-shrink-0">1.</span>
                   <div>
                     <strong>Open your Supabase Dashboard</strong>
                     <br />
@@ -148,14 +148,14 @@ FOR DELETE USING (
                       href="https://supabase.com/dashboard" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-[#0891b2] hover:underline inline-flex items-center gap-1 mt-1"
+                      className="text-[#00719C] hover:underline inline-flex items-center gap-1 mt-1"
                     >
                       Go to Supabase Dashboard <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-semibold text-[#0891b2] flex-shrink-0">2.</span>
+                  <span className="font-semibold text-[#00719C] flex-shrink-0">2.</span>
                   <div>
                     <strong>Navigate to SQL Editor</strong>
                     <br />
@@ -165,7 +165,7 @@ FOR DELETE USING (
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-semibold text-[#0891b2] flex-shrink-0">3.</span>
+                  <span className="font-semibold text-[#00719C] flex-shrink-0">3.</span>
                   <div>
                     <strong>Copy and run this SQL script</strong>
                     <div className="mt-2 relative">
@@ -175,11 +175,11 @@ FOR DELETE USING (
                       <Button
                         onClick={copyToClipboard}
                         size="sm"
-                        className="absolute top-2 right-2 bg-[#0891b2] hover:bg-[#0891b2]/90"
+                        className="absolute top-2 right-2 bg-[#00719C] hover:bg-[#00719C]/90"
                       >
                         {copied ? (
                           <>
-                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            <CircleCheck className="w-4 h-4 mr-2" />
                             Copied!
                           </>
                         ) : (
@@ -193,7 +193,7 @@ FOR DELETE USING (
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-semibold text-[#0891b2] flex-shrink-0">4.</span>
+                  <span className="font-semibold text-[#00719C] flex-shrink-0">4.</span>
                   <div>
                     <strong>Click "Run" in the SQL Editor</strong>
                     <br />
@@ -203,7 +203,7 @@ FOR DELETE USING (
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-semibold text-[#0891b2] flex-shrink-0">5.</span>
+                  <span className="font-semibold text-[#00719C] flex-shrink-0">5.</span>
                   <div>
                     <strong>Refresh this page</strong>
                     <br />
@@ -238,7 +238,7 @@ FOR DELETE USING (
           </Button>
           <Button
             onClick={() => window.location.reload()}
-            className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+            className="bg-[#00719C] hover:bg-[#00719C]/90"
           >
             I Fixed It - Reload Page
           </Button>

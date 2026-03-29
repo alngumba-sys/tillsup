@@ -52,7 +52,7 @@ export function StockTransferConfirmation({
       <AlertDialogContent className="max-w-lg">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-[#0891b2]" />
+            <Package className="w-5 h-5 text-[#00719C]" />
             Confirm Stock Transfer
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
@@ -62,7 +62,7 @@ export function StockTransferConfirmation({
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1">
                   Product: {productName}
                 </div>
-                <div className="text-lg font-bold text-[#0891b2]">
+                <div className="text-lg font-bold text-[#00719C]">
                   {quantity} units
                 </div>
               </div>
@@ -162,7 +162,7 @@ export function StockTransferConfirmation({
           <AlertDialogAction
             onClick={onConfirm}
             disabled={hasNegativeStock}
-            className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+            className="bg-[#00719C] hover:bg-[#00719C]/90"
           >
             {hasNegativeStock ? "Insufficient Stock" : "Confirm Transfer"}
           </AlertDialogAction>

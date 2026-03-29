@@ -166,9 +166,9 @@ export function BusinessRegistration() {
           </div>
           
           {/* Free Trial Banner */}
-          <div className="bg-[#0891b2]/10 border border-[#0891b2]/30 rounded-lg p-3 mt-4">
+          <div className="bg-[#00719C]/10 border border-[#00719C]/30 rounded-lg p-3 mt-4">
             <div className="flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#0891b2]" />
+              <Sparkles className="w-4 h-4 text-[#00719C]" />
               <span className="text-sm font-semibold text-[#075d8c]">
                 14-Day Free Trial • Full Access • No Credit Card Required
               </span>
@@ -393,7 +393,7 @@ export function BusinessRegistration() {
             <div className="pt-2 space-y-3">
               <Button
                 type="submit"
-                className="w-full bg-[#0479A1] hover:bg-[#036080] text-white"
+                className="w-full bg-[#00719C] hover:bg-[#005d81] text-white"
                 size="default" 
                 disabled={loading}
               >

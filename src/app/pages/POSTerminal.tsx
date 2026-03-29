@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -21,6 +21,7 @@ import { CartPanel } from "../components/pos/CartPanel";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
 import { SchemaError } from "../components/inventory/SchemaError";
+import { ProductGridErrorBoundary } from "../components/ProductGridErrorBoundary";
 
 interface Product {
   id: string;
@@ -69,10 +70,49 @@ export function POSTerminal() {
   const { recordSale } = useSales();
   const { user, business } = useAuth();
   const { formatCurrency } = useCurrency();
-  const { selectedBranchId, branches, setSelectedBranchId, error: branchError } = useBranch();
+  const { selectedBranchId, branches, setSelectedBranchId, isLoading: branchLoading, error: branchError } = useBranch();
   const { activeCategories, error: categoryError } = useCategory();
   const { hasFeature, plan } = useSubscription();
   const navigate = useNavigate();
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // WAIT FOR BRANCH FETCH TO COMPLETE BEFORE RENDERING
+  // ═══════════════════════════════════════════════════════════════════
+  if (branchLoading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+          <p className="text-muted-foreground">Loading branches...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // NO BRANCHES FALLBACK — Friendly empty state
+  // ═══════════════════════════════════════════════════════════════════
+  if (!branchLoading && branches.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <Card className="max-w-md w-full border-2 border-dashed border-slate-300">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+              <Building2 className="w-8 h-8 text-slate-400" />
+            </div>
+            <h2 className="text-xl font-semibold text-slate-900">No Branches Found</h2>
+            <p className="text-sm text-slate-600">
+              You need to create at least one branch before you can use the POS Terminal.
+            </p>
+            <Button onClick={() => navigate("/app/branch-management")} className="gap-2">
+              <Building2 className="w-4 h-4" />
+              Create Your First Branch
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   
   // ════════════════════════════════════════════════════════════════
   // STEP 2.1: BRANCH CONTEXT LOADING
@@ -124,80 +164,133 @@ export function POSTerminal() {
       // This ensures zero cross-branch inventory leakage
       return item.branchId === activeBranchId;
     })
-    .map(item => ({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      category: item.category,
-      stock: item.stock,
-      branchId: item.branchId,
-      image: item.image,
-      // PRICING EXTENSION: Include new pricing fields
-      costPrice: item.costPrice,
-      retailPrice: item.retailPrice || item.price, // Default to legacy price
-      wholesalePrice: item.wholesalePrice
-    }));
+    .map(item => {
+      // ═══════════════════════════════════════════════════════════════════
+      // SAFETY: Ensure all required fields have fallback values
+      // ═══════════════════════════════════════════════════════════════════
+      if (!item || !item.id) {
+        console.warn('⚠️ Skipping invalid inventory item:', item);
+        return null;
+      }
+      
+      return {
+        id: item.id,
+        name: item.name ?? 'Unknown Product',
+        price: Number(item.price) || 0,
+        category: item.category ?? '',
+        stock: Number(item.stock) || 0,
+        branchId: item.branchId ?? '',
+        image: item.image,
+        // PRICING EXTENSION: Include new pricing fields with fallbacks
+        costPrice: item.costPrice ? Number(item.costPrice) : undefined,
+        retailPrice: Number(item.retailPrice || item.price) || 0,
+        wholesalePrice: item.wholesalePrice ? Number(item.wholesalePrice) : undefined
+      };
+    })
+    .filter((item): item is Product => item !== null);
   
   console.log('📦 Filtered products count:', products.length);
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    // Fix: selectedCategory now stores the Category ID (or "All"), and product.category is the Category ID.
-    // This allows direct comparison.
-    const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredProducts = useMemo(() => {
+    if (!products || !Array.isArray(products)) return [];
+    return products.filter((product) => {
+      if (!product) return false;
+      const matchesSearch = (product.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchQuery, selectedCategory]);
 
-  const addToCart = (product: Product) => {
-    // ═══════════════════════════════════════════════════════════════════
-    // PLAN LIMITS CHECK
-    // ═══════════════════════════════════════════════════════════════════
-    // "Free Trial" users have basic POS (limited features)
-    // "Basic" and up have full POS
-    // Here we can limit advanced features like wholesale pricing or customer assignment if needed
-    // For now, if fullPOS is false, we might restrict adding items or showing advanced pricing
-    // But since basicPOS is true for everyone, we allow adding items.
-    
-    // Example: Only Full POS can use wholesale pricing
-    
-    // ═══════════════════════════════════════════════════════════════════
-    // STEP 2.6: PREVENT ACTIONS WITHOUT BRANCH CONTEXT
-    // ═══════════════════════════════════════════════════════════════════
-    if (!isPOSReady) {
-      return; // Silently prevent adding to cart
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // BRANCH STATUS VALIDATION - Prevent cart operations on deactivated branches
-    // ═══════════════════════════════════════════════════════════════════
-    if (isBranchDeactivated) {
-      return; // Silently prevent adding to cart for deactivated branches
-    }
-    
-    const existingItem = cart.find((item) => item.id === product.id);
-    if (existingItem) {
-      setCart(
-        cart.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: Math.min(item.quantity + 1, product.stock) }
-            : item
-        )
-      );
-    } else {
+  const addToCart = (product: Product | null | undefined) => {
+    try {
       // ═══════════════════════════════════════════════════════════════════
-      // PRICING EXTENSION: Determine default price and type
+      // DEBUG: Log exact product data for troubleshooting
       // ═══════════════════════════════════════════════════════════════════
-      // Default to retail price (always the default selection)
-      const retailPrice = product.retailPrice || product.price;
-      const selectedPrice = retailPrice;
-      const priceType = "retail" as const;
+      console.log('addToCart called with:', JSON.stringify(product, (key, value) => {
+        if (key === 'image') return value ? '[IMAGE_DATA]' : null;
+        return value;
+      }, 2));
       
-      setCart([...cart, { 
-        ...product, 
-        quantity: 1,
-        selectedPrice,
-        priceType
-      }]);
+      // ═══════════════════════════════════════════════════════════════════
+      // NULL CHECKS: Prevent crashes if product is undefined/null
+      // ═══════════════════════════════════════════════════════════════════
+      if (!product || !product.id) {
+        console.error('Product is null, undefined, or missing ID:', product);
+        toast.error('Cannot add product', { description: 'Product data is missing or invalid' });
+        return;
+      }
+
+      // ═══════════════════════════════════════════════════════════════════
+      // PLAN LIMITS CHECK
+      // ═══════════════════════════════════════════════════════════════════
+      if (!isPOSReady) {
+        return; // Silently prevent adding to cart
+      }
+
+      // ═══════════════════════════════════════════════════════════════════
+      // BRANCH STATUS VALIDATION - Prevent cart operations on deactivated branches
+      // ═══════════════════════════════════════════════════════════════════
+      if (isBranchDeactivated) {
+        return; // Silently prevent adding to cart for deactivated branches
+      }
+
+      // Validate product data with optional chaining
+      if (!product?.name) {
+        console.error('Invalid product data - missing name:', product);
+        toast.error('Cannot add product', { description: 'Product name is missing' });
+        return;
+      }
+      
+      // Check for out of stock
+      const stock = product?.stock ?? 0;
+      if (stock <= 0) {
+        toast.error('Out of stock', { description: `${product?.name ?? 'Product'} is currently unavailable` });
+        return;
+      }
+      
+      const existingItem = cart.find((item) => item.id === product.id);
+      if (existingItem) {
+        setCart(
+          cart.map((item) =>
+            item.id === product.id
+              ? { ...item, quantity: Math.min(item.quantity + 1, stock) }
+              : item
+          )
+        );
+      } else {
+        // ═══════════════════════════════════════════════════════════════════
+        // PRICING EXTENSION: Determine default price and type with fallbacks
+        // ═══════════════════════════════════════════════════════════════════
+        // Use optional chaining and fallback to 0 if price is missing
+        const retailPrice = product?.retailPrice ?? product?.price ?? 0;
+        const safePrice = Number(retailPrice) || 0;
+        const selectedPrice = isFinite(safePrice) ? safePrice : 0;
+        const priceType = "retail" as const;
+        
+        // Create a safe product object with fallbacks for all required fields
+        const safeProduct: Product = {
+          id: product?.id ?? '',
+          name: product?.name ?? 'Unknown Product',
+          price: Number(product?.price) || 0,
+          category: String(product?.category ?? ''),
+          stock: Number(stock) || 0,
+          branchId: product?.branchId ?? '',
+          image: product?.image,
+          costPrice: product?.costPrice != null ? Number(product.costPrice) : undefined,
+          retailPrice: Number(product?.retailPrice || retailPrice) || 0,
+          wholesalePrice: product?.wholesalePrice != null ? Number(product.wholesalePrice) : undefined
+        };
+        
+        setCart([...cart, { 
+          ...safeProduct, 
+          quantity: 1,
+          selectedPrice,
+          priceType
+        }]);
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast.error('Error', { description: 'Failed to add product to cart' });
     }
   };
 
@@ -384,6 +477,17 @@ export function POSTerminal() {
     return activeBranch.status === "inactive";
   }, [activeBranchId, activeBranch]);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CART PROTECTION: Clear cart if branch becomes deactivated
+  // ═══════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (isBranchDeactivated && cart.length > 0) {
+      console.warn("Branch deactivated — clearing cart to prevent ghost sales");
+      setCart([]);
+      setValidationError(null);
+    }
+  }, [isBranchDeactivated]);
+
   return (
     <div className="flex min-h-full relative">
       {/* ═══════════════════════════════════════════════════════════════════
@@ -482,7 +586,7 @@ export function POSTerminal() {
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-100">
                 <Building2 className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">
-                  {branches.find(b => b.id === user.branchId)?.name || "Your Branch"}
+                  {branches.find(b => b.id === user.branchId)?.name ?? "Your Branch"}
                 </span>
                 <Badge variant="outline" className="text-xs">
                   Locked
@@ -558,7 +662,7 @@ export function POSTerminal() {
                 </div>
                 <div>
                   <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">Showing Inventory For</p>
-                  <p className="text-base font-bold text-blue-900">{activeBranch.name}</p>
+                  <p className="text-base font-bold text-blue-900">{activeBranch?.name ?? "—"}</p>
                 </div>
               </div>
               <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">
@@ -581,37 +685,98 @@ export function POSTerminal() {
           {/* ═══════════════════════════════════════════════════════════════════
               STEP 2: EMPTY BRANCH HANDLING
               ═══════════════════════════════════════════════════════════════════ */}
-          {/* Product Grid */}
+          {/* Product Grid - Wrapped in Error Boundary to prevent one bad product from crashing the page */}
           {filteredProducts.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredProducts.map((product) => (
-                <Card
-                  key={product.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => addToCart(product)}
-                >
-                  <CardContent className="p-4">
-                    <div className="relative aspect-square bg-slate-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
-                      {product.image ? (
-                        <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
-                      ) : (
-                        <Package className="w-12 h-12 text-slate-400" />
-                      )}
-                      <Badge 
-                        variant={product.stock > 10 ? "secondary" : "destructive"} 
-                        className={`absolute top-2 right-2 text-[10px] shadow-sm backdrop-blur-sm ${product.stock > 10 ? "bg-white/90 hover:bg-white text-slate-700" : ""}`}
+            <ProductGridErrorBoundary>
+              {console.log('🔍 Rendering products:', filteredProducts.map(p => ({ id: p?.id, name: p?.name, price: p?.price, stock: p?.stock })))}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {filteredProducts.map((product) => {
+                  try {
+                    // ═══════════════════════════════════════════════════════════════════
+                    // NULL CHECK: Skip rendering if product is null/undefined
+                    // ═══════════════════════════════════════════════════════════════════
+                    if (!product || !product.id) {
+                      console.warn('Skipping null/invalid product in grid:', product);
+                      return null;
+                    }
+                    
+                    // Safe access with fallbacks
+                    const isOutOfStock = (product?.stock ?? 0) === 0;
+                    const stock = product?.stock ?? 0;
+                    const productName = product?.name ?? 'Unknown Product';
+                    const productPrice = product?.price ?? 0;
+                    const productImage = product?.image;
+                    
+                    return (
+                      <Card
+                        key={product.id}
+                        className={`h-full flex flex-col transition-all ${
+                          isOutOfStock 
+                            ? 'cursor-not-allowed opacity-50 grayscale' 
+                            : 'cursor-pointer hover:shadow-md'
+                        }`}
+                        onClick={() => {
+                          // ═══════════════════════════════════════════════════════════════════
+                          // NULL CHECK: Prevent crash if product is missing
+                          // ═══════════════════════════════════════════════════════════════════
+                          if (!product || !product.id) {
+                            toast.error('Error', { description: 'Product data is missing' });
+                            return;
+                          }
+                          if (isOutOfStock) {
+                            toast.error('Out of stock', {
+                              description: `${productName} is currently unavailable`,
+                              duration: 2000,
+                            });
+                            return;
+                          }
+                          addToCart(product);
+                        }}
                       >
-                        {product.stock} left
-                      </Badge>
-                    </div>
-                    <h4 className="font-medium mb-1 line-clamp-1 text-[14px]">{product.name}</h4>
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[16px]">{formatCurrency(product.price)}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                        <CardContent className="p-3 flex flex-col h-full">
+                          <div className="relative aspect-square bg-slate-100 rounded-lg mb-2 flex items-center justify-center overflow-hidden flex-shrink-0">
+                            {productImage ? (
+                              <img src={productImage} alt={productName} className="w-full h-full object-contain" />
+                            ) : (
+                              <Package className="w-8 h-8 text-slate-400" />
+                            )}
+                            <Badge 
+                              variant={stock === 0 ? "destructive" : stock > 10 ? "secondary" : "destructive"} 
+                              className={`absolute top-1 right-1 text-[9px] shadow-sm backdrop-blur-sm ${
+                                stock === 0 
+                                  ? "bg-red-600 text-white border-red-700" 
+                                  : stock > 10 
+                                    ? "bg-white/90 hover:bg-white text-slate-700" 
+                                    : ""
+                              }`}
+                            >
+                              {stock === 0 ? "0 left" : `${stock} left`}
+                            </Badge>
+                          </div>
+                          <h4 className={`font-medium mb-1 line-clamp-2 text-xs leading-tight overflow-hidden text-ellipsis ${isOutOfStock ? 'text-slate-500' : ''}`}>
+                            {productName}
+                          </h4>
+                          <div className="mt-auto">
+                            <span className={`font-semibold text-sm ${isOutOfStock ? 'text-slate-400' : ''}`}>
+                              {formatCurrency(productPrice)}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  } catch (renderError) {
+                    console.error('Error rendering product card:', product, renderError);
+                    return (
+                      <Card key={product?.id ?? Math.random()} className="h-full border-red-200 bg-red-50">
+                        <CardContent className="p-3 flex items-center justify-center h-full">
+                          <p className="text-xs text-red-600 text-center">Unable to display product</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+                })}
+              </div>
+            </ProductGridErrorBoundary>
           )}
           
           {/* Empty State: No Products in Selected Branch */}
@@ -625,7 +790,7 @@ export function POSTerminal() {
                   No Products Available
                 </h3>
                 <p className="text-slate-600 mb-1">
-                  The <span className="font-semibold text-slate-900">"{activeBranch.name}"</span> branch has no inventory yet.
+                  The <span className="font-semibold text-slate-900">"{activeBranch?.name ?? 'this'}"</span> branch has no inventory yet.
                 </p>
                 <p className="text-sm text-slate-500 mb-6">
                   Add products to this branch from the Inventory page to start selling.
@@ -672,6 +837,8 @@ export function POSTerminal() {
                 generateFiscalReceipt={generateFiscalReceipt}
                 handleGenerateFiscalReceiptChange={handleGenerateFiscalReceiptChange}
                 handleCheckout={(paymentMethod) => handleCheckout(paymentMethod)}
+                businessId={business?.id}
+                branchId={activeBranchId || undefined}
               />
             </SheetContent>
           </Sheet>
@@ -680,24 +847,28 @@ export function POSTerminal() {
 
       {/* Desktop Cart Panel */}
       <div className="hidden lg:block w-96 border-l border-border bg-white sticky top-0 h-[calc(100vh-4rem)]">
-        <CartPanel
-          isPOSReady={isPOSReady}
-          activeBranch={activeBranch}
-          canChangeBranch={canChangeBranch}
-          validationError={validationError}
-          cart={cart}
-          removeFromCart={removeFromCart}
-          updatePriceTier={updatePriceTier}
-          updateQuantity={updateQuantity}
-          subtotal={subtotal}
-          tax={tax}
-          total={total}
-          customerName={customerName}
-          setCustomerName={setCustomerName}
-          generateFiscalReceipt={generateFiscalReceipt}
-          handleGenerateFiscalReceiptChange={handleGenerateFiscalReceiptChange}
-          handleCheckout={(paymentMethod) => handleCheckout(paymentMethod)}
-        />
+        <ProductGridErrorBoundary>
+          <CartPanel
+            isPOSReady={isPOSReady}
+            activeBranch={activeBranch}
+            canChangeBranch={canChangeBranch}
+            validationError={validationError}
+            cart={cart}
+            removeFromCart={removeFromCart}
+            updatePriceTier={updatePriceTier}
+            updateQuantity={updateQuantity}
+            subtotal={subtotal}
+            tax={tax}
+            total={total}
+            customerName={customerName}
+            setCustomerName={setCustomerName}
+            generateFiscalReceipt={generateFiscalReceipt}
+            handleGenerateFiscalReceiptChange={handleGenerateFiscalReceiptChange}
+            handleCheckout={(paymentMethod) => handleCheckout(paymentMethod)}
+            businessId={business?.id}
+            branchId={activeBranchId || undefined}
+          />
+        </ProductGridErrorBoundary>
       </div>
 
       {/* Success Card */}

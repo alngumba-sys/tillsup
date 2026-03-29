@@ -1,0 +1,71 @@
+════════════════════════════════════════════════════════════════════
+  🚨 PASSWORD RESET NOT WORKING? READ THIS! 🚨
+════════════════════════════════════════════════════════════════════
+
+ERROR YOU'RE SEEING:
+❌ Password reset failed: function gen_salt(unknown, integer) does not exist
+
+
+THIS IS NOT A CODE BUG!
+This is a required one-time database setup.
+
+
+⚡ FASTEST FIX (60 seconds):
+────────────────────────────────────────────────────────────────────
+
+OPEN THIS FILE:
+📄 COPY_PASTE_THIS_SQL.md
+
+It has the SQL code ready to copy-paste into Supabase.
+
+
+OR FOLLOW THESE STEPS:
+────────────────────────────────────────────────────────────────────
+
+1. Go to: https://supabase.com/dashboard
+
+2. Click your Tillsup project
+
+3. Click "SQL Editor" (left sidebar)
+
+4. Click "+ New query" button
+
+5. Open this file in your code editor:
+   📄 supabase_password_reset_FIXED.sql
+
+6. Copy ALL the contents (Ctrl+A, then Ctrl+C)
+
+7. Paste into Supabase SQL Editor (Ctrl+V)
+
+8. Click "Run" button
+
+9. Look for:
+   ✅ pgcrypto extension is enabled
+   ✅ Function simple_reset_staff_password exists
+
+10. Test password reset in Tillsup - IT WORKS! ✅
+
+
+OTHER HELPFUL FILES:
+────────────────────────────────────────────────────────────────────
+📄 COPY_PASTE_THIS_SQL.md       ← EASIEST (has SQL inline)
+📄 FIX_NOW.md                   ← Quick bullet points
+📄 START_HERE_PASSWORD_RESET.md ← Simple guide
+📄 PASSWORD_RESET_FIX_VISUAL_GUIDE.txt ← Visual diagrams
+
+
+TIME NEEDED: 60 seconds
+DIFFICULTY: Copy + Paste
+FREQUENCY: One-time only (never again!)
+
+
+AFTER THIS SETUP:
+────────────────────────────────────────────────────────────────────
+✅ Password reset works perfectly
+✅ No more database errors
+✅ Never have to do this again!
+
+
+════════════════════════════════════════════════════════════════════
+  START HERE: COPY_PASTE_THIS_SQL.md
+════════════════════════════════════════════════════════════════════

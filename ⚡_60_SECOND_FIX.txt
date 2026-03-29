@@ -1,0 +1,56 @@
+========================================
+⚡ 60 SECOND FIX - PASSWORD RESET ERROR
+========================================
+
+ERROR: "function gen_salt does not exist"
+
+FIX:
+----
+
+1. Open: https://supabase.com/dashboard
+   → Click your project
+   → Click "SQL Editor"
+   → Click "+ New query"
+
+2. Copy ALL the SQL from: RUN_THIS_IN_SUPABASE.sql
+
+3. Paste into SQL Editor
+
+4. Click "RUN"
+
+5. Done! ✅
+
+========================================
+
+WHAT YOU'LL SEE:
+✅ CREATE EXTENSION
+✅ CREATE FUNCTION
+✅ GRANT
+
+NOW TEST:
+→ Go to Tillsup
+→ Staff Management
+→ Reset Password
+→ Should work! No error!
+
+========================================
+
+TROUBLESHOOTING:
+→ Error "permission denied"? 
+  Go to Database → Extensions → Enable "pgcrypto"
+  
+→ Still broken?
+  Hard refresh: Ctrl+Shift+R (or Cmd+Shift+R on Mac)
+
+========================================
+
+FILES TO USE:
+1. RUN_THIS_IN_SUPABASE.sql ← THE SQL
+2. FIX_PASSWORD_RESET_NOW.md ← FULL GUIDE
+3. SIMPLE_FIX_CHECKLIST.md ← CHECKLIST
+
+========================================
+TIME: 60 seconds
+DIFFICULTY: Copy & Paste
+RUN ONCE: Never needed again
+========================================

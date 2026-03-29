@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { AlertTriangle, X, ExternalLink, Copy, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, X, ExternalLink, Copy, CircleCheck } from "lucide-react";
 import { Button } from "./ui/button";
 import { isPreviewMode } from "../utils/previewMode";
 
@@ -143,7 +143,7 @@ FOR DELETE USING (
                         href="https://supabase.com/dashboard"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#0891b2] hover:underline inline-flex items-center gap-1"
+                        className="text-[#00719C] hover:underline inline-flex items-center gap-1"
                       >
                         Open Supabase Dashboard <ExternalLink className="w-3 h-3" />
                       </a>
@@ -165,11 +165,11 @@ FOR DELETE USING (
                     <Button
                       onClick={copySQL}
                       size="sm"
-                      className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+                      className="bg-[#00719C] hover:bg-[#00719C]/90"
                     >
                       {copied ? (
                         <>
-                          <CheckCircle2 className="w-4 h-4 mr-1" />
+                          <CircleCheck className="w-4 h-4 mr-1" />
                           Copied!
                         </>
                       ) : (
@@ -183,7 +183,7 @@ FOR DELETE USING (
                   
                   <textarea
                     ref={textareaRef}
-                    className="w-full h-48 p-3 bg-gray-900 text-gray-100 font-mono text-xs rounded border-2 border-gray-700 focus:border-[#0891b2] focus:outline-none resize-none"
+                    className="w-full h-48 p-3 bg-gray-900 text-gray-100 font-mono text-xs rounded border-2 border-gray-700 focus:border-[#00719C] focus:outline-none resize-none"
                     value={sqlFix}
                     onClick={selectAll}
                     readOnly

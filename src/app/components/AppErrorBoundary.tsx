@@ -63,7 +63,7 @@ export class AppErrorBoundary extends Component<Props, State> {
               onClick={() => window.location.reload()}
               style={{
                 padding: '12px 24px',
-                background: '#0891b2',
+                background: '#00719C',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { ShoppingCart, DollarSign, TrendingUp, Users, Database, Info, Crown, AlertCircle, TrendingDown, Receipt } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
+import { ShoppingCart, DollarSign, TrendingUp, Users, Database, Info, Crown, AlertCircle, TrendingDown, Receipt, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Cell } from "recharts";
 import { useKPI } from "../contexts/KPIContext";
 import { useSales } from "../contexts/SalesContext";
 import { useInventory } from "../contexts/InventoryContext";
@@ -21,6 +21,22 @@ import { Package } from "lucide-react";
 import { Building2 } from "lucide-react";
 import { SchemaError } from "../components/inventory/SchemaError";
 import { isPreviewMode } from "../utils/previewMode";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "../components/ui/table";
+import { Input } from "../components/ui/input";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "../components/ui/select";
 
 const salesData = [
   { name: "Mon", sales: 4200 },
@@ -41,17 +57,23 @@ export function Dashboard() {
     addSaleDirectly,
     getTotalRevenueToday,
     getTotalCustomersToday,
-    getDailySales,
     getTotalCOGS
   } = useSales();
   const { inventory } = useInventory();
-  const { user, business, schemaError } = useAuth();
+  const { user, business, schemaError, staffMembers } = useAuth();
   const { usage } = useSubscription();
   const { branches, error: branchError } = useBranch();
   const { expenses } = useExpense();
   const { categories } = useCategory();
   const navigate = useNavigate();
   const [isDemoDataLoaded, setIsDemoDataLoaded] = useState(false);
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // RECENT TRANSACTIONS - Pagination & Search State
+  // ═══════════════════════════════════════════════════════════════════
+  const [transactionSearch, setTransactionSearch] = useState("");
+  const [transactionPage, setTransactionPage] = useState(1);
+  const transactionsPerPage = 10;
 
   // ═══════════════════════════════════════════════════════════════════
   // RBAC: Determine filtering based on role
@@ -371,25 +393,205 @@ export function Dashboard() {
   }, [sales, businessId, staffId, branchId]);
 
   // ═══════════════════════════════════════════════════════════════════
+  // ALL TRANSACTIONS WITH SEARCH, FILTER & PAGINATION
+  // ═══════════════════════════════════════════════════════════════════
+  const allTransactions = useMemo(() => {
+    // Filter sales by role
+    let filteredSales = sales.filter(sale => {
+      if (businessId && sale.businessId !== businessId) return false;
+      if (staffId && sale.staffId !== staffId) return false;
+      if (branchId && sale.branchId !== branchId) return false;
+      return true;
+    });
+
+    // Sort by timestamp (newest first)
+    return filteredSales
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .map(sale => {
+        const timeAgo = getTimeAgo(new Date(sale.timestamp));
+        const displayId = sale.readableId 
+          ? `Order #${sale.readableId.toString().padStart(5, '0')}`
+          : `Order #${sale.id.substring(0, 8).toUpperCase()}`;
+          
+        return {
+          id: sale.id,
+          displayId,
+          customer: sale.customerName || "Walk-in",
+          amount: formatCurrency(sale.total),
+          rawAmount: sale.total,
+          time: timeAgo,
+          paymentMethod: sale.paymentMethod || "Cash",
+          staffName: sale.staffName,
+          timestamp: sale.timestamp
+        };
+      });
+  }, [sales, businessId, staffId, branchId, formatCurrency]);
+
+  // Filtered and paginated transactions
+  const { filteredTransactions, paginatedTransactions, totalPages } = useMemo(() => {
+    // Apply search filter
+    let filtered = allTransactions;
+    
+    if (transactionSearch) {
+      const searchLower = transactionSearch.toLowerCase();
+      filtered = filtered.filter(t => 
+        t.customer.toLowerCase().includes(searchLower) ||
+        t.displayId.toLowerCase().includes(searchLower) ||
+        t.staffName.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Calculate pagination
+    const total = Math.ceil(filtered.length / transactionsPerPage);
+    const startIndex = (transactionPage - 1) * transactionsPerPage;
+    const paginated = filtered.slice(startIndex, startIndex + transactionsPerPage);
+
+    return {
+      filteredTransactions: filtered,
+      paginatedTransactions: paginated,
+      totalPages: total
+    };
+  }, [allTransactions, transactionSearch, transactionPage, transactionsPerPage]);
+
+  // ═══════════════════════════════════════════════════════════════════
   // ROLE-BASED SALES CHART DATA
   // ═══════════════════════════════════════════════════════════════════
   // Prepare chart data - use single data source with absolutely minimal structure
   const weekSalesData = useMemo(() => {
-    const dailySales = getDailySales(7, businessId, staffId, branchId);
-    return dailySales.map((day, idx) => {
-      const weekdayShort = day.dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-      const dateShort = day.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      
-      return {
-        // Use simple index-based name to avoid any duplicate key issues
-        name: `Day ${idx}`,
-        // Display label for X-axis  
-        label: `${weekdayShort} ${dateShort}`,
-        // Sales value
-        sales: day.revenue || 0,
-      };
+    const safeDate = (value: unknown): Date | null => {
+      const date = value instanceof Date ? new Date(value.getTime()) : new Date(value as any);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    const toDayKey = (date: Date) => {
+      const normalized = new Date(date);
+      normalized.setHours(0, 0, 0, 0);
+      // Use local calendar day key (not UTC ISO date) to avoid timezone day-shift bugs.
+      const y = normalized.getFullYear();
+      const m = String(normalized.getMonth() + 1).padStart(2, "0");
+      const d = String(normalized.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const createEmptyBuckets = () => {
+      const buckets: Array<{ dateObj: Date; revenue: number }> = [];
+      const bucketIndexByKey = new Map<string, number>();
+      for (let i = 6; i >= 0; i--) {
+        const dateObj = new Date(today);
+        dateObj.setDate(today.getDate() - i);
+        const key = toDayKey(dateObj);
+        bucketIndexByKey.set(key, buckets.length);
+        buckets.push({ dateObj, revenue: 0 });
+      }
+      return { buckets, bucketIndexByKey };
+    };
+
+    const fillBuckets = (
+      buckets: Array<{ dateObj: Date; revenue: number }>,
+      bucketIndexByKey: Map<string, number>
+    ) => {
+      sales.forEach((sale) => {
+        const saleDate = safeDate(sale.timestamp);
+        if (!saleDate) return;
+
+        const idx = bucketIndexByKey.get(toDayKey(saleDate));
+        if (idx === undefined) return;
+
+        buckets[idx].revenue += Number(sale.total) || 0;
+      });
+    };
+
+    let { buckets, bucketIndexByKey } = createEmptyBuckets();
+    fillBuckets(buckets, bucketIndexByKey);
+
+    const hasAnyRecentSale = sales.some((sale) => {
+      const d = safeDate(sale.timestamp);
+      if (!d) return false;
+      const diffMs = today.getTime() - d.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      return diffDays >= 0 && diffDays < 7;
     });
-  }, [getDailySales, businessId, staffId, branchId]);
+
+    const allZero = buckets.every((b) => b.revenue === 0);
+
+    // Safety net: if we know there are recent sales but everything is zero
+    // (e.g. due to unexpected timestamp formats), reset buckets and try again.
+    if (hasAnyRecentSale && allZero) {
+      const reset = createEmptyBuckets();
+      buckets = reset.buckets;
+      bucketIndexByKey = reset.bucketIndexByKey;
+      fillBuckets(buckets, bucketIndexByKey);
+    }
+
+    return buckets.map((day, idx) => ({
+      // Use simple index-based name to avoid any duplicate key issues
+      name: `Day ${idx}`,
+      // Display label for X-axis
+      label: `${day.dateObj.toLocaleDateString('en-US', { weekday: 'short' })} ${day.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      // Revenue value for the day
+      sales: day.revenue,
+    }));
+  }, [sales, businessId, staffId, branchId]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 7-DAY SPARKLINE DATA — Per-metric daily values for KPI cards
+  // ═══════════════════════════════════════════════════════════════════
+  const sparklineData = useMemo(() => {
+    const safeDate = (value: unknown): Date | null => {
+      const date = value instanceof Date ? new Date(value.getTime()) : new Date(value as any);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    const toDayKey = (date: Date) => {
+      const normalized = new Date(date);
+      normalized.setHours(0, 0, 0, 0);
+      const y = normalized.getFullYear();
+      const m = String(normalized.getMonth() + 1).padStart(2, "0");
+      const d = String(normalized.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const days: Array<{ dateObj: Date; revenue: number; customers: number; products: number }> = [];
+    const dayIndex = new Map<string, number>();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = toDayKey(d);
+      dayIndex.set(key, days.length);
+      days.push({ dateObj: d, revenue: 0, customers: 0, products: 0 });
+    }
+
+    const scopeSales = sales.filter(sale => {
+      if (businessId && sale.businessId !== businessId) return false;
+      if (staffId && sale.staffId !== staffId) return false;
+      if (branchId && sale.branchId !== branchId) return false;
+      return true;
+    });
+
+    scopeSales.forEach(sale => {
+      const sd = safeDate(sale.timestamp);
+      if (!sd) return;
+      const idx = dayIndex.get(toDayKey(sd));
+      if (idx === undefined) return;
+      days[idx].revenue += Number(sale.total) || 0;
+      days[idx].customers += 1;
+      days[idx].products += (sale.items || []).reduce((s: number, item: any) => s + (item.quantity || 0), 0);
+    });
+
+    return days.map(d => ({
+      label: d.dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
+      revenue: d.revenue,
+      customers: d.customers,
+      avgTransaction: d.customers > 0 ? d.revenue / d.customers : 0,
+      products: d.products,
+    }));
+  }, [sales, businessId, staffId, branchId]);
 
   // ═══════════════════════════════════════════════════════════════════
   // CATEGORY AGGREGATION (for Categories chart)
@@ -474,7 +676,8 @@ export function Dashboard() {
       change: baselineMetrics?.customersChange ?? null,
       icon: Users,
       color: "text-blue-600",
-      bgColor: "bg-blue-50"
+      bgColor: "bg-blue-50",
+      sparklineKey: "customers" as const,
     },
     {
       title: user?.role === "Cashier" || user?.role === "Staff" 
@@ -483,16 +686,18 @@ export function Dashboard() {
       value: formatCurrency(roleBasedKPIs.todayRevenue),
       change: baselineMetrics?.revenueChange ?? null,
       icon: DollarSign,
-      color: "text-green-600",
-      bgColor: "bg-green-50"
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
+      sparklineKey: "revenue" as const,
     },
     {
       title: "Average Transaction",
       value: formatCurrency(roleBasedKPIs.averageTransaction),
       change: baselineMetrics?.avgTransactionChange ?? null,
       icon: TrendingUp,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50"
+      color: "text-violet-600",
+      bgColor: "bg-violet-50",
+      sparklineKey: "avgTransaction" as const,
     },
     {
       title: user?.role === "Cashier" || user?.role === "Staff" 
@@ -501,8 +706,9 @@ export function Dashboard() {
       value: roleBasedKPIs.productsSoldToday.toString(),
       change: baselineMetrics?.productsSoldChange ?? null,
       icon: ShoppingCart,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50"
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
+      sparklineKey: "products" as const,
     }
   ];
 
@@ -575,8 +781,8 @@ export function Dashboard() {
 
       {/* Preview Mode Banner */}
       {isPreviewMode() && (
-        <Alert className="border-[#0891b2] bg-[#0891b2]/10">
-          <Info className="h-5 w-5 text-[#0891b2]" />
+        <Alert className="border-[#00719C] bg-[#00719C]/10">
+          <Info className="h-5 w-5 text-[#00719C]" />
           <AlertDescription className="text-sm">
             <span className="font-semibold">Preview Mode Active</span> - You're viewing this app with demo data in Figma Make. 
             All features are functional with mock data. Deploy to Vercel or run locally for full Supabase integration.
@@ -624,12 +830,14 @@ export function Dashboard() {
             {/* Right: Usage & Action */}
             <div className="flex items-center gap-4 w-full sm:w-auto justify-center sm:justify-end">
               <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground">
-                <span title="Branches Used">
-                  <span className="font-medium text-foreground">{branches?.length || 0}</span>/{business.maxBranches} Branches
+                <span title="Active Branches / Total Branches">
+                  <span className="font-medium text-foreground">
+                    {branches?.filter(b => b.status === "active").length || 0}
+                  </span>/{branches?.length || 0} Branches
                 </span>
                 <span className="w-px h-3 bg-border" />
-                <span title="Staff Members">
-                  <span className="font-medium text-foreground">{usage.staff}</span>/{business.maxStaff} Staff
+                <span title="Active Staff / Total Staff">
+                  <span className="font-medium text-foreground">{staffMembers?.length || 0}</span>/{usage.staff} Staff
                 </span>
               </div>
 
@@ -657,16 +865,57 @@ export function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
+      <div className={`grid gap-3 ${
+        user && !staffId && (user.role === "Business Owner" || user.role === "Manager" || user.role === "Accountant")
+          ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-6" 
+          : "grid-cols-2 md:grid-cols-3 lg:grid-cols-6"
+      }`}>
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
           
-          // ══════════════════════════════════════════════════════════════════
-          // BASELINE VISUAL RULES - Apply neutral styling when no baseline
-          // ═══════════════════════════════════════════════════════════════════
           const showNeutralStyle = baselineMetrics && !baselineMetrics.hasBaseline;
-          const displayBgColor = showNeutralStyle ? "bg-gray-50" : kpi.bgColor;
           const displayColor = showNeutralStyle ? "text-gray-600" : kpi.color;
+          
+          // ═══════════════════════════════════════════════════════════════
+          // TREND CALCULATION — ((current - previous) / previous) * 100
+          // Uses sparkline data: last element = today, second-to-last = yesterday
+          // ═══════════════════════════════════════════════════════════════
+          const sparkSeries = sparklineData.map(d => d[kpi.sparklineKey]);
+          const currentVal = sparkSeries[sparkSeries.length - 1] ?? 0;
+          const previousVal = sparkSeries[sparkSeries.length - 2] ?? 0;
+          
+          let trendPct: number = 0;
+          let trendDirection: "up" | "down" | "flat" = "flat";
+          
+          if (previousVal > 0) {
+            trendPct = Math.round(((currentVal - previousVal) / previousVal) * 100);
+            if (trendPct > 0) trendDirection = "up";
+            else if (trendPct < 0) trendDirection = "down";
+          } else if (previousVal === 0 && currentVal > 0) {
+            trendPct = 100;
+            trendDirection = "up";
+          } else if (previousVal === 0 && currentVal === 0) {
+            trendPct = 0;
+            trendDirection = "flat";
+          }
+          
+          const absTrend = Math.abs(trendPct);
+          
+          // Sparkline stroke color matches trend direction
+          const sparkStroke = trendDirection === "up"
+            ? "#10b981"
+            : trendDirection === "down"
+              ? "#f43f5e"
+              : "#94a3b8"; // slate-400 for flat
+          
+          // Trend pill styles
+          const trendPillClass = trendDirection === "up"
+            ? "bg-emerald-50 text-emerald-700"
+            : trendDirection === "down"
+              ? "bg-rose-50 text-rose-700"
+              : "bg-slate-100 text-slate-500";
+          
+          const trendArrow = trendDirection === "up" ? "↑" : trendDirection === "down" ? "↓" : "—";
           
           return (
             <button
@@ -685,25 +934,37 @@ export function Dashboard() {
                 }
               }}
             >
-              <Card className="h-full">
-                <CardContent className="p-3 h-full">
-                  <div className="flex flex-col justify-between h-full">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground leading-tight whitespace-normal">{kpi.title}</p>
-                      <p className="font-semibold text-base leading-tight whitespace-nowrap">{kpi.value}</p>
-                      {/* Only show change text if it exists (not null) */}
-                      {kpi.change && (
-                        <p className={`text-[10px] leading-tight ${showNeutralStyle ? 'text-muted-foreground/80' : 'text-muted-foreground'}`}>
-                          {kpi.change}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-end">
-                      <div className={`w-8 h-8 rounded-lg ${displayBgColor} flex items-center justify-center flex-shrink-0`}>
-                        <Icon className={`w-4 h-4 ${displayColor}`} />
-                      </div>
+              <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardContent className="p-3 h-full flex flex-col justify-center">
+                  {/* Header row: title left, icon right */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-medium text-slate-500 truncate">{kpi.title}</span>
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
+                      showNeutralStyle ? "bg-gray-100" : kpi.bgColor
+                    }`}>
+                      <Icon className={`w-2.5 h-2.5 ${displayColor}`} />
                     </div>
                   </div>
+                  
+                  {/* Main row: metric value + trend pill */}
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="text-lg font-bold text-slate-900 leading-none truncate">{kpi.value}</span>
+                    {!showNeutralStyle && (
+                      <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[8px] font-semibold flex-shrink-0 ${trendPillClass}`}>
+                        {trendArrow} {absTrend}%
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Micro-copy: comparison period */}
+                  <p className="text-[9px] text-slate-400">
+                    {showNeutralStyle
+                      ? "No previous data"
+                      : trendDirection === "flat" && previousVal === 0 && currentVal === 0
+                        ? "No sales yet today"
+                        : "vs yesterday"
+                    }
+                  </p>
                 </CardContent>
               </Card>
             </button>
@@ -721,20 +982,18 @@ export function Dashboard() {
                 setIsKpiDialogOpen(true);
               }}
             >
-              <Card className="h-full">
-                <CardContent className="p-3 h-full">
-                  <div className="flex flex-col justify-between h-full">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground leading-tight whitespace-normal">Today's Expenses</p>
-                      <p className="font-semibold text-red-600 text-base leading-tight whitespace-nowrap">{formatCurrency(roleBasedKPIs.todayExpenses)}</p>
-                      <p className="text-[10px] text-muted-foreground leading-tight">Total expenses recorded</p>
-                    </div>
-                    <div className="flex items-center justify-end">
-                      <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                        <Receipt className="w-4 h-4 text-red-600" />
-                      </div>
+              <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardContent className="p-3 h-full flex flex-col justify-center">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-medium text-slate-500 truncate">Today's Expenses</span>
+                    <div className="w-5 h-5 rounded-md bg-rose-50 flex items-center justify-center flex-shrink-0">
+                      <Receipt className="w-2.5 h-2.5 text-rose-600" />
                     </div>
                   </div>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="text-lg font-bold text-slate-900 leading-none truncate">{formatCurrency(roleBasedKPIs.todayExpenses)}</span>
+                  </div>
+                  <p className="text-[9px] text-slate-400">vs yesterday</p>
                 </CardContent>
               </Card>
             </button>
@@ -747,26 +1006,29 @@ export function Dashboard() {
                 setIsKpiDialogOpen(true);
               }}
             >
-              <Card className="h-full">
-                <CardContent className="p-3 h-full">
-                  <div className="flex flex-col justify-between h-full">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground leading-tight whitespace-normal">Net Profit Today</p>
-                      <p className={`font-semibold ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-green-600' : 'text-red-600'} text-base leading-tight whitespace-nowrap`}>
-                        {formatCurrency(roleBasedKPIs.todayNetProfit)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground leading-tight">Revenue - COGS - Expenses</p>
-                    </div>
-                    <div className={`flex items-center justify-end`}>
-                      <div className={`w-8 h-8 rounded-lg ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-green-50' : 'bg-red-50'} flex items-center justify-center flex-shrink-0`}>
-                        {roleBasedKPIs.todayNetProfit >= 0 ? (
-                          <TrendingUp className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <TrendingDown className="w-4 h-4 text-red-600" />
-                        )}
-                      </div>
+              <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardContent className="p-3 h-full flex flex-col justify-center">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-medium text-slate-500 truncate">Net Profit Today</span>
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${roleBasedKPIs.todayNetProfit >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                      {roleBasedKPIs.todayNetProfit >= 0 ? (
+                        <TrendingUp className="w-2.5 h-2.5 text-emerald-600" />
+                      ) : (
+                        <TrendingDown className="w-2.5 h-2.5 text-rose-600" />
+                      )}
                     </div>
                   </div>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className={`text-lg font-bold leading-none truncate ${roleBasedKPIs.todayNetProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {formatCurrency(roleBasedKPIs.todayNetProfit)}
+                    </span>
+                    {roleBasedKPIs.todayNetProfit >= 0 && (
+                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[8px] font-semibold bg-emerald-50 text-emerald-700 flex-shrink-0">
+                        ↑ Profitable
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-slate-400">Revenue - COGS - Expenses</p>
                 </CardContent>
               </Card>
             </button>
@@ -924,9 +1186,10 @@ export function Dashboard() {
                     key="sales-line"
                     type="monotone" 
                     dataKey="sales" 
-                    stroke="hsl(var(--primary))" 
+                    stroke="#2563eb"
                     strokeWidth={3}
-                    dot={false}
+                    dot={{ r: 4, fill: "#2563eb", stroke: "#ffffff", strokeWidth: 1 }}
+                    activeDot={{ r: 6, fill: "#1d4ed8", stroke: "#ffffff", strokeWidth: 1 }}
                     isAnimationActive={false}
                   />
                 </LineChart>
@@ -952,7 +1215,24 @@ export function Dashboard() {
                     <XAxis dataKey="category" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
                     <YAxis />
                     <Tooltip formatter={(value: number) => [formatCurrency(value), 'Revenue']} />
-                    <Bar dataKey="revenue" fill="hsl(var(--primary))" isAnimationActive={false} />
+                    {/* Use light pastel colors so bars don't look overly dark/black in the UI */}
+                    <Bar dataKey="revenue" isAnimationActive={false}>
+                      {categoriesData.map((_, index) => (
+                        <Cell
+                          key={`category-bar-${index}`}
+                          fill={[
+                            "#93c5fd", // light blue
+                            "#a7f3d0", // light green
+                            "#fbcfe8", // light pink
+                            "#fde68a", // light yellow
+                            "#c4b5fd", // light purple
+                            "#99f6e4", // light teal
+                            "#fecaca", // light red
+                            "#fdba74", // light orange
+                          ][index % 8]}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -964,33 +1244,105 @@ export function Dashboard() {
       {/* Recent Transactions */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Transactions</CardTitle>
-          <CardDescription>Latest customer transactions</CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle>Recent Transactions</CardTitle>
+              <CardDescription>Latest customer transactions</CardDescription>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search transactions..."
+                  value={transactionSearch}
+                  onChange={(e) => {
+                    setTransactionSearch(e.target.value);
+                    setTransactionPage(1);
+                  }}
+                  className="pl-8 w-full sm:w-[250px]"
+                />
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {recentTransactions.map((transaction) => (
-              <div
-                key={transaction.id}
-                className="flex items-center justify-between py-3 border-b border-border last:border-0"
-              >
-                <div className="flex-1">
-                  <p className="font-medium">{transaction.customer}</p>
-                  <p className="text-sm text-muted-foreground">{transaction.displayId} • {transaction.time}</p>
-                  {/* ═══════════════════════════════════════════════════════════════════
-                      SOLD BY (STAFF/CASHIER) - Display who processed the transaction
-                      ══════════════════════════════════════���════════════════════════════ */}
-                  <p className="text-xs text-muted-foreground mt-0.5">Sold by: {transaction.staffName}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">{transaction.amount}</p>
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-50 text-green-700">
-                    {transaction.status}
-                  </span>
-                </div>
+          {paginatedTransactions.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No transactions found.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[180px]">Customer</TableHead>
+                      <TableHead className="w-[140px]">Order #</TableHead>
+                      <TableHead className="w-[120px]">Time</TableHead>
+                      <TableHead className="w-[150px]">Sold By</TableHead>
+                      <TableHead className="w-[100px] text-right">Amount</TableHead>
+                      <TableHead className="w-[120px]">Payment Method</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedTransactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell className="font-medium truncate max-w-[180px]">{transaction.customer}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{transaction.displayId}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{transaction.time}</TableCell>
+                        <TableCell className="text-sm truncate max-w-[150px]">{transaction.staffName}</TableCell>
+                        <TableCell className="font-semibold text-right">{transaction.amount}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                            transaction.paymentMethod === 'MPesa' || transaction.paymentMethod === 'M-Pesa' || transaction.paymentMethod === 'Mpesa'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : transaction.paymentMethod === 'Credit'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-blue-50 text-blue-700'
+                          }`}>
+                            {transaction.paymentMethod}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
-            ))}
-          </div>
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {((transactionPage - 1) * transactionsPerPage) + 1} to {Math.min(transactionPage * transactionsPerPage, filteredTransactions.length)} of {filteredTransactions.length} transactions
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTransactionPage(p => Math.max(1, p - 1))}
+                      disabled={transactionPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <div className="text-sm">
+                      Page {transactionPage} of {totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTransactionPage(p => Math.min(totalPages, p + 1))}
+                      disabled={transactionPage === totalPages}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 

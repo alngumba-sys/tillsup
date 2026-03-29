@@ -141,10 +141,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      // RBAC: Non-owner staff are scoped to their assigned branch
+      let query = supabase
         .from('inventory')
         .select('*')
         .eq('business_id', business.id);
+
+      if (user && user.role !== 'Business Owner' && user.branchId) {
+        query = query.eq('branch_id', user.branchId);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         console.error("Error fetching inventory:", fetchError);
@@ -161,7 +168,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const mappedInventory: InventoryItem[] = data.map((item: any) => ({
           id: item.id,
           name: item.name,
-          category: item.category,
+          // Handle category - could be a string ID, an object, or null
+          category: typeof item.category === 'object' 
+            ? item.category?.id ?? item.category?.name ?? '' 
+            : (item.category ?? ''),
           price: Number(item.retail_price || item.price || 0),
           stock: Number(item.stock || 0),
           sku: item.sku || "",

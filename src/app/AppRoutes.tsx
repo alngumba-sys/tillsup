@@ -24,6 +24,12 @@ import { AIInsights } from "./pages/AIInsights";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { LocationManagement } from "./pages/LocationManagement";
 import { StockTransferHistory } from "./pages/StockTransferHistory";
+import { SubscriptionExpired } from "./pages/SubscriptionExpired";
+import { SubscriptionSuspended } from "./pages/SubscriptionSuspended";
+import { SubscriptionCancelled } from "./pages/SubscriptionCancelled";
+import { SubscriptionPastDue } from "./pages/SubscriptionPastDue";
+import { PaymentSuccess } from "./pages/PaymentSuccess";
+import { Unauthorized } from "./pages/Unauthorized";
 
 // Auth Pages
 import { Login } from "./pages/Login";
@@ -56,6 +62,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BusinessProviders } from "./components/BusinessProviders";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthenticatedLayout } from "./components/AuthenticatedLayout";
+import { PermissionGuard } from "./components/PermissionGuard";
+import { Permission } from "./types/permissions";
 
 export const router = createBrowserRouter([
   {
@@ -134,6 +142,31 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
+    path: "/subscription-expired",
+    element: <SubscriptionExpired />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/subscription-suspended",
+    element: <SubscriptionSuspended />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/subscription-cancelled",
+    element: <SubscriptionCancelled />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/subscription-past-due",
+    element: <SubscriptionPastDue />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/payment-success",
+    element: <PaymentSuccess />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: "/change-password",
     element: (
       <ProtectedRoute>
@@ -158,6 +191,11 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
+    path: "/unauthorized",
+    element: <Unauthorized />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: "/app",
     element: <AuthenticatedLayout />,
     errorElement: <ErrorBoundary />,
@@ -172,59 +210,156 @@ export const router = createBrowserRouter([
       },
       {
         path: "pos",
-        element: <POSTerminal />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Cashier", "Staff"]}
+            requiredPermission={"pos.access" as Permission}
+          >
+            <POSTerminal />
+          </PermissionGuard>
+        ),
       },
       {
         path: "inventory",
-        element: <Inventory />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager"]}
+            requiredPermission={"inventory.view" as Permission}
+          >
+            <Inventory />
+          </PermissionGuard>
+        ),
       },
       {
         path: "staff",
-        element: <Staff />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Cashier", "Accountant", "Staff"]}
+            requiredPermission={"staff.view" as Permission}
+          >
+            <Staff />
+          </PermissionGuard>
+        ),
       },
       {
         path: "reports",
-        element: <Reports />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Accountant"]}
+            requiredPermission={"reports.view_sales" as Permission}
+          >
+            <Reports />
+          </PermissionGuard>
+        ),
       },
       {
         path: "reports-enhanced",
-        element: <ReportsEnhanced />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Accountant"]}
+            requiredPermission={"reports.view_sales" as Permission}
+          >
+            <ReportsEnhanced />
+          </PermissionGuard>
+        ),
       },
       {
         path: "expenses",
-        element: <Expenses />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Accountant"]}
+            requiredPermission={"expenses.view" as Permission}
+          >
+            <Expenses />
+          </PermissionGuard>
+        ),
       },
       {
         path: "suppliers",
-        element: <Suppliers />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Staff"]}
+            requiredPermission={"suppliers.view" as Permission}
+          >
+            <Suppliers />
+          </PermissionGuard>
+        ),
       },
       {
         path: "supplier-management",
-        element: <SupplierManagement />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Staff"]}
+            requiredPermission={"suppliers.view" as Permission}
+          >
+            <SupplierManagement />
+          </PermissionGuard>
+        ),
       },
       {
         path: "supplier-requests",
-        element: <SupplierRequests />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Staff"]}
+            requiredPermission={"suppliers.view" as Permission}
+          >
+            <SupplierRequests />
+          </PermissionGuard>
+        ),
       },
       {
         path: "purchase-orders",
-        element: <PurchaseOrders />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Staff"]}
+            requiredPermission={"suppliers.manage_orders" as Permission}
+          >
+            <PurchaseOrders />
+          </PermissionGuard>
+        ),
       },
       {
         path: "goods-received",
-        element: <GoodsReceived />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager", "Staff"]}
+            requiredPermission={"suppliers.manage_orders" as Permission}
+          >
+            <GoodsReceived />
+          </PermissionGuard>
+        ),
       },
       {
         path: "subscription",
-        element: <SubscriptionBilling />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner"]}
+          >
+            <SubscriptionBilling />
+          </PermissionGuard>
+        ),
       },
       {
         path: "business-settings",
-        element: <BusinessSettings />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner"]}
+            requiredPermission={"settings.view" as Permission}
+          >
+            <BusinessSettings />
+          </PermissionGuard>
+        ),
       },
       {
         path: "branch-management",
-        element: <BranchManagement />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner"]}
+            requiredPermission={"settings.manage_branches" as Permission}
+          >
+            <BranchManagement />
+          </PermissionGuard>
+        ),
       },
       {
         path: "onboarding",
@@ -232,19 +367,46 @@ export const router = createBrowserRouter([
       },
       {
         path: "forecasting",
-        element: <ReorderForecasting />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager"]}
+            requiredPermission={"inventory.view" as Permission}
+          >
+            <ReorderForecasting />
+          </PermissionGuard>
+        ),
       },
       {
         path: "ai-insights",
-        element: <AIInsights />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager"]}
+            requiredPermission={"reports.view_sales" as Permission}
+          >
+            <AIInsights />
+          </PermissionGuard>
+        ),
       },
       {
         path: "location-management",
-        element: <LocationManagement />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner"]}
+          >
+            <LocationManagement />
+          </PermissionGuard>
+        ),
       },
       {
         path: "stock-transfer-history",
-        element: <StockTransferHistory />,
+        element: (
+          <PermissionGuard
+            requiredRoles={["Business Owner", "Manager"]}
+            requiredPermission={"inventory.view" as Permission}
+          >
+            <StockTransferHistory />
+          </PermissionGuard>
+        ),
       },
     ],
   },

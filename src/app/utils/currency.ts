@@ -11,13 +11,28 @@
  * @param currencyCode - ISO 4217 currency code (default: "KES")
  * @returns Formatted currency string (e.g., "KES 1,250.00" or "$1,250.00")
  */
-export function formatCurrency(amount: number | string, currencyCode: string = "KES"): string {
+export function formatCurrency(amount: number | string | null | undefined, currencyCode: string = "KES"): string {
+  // Handle null, undefined, and invalid inputs
+  if (amount === null || amount === undefined || amount === '') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(0);
+  }
+  
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
   
-  if (isNaN(numAmount)) return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currencyCode,
-  }).format(0);
+  // Handle NaN, Infinity, and -Infinity
+  if (isNaN(numAmount) || !isFinite(numAmount)) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(0);
+  }
 
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

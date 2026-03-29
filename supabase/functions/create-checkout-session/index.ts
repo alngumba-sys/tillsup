@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@12.0.0?target=deno"
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
+const stripeSecret = Deno.env.get('STRIPE_SECRET_KEY') ?? ''
+const stripe = new Stripe(stripeSecret, {
   apiVersion: '2022-11-15',
   httpClient: Stripe.createFetchHttpClient(),
 })
@@ -12,28 +13,45 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { priceId, customerId, successUrl, cancelUrl } = await req.json()
+    const { priceId, businessId, planId, billingCycle, country, successUrl, cancelUrl } = await req.json()
+
+    if (!priceId) {
+      throw new Error('priceId is required')
+    }
 
     // Create a Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
-          price: priceId, // The ID of the price object created in Stripe Dashboard
+          price: priceId,
           quantity: 1,
         },
       ],
       mode: 'subscription',
-      success_url: successUrl || `${req.headers.get('origin')}/app/subscription?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl || `${req.headers.get('origin')}/app/subscription`,
-      customer: customerId, // Optional: if you have a Stripe Customer ID for the user
-      // automatic_tax: { enabled: true },
+      success_url: successUrl || `${req.headers.get('origin')}/app/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancelUrl || `${req.headers.get('origin')}/app/subscription?canceled=true`,
+      // Include business metadata so the webhook knows which business to update
+      metadata: {
+        business_id: businessId ?? '',
+        plan_id: planId ?? 'Basic',
+        billing_cycle: billingCycle ?? 'monthly',
+        country: country ?? 'KE',
+      },
+      // Also attach to the subscription for invoice.paid events
+      subscription_data: {
+        metadata: {
+          business_id: businessId ?? '',
+          plan_id: planId ?? 'Basic',
+          billing_cycle: billingCycle ?? 'monthly',
+        },
+      },
     })
 
     return new Response(

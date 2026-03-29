@@ -1,9 +1,11 @@
-import { createContext, useContext, useState, ReactNode, useEffect, useMemo } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import { supabase } from "../../lib/supabase";
 import { isPreviewMode } from "../utils/previewMode";
 
-console.log("BranchContext module loaded - v3.0 - Supabase Persistence Only");
+const BRANCH_STORAGE_KEY = 'tillsup_selected_branch_id';
+
+console.log("BranchContext module loaded - v3.1 - localStorage persistence + auto-select");
 
 // ═══════════════════════════════════════════════════════════════════
 // BRANCH DATA MODEL
@@ -59,9 +61,30 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const user = authContext?.user || null;
   
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [selectedBranchId, _setSelectedBranchId] = useState<string | null>(() => {
+    // Initialize from localStorage
+    try {
+      return localStorage.getItem(BRANCH_STORAGE_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<any>(null);
+
+  // Persist selectedBranchId to localStorage whenever it changes
+  const setSelectedBranchId = useCallback((branchId: string | null) => {
+    _setSelectedBranchId(branchId);
+    try {
+      if (branchId) {
+        localStorage.setItem(BRANCH_STORAGE_KEY, branchId);
+      } else {
+        localStorage.removeItem(BRANCH_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn("Failed to persist branch selection to localStorage:", e);
+    }
+  }, []);
 
   // Create a default branch if none exists
   const createDefaultBranch = async (businessId: string) => {
@@ -135,11 +158,18 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      // RBAC: Non-owner staff are scoped to only see their assigned branch
+      let query = supabase
         .from('branches')
         .select('id, business_id, name, location, status, created_at, latitude, longitude, geofence_radius')
         .eq('business_id', business.id)
         .order('created_at', { ascending: true });
+
+      if (user && user.role !== 'Business Owner' && user.branchId) {
+        query = query.eq('id', user.branchId);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         console.error("Error fetching branches:", fetchError);
@@ -185,23 +215,38 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   // STRICT BRANCH ENFORCEMENT & SELECTION
   // ═══════════════════════════════════════════════════════════════════
   useEffect(() => {
-    if (user && !isLoading) {
-      if (user.role === "Business Owner") {
-        // Business Owner: Can access all branches
-        // If no branch selected, and branches exist, select the first one
-        // Note: Removed localStorage persistence. Defaults to first active branch.
-        if (!selectedBranchId && allBranches.length > 0) {
-            const firstActive = allBranches.find(b => b.status === "active");
-            if (firstActive) setSelectedBranchId(firstActive.id);
-        }
-      } else if (user.branchId) {
-        // Manager/Staff/Cashier: LOCKED to their assigned branch
-        if (selectedBranchId !== user.branchId) {
-          setSelectedBranchId(user.branchId);
+    if (!user || isLoading) return;
+
+    if (user.role === "Business Owner") {
+      // STEP 1: Clear stale localStorage cache — validate against fetched branches
+      if (selectedBranchId && allBranches.length > 0) {
+        const branchExists = allBranches.some(b => b.id === selectedBranchId);
+        if (!branchExists) {
+          console.warn("Stale branch ID detected, clearing localStorage:", selectedBranchId);
+          try { localStorage.removeItem(BRANCH_STORAGE_KEY); } catch {}
+          _setSelectedBranchId(null);
+          return; // Re-run after state update
         }
       }
+
+      // STEP 2: If no valid branch selected, auto-select first active
+      if (!selectedBranchId && allBranches.length > 0) {
+        const firstActive = allBranches.find(b => b.status === "active");
+        if (firstActive) {
+          console.log("Auto-selecting first active branch:", firstActive.name);
+          setSelectedBranchId(firstActive.id);
+        } else {
+          // No active branches, select first regardless of status
+          setSelectedBranchId(allBranches[0].id);
+        }
+      }
+    } else if (user.branchId) {
+      // Manager/Staff/Cashier: LOCKED to their assigned branch
+      if (selectedBranchId !== user.branchId) {
+        setSelectedBranchId(user.branchId);
+      }
     }
-  }, [user, selectedBranchId, allBranches, isLoading]);
+  }, [user, selectedBranchId, allBranches, isLoading, setSelectedBranchId]);
 
   // ───────────────────────────────────────────────────────────────
   // CREATE BRANCH (Business Owner Only)
@@ -268,13 +313,20 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         }
         
         return { success: false, error: error.message, errorCode: error.code };
+
       }
 
       await refreshBranches();
+      
+      // Auto-select the newly created branch
+      if (data) {
+        setSelectedBranchId(data.id);
+      }
+      
       return { success: true, branchId: data.id };
     } catch (err: any) {
       console.error("Unexpected error creating branch:", err);
-      return { success: false, error: "Unexpected error occurred" };
+      return { success: false, error: err?.message || "Unexpected error occurred", errorCode: err?.code };
     }
   };
 
@@ -327,6 +379,26 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       }
 
       await refreshBranches();
+      
+      // Auto-switch to next active branch if the currently selected branch is being deactivated
+      if (updates.status === "inactive" && branchId === selectedBranchId) {
+        const otherActiveBranches = allBranches.filter(
+          b => b.id !== branchId && b.status === "active"
+        );
+        if (otherActiveBranches.length > 0) {
+          console.log("Auto-switching to next active branch after deactivation:", otherActiveBranches[0].name);
+          setSelectedBranchId(otherActiveBranches[0].id);
+        } else {
+          // No other active branches, select first available (even if inactive)
+          const otherBranches = allBranches.filter(b => b.id !== branchId);
+          if (otherBranches.length > 0) {
+            setSelectedBranchId(otherBranches[0].id);
+          } else {
+            setSelectedBranchId(null);
+          }
+        }
+      }
+      
       return { success: true };
     } catch (err: any) {
       return { success: false, error: "Unexpected error" };

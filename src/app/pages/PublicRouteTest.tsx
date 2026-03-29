@@ -103,7 +103,7 @@ export function PublicRouteTest() {
             onClick={() => navigate('/')}
             style={{
               padding: '1rem',
-              background: '#0891b2',
+              background: '#00719C',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -118,7 +118,7 @@ export function PublicRouteTest() {
             onClick={() => navigate('/login')}
             style={{
               padding: '1rem',
-              background: '#0891b2',
+              background: '#00719C',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -133,7 +133,7 @@ export function PublicRouteTest() {
             onClick={() => navigate('/diagnostic')}
             style={{
               padding: '1rem',
-              background: '#0891b2',
+              background: '#00719C',
               color: 'white',
               border: 'none',
               borderRadius: '8px',

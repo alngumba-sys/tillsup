@@ -162,10 +162,15 @@ export function Layout() {
                 const Icon = item.icon;
                 const accessible = hasAccess(item.roles, item.permission);
                 const active = isActive(item.path);
-                
+
                 // Check feature access
                 // @ts-ignore
                 const isFeatureLocked = item.feature ? !hasFeature(item.feature) : false;
+
+                // Hide menu items the user does NOT have permission to access
+                if (!accessible && !isFeatureLocked) {
+                  return null;
+                }
 
                 const handleClick = () => {
                   if (isFeatureLocked) {
@@ -189,28 +194,27 @@ export function Layout() {
                     variant="ghost"
                     className={cn(
                       "w-full justify-start gap-3 relative group transition-all duration-200",
-                      !accessible && "opacity-50 cursor-not-allowed",
-                      
+
                       // Active State: Bright white, distinct background
                       active && "bg-white/20 text-white font-semibold shadow-sm",
-                      
+
                       // Normal Inactive State (Accessible, Not Locked, Not Active): Clear white text (70%)
                       !active && !isFeatureLocked && "text-white/70 hover:text-white hover:bg-white/10",
-                      
+
                       // Locked State: Dimmer text (30%)
                       isFeatureLocked && "text-white/30 hover:text-white/50 hover:bg-white/5"
                     )}
                     onClick={handleClick}
-                    disabled={!accessible && !isFeatureLocked}
+                    disabled={isFeatureLocked && !accessible}
                   >
                     <div className="relative">
                       <Icon className="w-5 h-5" />
                     </div>
-                    
+
                     <span className="flex-1 text-left">
                       {item.label}
                     </span>
-                    
+
                     {isFeatureLocked && (
                       <Lock className="w-3.5 h-3.5 ml-auto" />
                     )}
@@ -232,7 +236,7 @@ export function Layout() {
                   <p className="text-xs text-white/70 mb-1">Assigned Branch</p>
                   <div className="flex items-center gap-1">
                     <Building2 className="w-3 h-3 text-white" />
-                    <span className="text-xs font-medium text-white">{currentBranch.name}</span>
+                    <span className="text-xs font-medium text-white">{currentBranch?.name ?? '—'}</span>
                   </div>
                 </div>
               )}
@@ -279,12 +283,17 @@ export function Layout() {
                 <nav className="space-y-1">
                   {menuItems.map((item) => {
                     const Icon = item.icon;
-                    const accessible = hasAccess(item.roles);
+                    const accessible = hasAccess(item.roles, item.permission);
                     const active = isActive(item.path);
-                    
+
                     // Check feature access
                     // @ts-ignore
                     const isFeatureLocked = item.feature ? !hasFeature(item.feature) : false;
+
+                    // Hide menu items the user does NOT have permission to access
+                    if (!accessible && !isFeatureLocked) {
+                      return null;
+                    }
 
                     const handleClick = () => {
                       if (isFeatureLocked) {
@@ -312,28 +321,27 @@ export function Layout() {
                         variant="ghost"
                         className={cn(
                           "w-full justify-start gap-3 relative group transition-all duration-200",
-                          !accessible && "opacity-50 cursor-not-allowed",
-                          
+
                           // Active State
                           active && "bg-white/20 text-white font-semibold shadow-sm",
-                          
+
                           // Normal Inactive State
                           !active && !isFeatureLocked && "text-white/70 hover:text-white hover:bg-white/10",
-                          
+
                           // Locked State
                           isFeatureLocked && "text-white/30 hover:text-white/50 hover:bg-white/5"
                         )}
                         onClick={handleClick}
-                        disabled={!accessible && !isFeatureLocked}
+                        disabled={isFeatureLocked && !accessible}
                       >
                         <div className="relative">
                           <Icon className="w-5 h-5" />
                         </div>
-                        
+
                         <span className="flex-1 text-left">
                           {item.label}
                         </span>
-                        
+
                         {isFeatureLocked && (
                           <Lock className="w-3.5 h-3.5 ml-auto" />
                         )}
@@ -354,7 +362,7 @@ export function Layout() {
                       <p className="text-xs text-white/70 mb-1">Assigned Branch</p>
                       <div className="flex items-center gap-1">
                         <Building2 className="w-3 h-3 text-white" />
-                        <span className="text-xs font-medium text-white">{currentBranch.name}</span>
+                        <span className="text-xs font-medium text-white">{currentBranch?.name ?? '—'}</span>
                       </div>
                     </div>
                   )}

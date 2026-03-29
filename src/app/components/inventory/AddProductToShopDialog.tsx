@@ -24,7 +24,7 @@ import {
 } from "../ui/select";
 import { Badge } from "../ui/badge";
 import { Alert, AlertDescription } from "../ui/alert";
-import { Warehouse, Store, Package, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Warehouse, Store, Package, AlertTriangle, CircleCheck } from "lucide-react";
 import { useLocation } from "../../contexts/LocationContext";
 import { useInventory } from "../../contexts/InventoryContext";
 import { StockTransferConfirmation } from "./StockTransferConfirmation";
@@ -144,7 +144,7 @@ export function AddProductToShopDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Store className="w-5 h-5 text-[#0891b2]" />
+              <Store className="w-5 h-5 text-[#00719C]" />
               Add Product to Shop
             </DialogTitle>
             <DialogDescription>
@@ -209,7 +209,7 @@ export function AddProductToShopDialog({
                 </Select>
                 {selectedWarehouseId && (
                   <div className="text-xs text-slate-500">
-                    Available stock: <span className="font-semibold text-[#0891b2]">{warehouseStock} units</span>
+                    Available stock: <span className="font-semibold text-[#00719C]">{warehouseStock} units</span>
                   </div>
                 )}
               </div>
@@ -250,7 +250,7 @@ export function AddProductToShopDialog({
 
               {/* Info Alert */}
               <Alert>
-                <CheckCircle2 className="w-4 h-4 text-[#0891b2]" />
+                <CircleCheck className="w-4 h-4 text-[#00719C]" />
                 <AlertDescription className="text-sm">
                   <div className="font-semibold mb-1">Warehouse-First Inventory</div>
                   <div>
@@ -267,7 +267,7 @@ export function AddProductToShopDialog({
                 <Button
                   type="submit"
                   disabled={!canTransfer}
-                  className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+                  className="bg-[#00719C] hover:bg-[#00719C]/90"
                 >
                   Continue
                 </Button>

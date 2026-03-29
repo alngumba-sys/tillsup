@@ -27,8 +27,14 @@ import {
   Sun,
   Palette,
   DollarSign,
-  Layers
+  Layers,
+  Crown,
+  CheckCircle,
+  AlertCircle,
+  Save,
+  Calendar
 } from "lucide-react";
+import { NumericInput } from "../components/ui/NumericInput";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -42,6 +48,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "../components/ui/dialog";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import { COUNTRIES } from "../utils/countries";
+import { calculateSubscriptionStatus, getBadgeClassName, SubscriptionStatus } from "../utils/subscriptionStatus";
 
 interface BusinessData {
   id: string;
@@ -53,7 +60,9 @@ interface BusinessData {
   sales_count: number;
   total_volume: number;
   last_active: string | null;
-  status: "active" | "trial" | "expired";
+  status: "active" | "trial" | "expired" | "trial_extended" | "past_due" | "suspended" | "cancelled";
+  trial_ends_at: string | null;
+  subscription_plan: string | null;
 }
 
 type SortConfig = {
@@ -209,14 +218,76 @@ export function AdminDashboard() {
     }
   };
 
-  // Pricing State - Load from localStorage or use defaults
-  const [pricingData, setPricingData] = useState<Record<string, any>>(() => {
-    const saved = localStorage.getItem('tillsup-pricing-data');
-    if (saved) {
+  // Pricing State - Load from Supabase or localStorage
+  const [pricingData, setPricingData] = useState<Record<string, any>>({});
+  const [loadingPricing, setLoadingPricing] = useState(true);
+
+  useEffect(() => {
+    const loadPricing = async () => {
       try {
-        return JSON.parse(saved);
-      } catch {
-        return {
+        // Try to load from Supabase first
+        const { data, error } = await supabase
+          .from('platform_settings')
+          .select('value')
+          .eq('key', 'subscription_pricing')
+          .single();
+
+        if (data && data.value) {
+          setPricingData(JSON.parse(data.value));
+        } else {
+          // Fall back to localStorage
+          const saved = localStorage.getItem('tillsup-pricing-data');
+          if (saved) {
+            setPricingData(JSON.parse(saved));
+          } else {
+            // Use default values
+            setPricingData({
+              KE: { 
+                basic_monthly: 999, 
+                basic_quarterly: 2697, 
+                basic_annual: 9588,
+                professional_monthly: 2499, 
+                professional_quarterly: 6747,
+                professional_annual: 23988,
+                ultra_monthly: 4999,
+                ultra_quarterly: 13497,
+                ultra_annual: 47988,
+                quarterly_discount: 10,
+                annual_discount: 20
+              },
+              GH: { 
+                basic_monthly: 150, 
+                basic_quarterly: 405,
+                basic_annual: 1440,
+                professional_monthly: 350, 
+                professional_quarterly: 945,
+                professional_annual: 3360,
+                ultra_monthly: 700,
+                ultra_quarterly: 1890,
+                ultra_annual: 6720,
+                quarterly_discount: 10,
+                annual_discount: 20
+              },
+              ET: { 
+                basic_monthly: 500, 
+                basic_quarterly: 1350,
+                basic_annual: 4800,
+                professional_monthly: 1200, 
+                professional_quarterly: 3240,
+                professional_annual: 11520,
+                ultra_monthly: 2500,
+                ultra_quarterly: 6750,
+                ultra_annual: 24000,
+                quarterly_discount: 10,
+                annual_discount: 20
+              },
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error loading pricing:', error);
+        // Use default values on error
+        setPricingData({
           KE: { 
             basic_monthly: 999, 
             basic_quarterly: 2697, 
@@ -224,6 +295,9 @@ export function AdminDashboard() {
             professional_monthly: 2499, 
             professional_quarterly: 6747,
             professional_annual: 23988,
+            ultra_monthly: 4999,
+            ultra_quarterly: 13497,
+            ultra_annual: 47988,
             quarterly_discount: 10,
             annual_discount: 20
           },
@@ -234,6 +308,9 @@ export function AdminDashboard() {
             professional_monthly: 350, 
             professional_quarterly: 945,
             professional_annual: 3360,
+            ultra_monthly: 700,
+            ultra_quarterly: 1890,
+            ultra_annual: 6720,
             quarterly_discount: 10,
             annual_discount: 20
           },
@@ -244,47 +321,28 @@ export function AdminDashboard() {
             professional_monthly: 1200, 
             professional_quarterly: 3240,
             professional_annual: 11520,
+            ultra_monthly: 2500,
+            ultra_quarterly: 6750,
+            ultra_annual: 24000,
             quarterly_discount: 10,
             annual_discount: 20
           },
-        };
+        });
+      } finally {
+        setLoadingPricing(false);
       }
-    }
-    return {
-      KE: { 
-        basic_monthly: 999, 
-        basic_quarterly: 2697, 
-        basic_annual: 9588,
-        professional_monthly: 2499, 
-        professional_quarterly: 6747,
-        professional_annual: 23988,
-        quarterly_discount: 10,
-        annual_discount: 20
-      },
-      GH: { 
-        basic_monthly: 150, 
-        basic_quarterly: 405,
-        basic_annual: 1440,
-        professional_monthly: 350, 
-        professional_quarterly: 945,
-        professional_annual: 3360,
-        quarterly_discount: 10,
-        annual_discount: 20
-      },
-      ET: { 
-        basic_monthly: 500, 
-        basic_quarterly: 1350,
-        basic_annual: 4800,
-        professional_monthly: 1200, 
-        professional_quarterly: 3240,
-        professional_annual: 11520,
-        quarterly_discount: 10,
-        annual_discount: 20
-      },
     };
-  });
+
+    loadPricing();
+  }, []);
   const [selectedPricingCountry, setSelectedPricingCountry] = useState('KE');
   const [savingPricing, setSavingPricing] = useState(false);
+  
+  // Extend Subscription Modal State
+  const [extendModalOpen, setExtendModalOpen] = useState(false);
+  const [selectedBusiness, setSelectedBusiness] = useState<BusinessData | null>(null);
+  const [extendDays, setExtendDays] = useState('');
+  const [extendingSubscription, setExtendingSubscription] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -313,7 +371,9 @@ export function AdminDashboard() {
           owner_id,
           country, 
           created_at, 
-          subscription_status
+          subscription_status,
+          trial_ends_at,
+          subscription_plan
         `);
 
       if (bizError) {
@@ -429,8 +489,15 @@ export function AdminDashboard() {
           console.warn("Failed to fetch sales for stats", e); 
       }
 
-      // 4. Map Data
+      // 4. Map Data - use unified status calculation
       const mappedBusinesses: BusinessData[] = businessesData.map((b: any) => {
+        // Use unified status calculation
+        const statusResult = calculateSubscriptionStatus({
+          subscription_status: b.subscription_status,
+          trial_ends_at: b.trial_ends_at,
+          subscription_end_date: b.subscription_end_date
+        });
+
         const mapped = {
           id: b.id,
           name: b.name || "Unnamed Business",
@@ -441,13 +508,14 @@ export function AdminDashboard() {
           sales_count: salesCounts[b.id] || 0,
           total_volume: volumeCounts[b.id] || 0,
           last_active: lastActiveDates[b.id] || null,
-          status: b.subscription_status === 'active' ? 'active' : 'trial'
+          status: statusResult.status as any,
+          trial_ends_at: b.trial_ends_at,
+          subscription_plan: b.subscription_plan
         };
         console.log(`Admin Dashboard - Mapped business ${b.name}:`, {
-          owner_id: b.owner_id,
-          profile_found: !!profilesMap[b.owner_id],
-          mapped_owner: mapped.owner_name,
-          mapped_phone: mapped.owner_phone
+          db_status: b.subscription_status,
+          calculated_status: statusResult.status,
+          days_remaining: statusResult.daysRemaining
         });
         return mapped;
       });
@@ -735,6 +803,52 @@ export function AdminDashboard() {
     return assets.find(a => a.name.startsWith(slotId));
   };
 
+  // Export business data to CSV
+  const handleExportData = () => {
+    try {
+      // Create CSV headers
+      const headers = ['Business Name', 'Owner', 'Phone', 'Country', 'Status', 'Subscription Plan', 'Total Volume', 'Sales Count', 'Registered', 'Last Active', 'Expiry Date'];
+      
+      // Create CSV rows using processedData (which includes all current filters)
+      const rows = processedData.map(biz => [
+        biz.name,
+        biz.owner_name,
+        biz.owner_phone,
+        biz.country,
+        biz.status,
+        biz.subscription_plan || 'N/A',
+        biz.total_volume,
+        biz.sales_count,
+        new Date(biz.created_at).toLocaleDateString(),
+        biz.last_active ? formatTimeAgo(biz.last_active) : 'Never',
+        biz.trial_ends_at ? new Date(biz.trial_ends_at).toLocaleDateString() : 'N/A'
+      ]);
+      
+      // Combine headers and rows
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+      
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `businesses_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(url);
+      
+      toast.success(`Exported ${processedData.length} businesses to CSV`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data');
+    }
+  };
+
   return (
     <div className={`min-h-screen ${bgClass} text-slate-50 font-sans`}>
       {/* Top Bar */}
@@ -861,7 +975,7 @@ export function AdminDashboard() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
                       placeholder="Search businesses..."
-                      className="pl-9 bg-slate-950/30 border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500/50"
+                      className="pl-9 bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-indigo-500"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -870,39 +984,43 @@ export function AdminDashboard() {
                   <div className="flex items-center gap-2">
                      <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" className="gap-2 bg-slate-950/30 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white">
+                          <Button variant="outline" className="gap-2 bg-white border-gray-300 text-gray-700 hover:bg-gray-50">
                             <Filter className="w-4 h-4" />
                             Filters
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-80 bg-slate-900 border-white/10 text-white">
+                        <PopoverContent className="w-80 bg-white border-gray-200 text-gray-900 shadow-lg">
                           <div className="grid gap-4">
                             <div className="space-y-2">
                               <h4 className="font-medium leading-none">Filter Businesses</h4>
-                              <p className="text-sm text-slate-400">Apply filters to refine the list</p>
+                              <p className="text-sm text-gray-500">Apply filters to refine the list</p>
                             </div>
                             <div className="grid gap-2">
                               <div className="grid grid-cols-3 items-center gap-4">
-                                <Label htmlFor="status">Status</Label>
+                                <Label htmlFor="status" className="text-gray-700">Status</Label>
                                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                  <SelectTrigger className="col-span-2 h-8">
+                                  <SelectTrigger className="col-span-2 h-8 bg-white border-gray-300 text-gray-900">
                                     <SelectValue placeholder="Select status" />
                                   </SelectTrigger>
-                                  <SelectContent>
+                                  <SelectContent className="bg-white border-gray-200">
                                     <SelectItem value="all">All Statuses</SelectItem>
                                     <SelectItem value="active">Active</SelectItem>
                                     <SelectItem value="trial">Trial</SelectItem>
-                                    <SelectItem value="expired">Expired</SelectItem>
+                                    <SelectItem value="trial_expired">Trial Expired</SelectItem>
+                                    <SelectItem value="trial_extended">Trial Extended</SelectItem>
+                                    <SelectItem value="past_due">Past Due</SelectItem>
+                                    <SelectItem value="suspended">Suspended</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
                               <div className="grid grid-cols-3 items-center gap-4">
-                                <Label htmlFor="country">Country</Label>
+                                <Label htmlFor="country" className="text-gray-700">Country</Label>
                                 <Select value={countryFilter} onValueChange={setCountryFilter}>
-                                  <SelectTrigger className="col-span-2 h-8">
+                                  <SelectTrigger className="col-span-2 h-8 bg-white border-gray-300 text-gray-900">
                                     <SelectValue placeholder="Select country" />
                                   </SelectTrigger>
-                                  <SelectContent>
+                                  <SelectContent className="bg-white border-gray-200">
                                     <SelectItem value="all">All Countries</SelectItem>
                                     {COUNTRIES.map((c) => (
                                       <SelectItem key={c.code} value={c.name}>{c.name}</SelectItem>
@@ -915,9 +1033,13 @@ export function AdminDashboard() {
                         </PopoverContent>
                      </Popover>
                   
-                     <Button variant="outline" className="gap-2 bg-slate-950/30 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white">
-                       <Download className="w-4 h-4" />
-                       Export Data
+                     <Button 
+                        variant="outline" 
+                        className="gap-2 bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                        onClick={handleExportData}
+                      >
+                        <Download className="w-4 h-4" />
+                        Export Data
                      </Button>
                   </div>
                 </div>
@@ -1007,6 +1129,9 @@ export function AdminDashboard() {
                             <SortIcon column="last_active" />
                           </div>
                         </TableHead>
+                        <TableHead className="text-slate-400 w-32">
+                          Actions
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1044,15 +1169,12 @@ export function AdminDashboard() {
                             <TableCell>
                               <Badge 
                                 variant="secondary" 
-                                className={
-                                  biz.status === "active" 
-                                    ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20" 
-                                    : biz.status === "trial"
-                                    ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20"
-                                    : "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
-                                }
+                                className={getBadgeClassName(biz.status as SubscriptionStatus)}
                               >
-                                {biz.status}
+                                {biz.status === "trial_extended" ? "Extended" 
+                                  : biz.status === "past_due" ? "Past Due"
+                                  : biz.status === "trial_expired" ? "Trial Expired" 
+                                  : biz.status}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right text-slate-500">
@@ -1060,6 +1182,19 @@ export function AdminDashboard() {
                             </TableCell>
                             <TableCell className="text-right text-slate-400">
                               {formatTimeAgo(biz.last_active)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedBusiness(biz);
+                                  setExtendModalOpen(true);
+                                }}
+                                className="bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 text-xs"
+                              >
+                                Extend
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1086,7 +1221,7 @@ export function AdminDashboard() {
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-2xl font-bold mb-1 text-white">Pricing Management</h2>
-                    <p className="text-slate-400">Set country-specific pricing for subscription tiers</p>
+                    <p className="text-slate-400">Manage subscription tier pricing for all countries</p>
                   </div>
                 </div>
 
@@ -1107,7 +1242,7 @@ export function AdminDashboard() {
                         <SelectValue placeholder="Select country" />
                       </SelectTrigger>
                       <SelectContent className="bg-slate-900 border-white/10 text-white">
-                        <SelectItem value="KE" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Kenya (Ksh)</SelectItem>
+                        <SelectItem value="KE" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Kenya (KES)</SelectItem>
                         <SelectItem value="GH" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Ghana (GH¢)</SelectItem>
                         <SelectItem value="ET" className="text-white hover:bg-white/10 focus:bg-white/10 focus:text-white cursor-pointer">Ethiopia (ETB)</SelectItem>
                       </SelectContent>
@@ -1115,254 +1250,225 @@ export function AdminDashboard() {
                   </CardContent>
                 </Card>
 
-                {/* Discount Percentages */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  <Card className={`${glassClass} border-white/10`}>
-                    <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-green-400" />
-                        Discount Percentages
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Set discount rates for quarterly and annual billing
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+                {/* Three-Card Pricing Layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 justify-center">
+                  {/* Helper to format currency */}
+                  {(() => {
+                    const symbol = selectedPricingCountry === 'KE' ? 'KES' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB';
+                    const countryData = pricingData[selectedPricingCountry] || {};
+                    const qDiscount = (countryData.quarterly_discount || 10) / 100;
+                    const aDiscount = (countryData.annual_discount || 20) / 100;
+                    
+                    const tiers = [
+                      {
+                        key: 'basic',
+                        name: 'Starter',
+                        iconColor: 'text-blue-400',
+                        borderColor: 'border-white/5',
+                        badge: null,
+                        features: ['2 Branch Locations', 'Up to 10 Staff Members', 'Basic POS & Inventory', 'Basic Reports'],
+                      },
+                      {
+                        key: 'professional',
+                        name: 'Pro',
+                        iconColor: 'text-indigo-400',
+                        borderColor: 'border-indigo-500/30',
+                        badge: 'Most Popular',
+                        features: ['5 Branch Locations', 'Up to 25 Staff Members', 'Advanced Reports & Analytics', 'Expense Management', 'Priority Support'],
+                      },
+                      {
+                        key: 'ultra',
+                        name: 'Enterprise',
+                        iconColor: 'text-purple-400',
+                        borderColor: 'border-white/5',
+                        badge: null,
+                        features: ['Unlimited Branches', 'Unlimited Staff', 'AI-Powered Forecasting', 'API Access', 'Dedicated Account Manager'],
+                      },
+                    ];
+
+                    return tiers.map((tier) => {
+                      const monthly = countryData[`${tier.key}_monthly`] || 0;
+                      const quarterly = Math.round(monthly * 3 * (1 - qDiscount));
+                      const annual = Math.round(monthly * 12 * (1 - aDiscount));
+
+                      const updateMonthly = (val: number | null) => {
+                        const m = val ?? 0;
+                        setPricingData({
+                          ...pricingData,
+                          [selectedPricingCountry]: {
+                            ...countryData,
+                            [`${tier.key}_monthly`]: m,
+                            [`${tier.key}_quarterly`]: Math.round(m * 3 * (1 - qDiscount)),
+                            [`${tier.key}_annual`]: Math.round(m * 12 * (1 - aDiscount)),
+                          }
+                        });
+                      };
+
+                      return (
+                        <Card key={tier.key} className={`flex flex-col relative bg-slate-900/50 backdrop-blur ${tier.borderColor} border shadow-xl hover:shadow-2xl transition-shadow duration-200`}>
+                          {tier.badge && (
+                            <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                              <Badge className="bg-indigo-600 text-white h-5 text-[10px] px-2 shadow-sm">{tier.badge}</Badge>
+                            </div>
+                          )}
+                          <CardHeader className="p-4 pb-3 text-center">
+                            <CardTitle className="text-base font-bold text-white flex items-center justify-center gap-2">
+                              <Crown className={`w-4 h-4 ${tier.iconColor}`} />
+                              {tier.name}
+                            </CardTitle>
+                            <CardDescription className="text-slate-400 text-xs">
+                              {tier.key === 'basic' ? 'Up to 2 branches, basic features' : tier.key === 'professional' ? 'Up to 5 branches, advanced features' : 'Unlimited branches, enterprise features'}
+                            </CardDescription>
+                          </CardHeader>
+                          
+                          <CardContent className="p-4 pt-0 flex-1 flex flex-col">
+                            <div className="space-y-3 mb-4">
+                              {/* Monthly - Editable */}
+                              <div>
+                                <Label className="text-slate-300 text-xs">Monthly Price</Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm z-10">{symbol}</span>
+                                  <NumericInput
+                                    value={monthly}
+                                    onChange={updateMonthly}
+                                    allowEmpty={true}
+                                    className="bg-slate-950/30 border-white/10 text-white pl-16"
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* Quarterly - Auto-calculated, read-only */}
+                              <div>
+                                <Label className="text-slate-300 text-xs">Quarterly Price (auto)</Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm z-10">{symbol}</span>
+                                  <input
+                                    type="text"
+                                    value={monthly > 0 ? quarterly.toLocaleString() : '—'}
+                                    readOnly
+                                    className="w-full h-10 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 pl-16 text-white/60 cursor-not-allowed"
+                                  />
+                                </div>
+                                <p className="text-[10px] text-green-400 mt-0.5">10% off monthly rate</p>
+                              </div>
+                              
+                              {/* Annual - Auto-calculated, read-only */}
+                              <div>
+                                <Label className="text-slate-300 text-xs">Annual Price (auto)</Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm z-10">{symbol}</span>
+                                  <input
+                                    type="text"
+                                    value={monthly > 0 ? annual.toLocaleString() : '—'}
+                                    readOnly
+                                    className="w-full h-10 rounded-md border border-white/10 bg-slate-900/50 px-3 py-2 pl-16 text-white/60 cursor-not-allowed"
+                                  />
+                                </div>
+                                <p className="text-[10px] text-green-400 mt-0.5">20% off monthly rate</p>
+                              </div>
+                            </div>
+
+                            {/* Feature List */}
+                            <div className="space-y-2 flex-1 mb-4">
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Key Features:</p>
+                              <ul className="space-y-1.5">
+                                {tier.features.map((f) => (
+                                  <li key={f} className="flex items-start gap-2 text-xs text-slate-300">
+                                    <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0 mt-0.5" />
+                                    <span className="leading-tight">{f}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Discount Settings */}
+                <Card className={`${glassClass} border-white/10`}>
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-green-400" />
+                      Discount Settings
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Configure discount percentages for longer billing cycles
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label className="text-slate-300">Quarterly Discount (%)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
+                        <NumericInput
                           value={pricingData[selectedPricingCountry]?.quarterly_discount || 0}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             setPricingData({
                               ...pricingData,
                               [selectedPricingCountry]: {
                                 ...pricingData[selectedPricingCountry],
-                                quarterly_discount: parseFloat(e.target.value)
+                                quarterly_discount: val ?? 0
                               }
                             });
                           }}
+                          min={0}
+                          max={100}
+                          allowEmpty={true}
                           className="bg-slate-950/30 border-white/10 text-white"
                         />
+                        <p className="text-xs text-slate-400 mt-1">Save X% when customers pay quarterly</p>
                       </div>
                       <div>
                         <Label className="text-slate-300">Annual Discount (%)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
+                        <NumericInput
                           value={pricingData[selectedPricingCountry]?.annual_discount || 0}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             setPricingData({
                               ...pricingData,
                               [selectedPricingCountry]: {
                                 ...pricingData[selectedPricingCountry],
-                                annual_discount: parseFloat(e.target.value)
+                                annual_discount: val ?? 0
                               }
                             });
                           }}
+                          min={0}
+                          max={100}
+                          allowEmpty={true}
                           className="bg-slate-950/30 border-white/10 text-white"
                         />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Pricing Forms */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Basic Tier */}
-                  <Card className={`${glassClass} border-white/10`}>
-                    <CardHeader>
-                      <CardTitle className="text-white">Basic Tier</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Up to 2 branches, basic features
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <Label className="text-slate-300">Monthly Price</Label>
-                        <Input
-                          type="number"
-                          value={pricingData[selectedPricingCountry]?.basic_monthly || 0}
-                          onChange={(e) => {
-                            setPricingData({
-                              ...pricingData,
-                              [selectedPricingCountry]: {
-                                ...pricingData[selectedPricingCountry],
-                                basic_monthly: parseFloat(e.target.value)
-                              }
-                            });
-                          }}
-                          className="bg-slate-950/30 border-white/10 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Quarterly Price</Label>
-                        <Input
-                          type="number"
-                          value={pricingData[selectedPricingCountry]?.basic_quarterly || 0}
-                          onChange={(e) => {
-                            setPricingData({
-                              ...pricingData,
-                              [selectedPricingCountry]: {
-                                ...pricingData[selectedPricingCountry],
-                                basic_quarterly: parseFloat(e.target.value)
-                              }
-                            });
-                          }}
-                          className="bg-slate-950/30 border-white/10 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Annual Price</Label>
-                        <Input
-                          type="number"
-                          value={pricingData[selectedPricingCountry]?.basic_annual || 0}
-                          onChange={(e) => {
-                            setPricingData({
-                              ...pricingData,
-                              [selectedPricingCountry]: {
-                                ...pricingData[selectedPricingCountry],
-                                basic_annual: parseFloat(e.target.value)
-                              }
-                            });
-                          }}
-                          className="bg-slate-950/30 border-white/10 text-white"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Professional Tier */}
-                  <Card className={`${glassClass} border-white/10`}>
-                    <CardHeader>
-                      <CardTitle className="text-white">Professional Tier</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Up to 5 branches, advanced features
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <Label className="text-slate-300">Monthly Price</Label>
-                        <Input
-                          type="number"
-                          value={pricingData[selectedPricingCountry]?.professional_monthly || 0}
-                          onChange={(e) => {
-                            setPricingData({
-                              ...pricingData,
-                              [selectedPricingCountry]: {
-                                ...pricingData[selectedPricingCountry],
-                                professional_monthly: parseFloat(e.target.value)
-                              }
-                            });
-                          }}
-                          className="bg-slate-950/30 border-white/10 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Quarterly Price</Label>
-                        <Input
-                          type="number"
-                          value={pricingData[selectedPricingCountry]?.professional_quarterly || 0}
-                          onChange={(e) => {
-                            setPricingData({
-                              ...pricingData,
-                              [selectedPricingCountry]: {
-                                ...pricingData[selectedPricingCountry],
-                                professional_quarterly: parseFloat(e.target.value)
-                              }
-                            });
-                          }}
-                          className="bg-slate-950/30 border-white/10 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-slate-300">Annual Price</Label>
-                        <Input
-                          type="number"
-                          value={pricingData[selectedPricingCountry]?.professional_annual || 0}
-                          onChange={(e) => {
-                            setPricingData({
-                              ...pricingData,
-                              [selectedPricingCountry]: {
-                                ...pricingData[selectedPricingCountry],
-                                professional_annual: parseFloat(e.target.value)
-                              }
-                            });
-                          }}
-                          className="bg-slate-950/30 border-white/10 text-white"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Enterprise Info */}
-                <Alert className="bg-indigo-500/10 border-indigo-500/30">
-                  <DollarSign className="h-4 w-4 text-indigo-400" />
-                  <AlertTitle className="text-indigo-300">Enterprise Tier</AlertTitle>
-                  <AlertDescription className="text-indigo-200">
-                    Enterprise pricing is custom and requires direct contact with sales. No pricing configuration needed.
-                  </AlertDescription>
-                </Alert>
-
-                {/* Preview */}
-                <Card className={`${glassClass} border-white/10`}>
-                  <CardHeader>
-                    <CardTitle className="text-white">Pricing Preview</CardTitle>
-                    <CardDescription className="text-slate-400">
-                      How prices will appear on the pricing page
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-slate-950/30 border border-white/10">
-                        <h4 className="font-semibold text-white mb-2">Basic</h4>
-                        <p className="text-2xl font-bold text-indigo-400">
-                          {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.basic_monthly?.toLocaleString() || 0}
-                        </p>
-                        <p className="text-sm text-slate-400">per month</p>
-                        <div className="mt-2 space-y-1">
-                          <p className="text-xs text-green-400">
-                            Quarterly: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.basic_quarterly?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.quarterly_discount || 0}%)
-                          </p>
-                          <p className="text-xs text-green-400">
-                            Annual: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.basic_annual?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.annual_discount || 0}%)
-                          </p>
-                        </div>
-                      </div>
-                      <div className="p-4 rounded-lg bg-slate-950/30 border border-white/10">
-                        <h4 className="font-semibold text-white mb-2">Professional</h4>
-                        <p className="text-2xl font-bold text-indigo-400">
-                          {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.professional_monthly?.toLocaleString() || 0}
-                        </p>
-                        <p className="text-sm text-slate-400">per month</p>
-                        <div className="mt-2 space-y-1">
-                          <p className="text-xs text-green-400">
-                            Quarterly: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.professional_quarterly?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.quarterly_discount || 0}%)
-                          </p>
-                          <p className="text-xs text-green-400">
-                            Annual: {selectedPricingCountry === 'KE' ? 'Ksh' : selectedPricingCountry === 'GH' ? 'GH¢' : 'ETB'} {pricingData[selectedPricingCountry]?.professional_annual?.toLocaleString() || 0} (Save {pricingData[selectedPricingCountry]?.annual_discount || 0}%)
-                          </p>
-                        </div>
+                        <p className="text-xs text-slate-400 mt-1">Save X% when customers pay annually</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3">
+                {/* Save Button */}
+                <div className="flex justify-end">
                   <Button
                     onClick={async () => {
                       setSavingPricing(true);
                       try {
-                        // Save to localStorage (in production, this would save to Supabase)
-                        localStorage.setItem('tillsup-pricing-data', JSON.stringify(pricingData));
+                        // Save to Supabase platform_settings table
+                        const { error } = await supabase
+                          .from('platform_settings')
+                          .upsert({
+                            key: 'subscription_pricing',
+                            value: JSON.stringify(pricingData),
+                            updated_at: new Date().toISOString()
+                          });
+
+                        if (error) {
+                          // If table doesn't exist, fall back to localStorage
+                          console.warn('Supabase save failed, using localStorage:', error);
+                          localStorage.setItem('tillsup-pricing-data', JSON.stringify(pricingData));
+                        }
+
                         await new Promise(resolve => setTimeout(resolve, 500));
-                        toast.success('Pricing updated successfully! Changes will reflect on the pricing page.');
+                        toast.success('Pricing updated successfully! Changes will reflect on the Subscription & Billing page for all business users.');
                       } catch (error) {
+                        console.error('Error saving pricing:', error);
                         toast.error('Failed to save pricing data');
                       } finally {
                         setSavingPricing(false);
@@ -1378,21 +1484,13 @@ export function AdminDashboard() {
                       </>
                     ) : (
                       <>
-                        <DollarSign className="w-4 h-4 mr-2" />
-                        Save Changes
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Pricing Changes
                       </>
                     )}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.open('/pricing', '_blank')}
-                    className="bg-slate-950/30 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
-                  >
-                    <ArrowUpRight className="w-4 h-4 mr-2" />
-                    Preview Pricing Page
-                  </Button>
                 </div>
-            </TabsContent>
+              </TabsContent>
 
             <TabsContent value="assets" className="space-y-8">
 
@@ -1737,6 +1835,184 @@ USING ( bucket_id = 'platform-assets' );`);
           </DialogContent>
         </Dialog>
       </main>
+
+      {/* Extend Subscription Modal */}
+      <Dialog open={extendModalOpen} onOpenChange={setExtendModalOpen}>
+        <DialogContent className="bg-slate-900 border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>Extend Subscription</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Extend subscription for {selectedBusiness?.name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-slate-300">Current Status</Label>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant="secondary" 
+                  className={
+                    selectedBusiness?.status === "active" 
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                      : selectedBusiness?.status === "trial"
+                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20"
+                  }
+                >
+                  {selectedBusiness?.status === "expired" ? "Trial Expired" : selectedBusiness?.status}
+                </Badge>
+                {selectedBusiness?.trial_ends_at && (
+                  <span className="text-xs text-slate-400">
+                    Expires: {new Date(selectedBusiness.trial_ends_at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-slate-300">Days to Extend</Label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={extendDays}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  // Allow only digits, or empty string
+                  if (val === '' || /^\d+$/.test(val)) {
+                    setExtendDays(val);
+                  }
+                }}
+                className="w-full h-10 rounded-md border border-white/20 bg-slate-900/50 px-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Enter days"
+              />
+              <p className="text-xs text-slate-400">
+                {extendDays && parseInt(extendDays, 10) > 0
+                  ? `New end date: ${new Date(Date.now() + parseInt(extendDays, 10) * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                  : "Enter days to calculate new end date"
+                }
+              </p>
+            </div>
+
+            <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-lg p-3">
+              <p className="text-sm text-indigo-200">
+                <strong>Note:</strong> The new subscription end date will be calculated from today's date, 
+                regardless of when the previous subscription expired.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setExtendModalOpen(false);
+                setSelectedBusiness(null);
+                setExtendDays('');
+              }}
+              className="bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-300 font-medium"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!selectedBusiness) return;
+                
+                const daysNum = parseInt(extendDays, 10);
+                
+                // Validate days before submitting
+                if (isNaN(daysNum) || daysNum < 1) {
+                  toast.error("Please enter a valid number of days (minimum 1)");
+                  return;
+                }
+                
+                setExtendingSubscription(true);
+                try {
+                  const newEndDate = new Date(Date.now() + daysNum * 24 * 60 * 60 * 1000);
+                  const newEndDateISO = newEndDate.toISOString();
+                  
+                  console.log('Extending subscription:', {
+                    businessId: selectedBusiness.id,
+                    newEndDate: newEndDateISO,
+                    extendDays: daysNum
+                  });
+                  
+                  // Update the business subscription
+                  const { data, error } = await supabase
+                    .from('businesses')
+                    .update({
+                      trial_ends_at: newEndDateISO,
+                      subscription_end_date: newEndDateISO,
+                      subscription_status: 'trial_extended',
+                      requires_extension_notice: true
+                    })
+                    .eq('id', selectedBusiness.id)
+                    .select();
+                  
+                  if (error) {
+                    console.error('Supabase update error:', error);
+                    throw error;
+                  }
+
+                  // Check if update actually modified any rows
+                  if (!data || data.length === 0) {
+                    console.error('Update returned empty data - likely RLS policy blocking the update');
+                    throw new Error('Update blocked by security policy. Please run the Super Admin RLS migration in Supabase SQL Editor.');
+                  }
+                  
+                  console.log('Update successful:', data);
+                  
+                  // Verify the update by re-fetching this specific business
+                  const { data: verifyData, error: verifyError } = await supabase
+                    .from('businesses')
+                    .select('id, name, subscription_status, subscription_end_date, trial_ends_at, requires_extension_notice')
+                    .eq('id', selectedBusiness.id)
+                    .single();
+                    
+                  console.log('Verification after update:', verifyData);
+                  if (verifyError) {
+                    console.error('Verification error:', verifyError);
+                  }
+
+                  // Verify the status was actually updated
+                  if (verifyData && verifyData.subscription_status !== 'trial_extended') {
+                    console.error('Status was not updated! Current status:', verifyData.subscription_status);
+                    throw new Error('Database did not update the status. Current status: ' + verifyData.subscription_status);
+                  }
+                  
+                  toast.success(`Subscription successfully extended to ${newEndDate.toLocaleDateString()}`);
+                  setExtendModalOpen(false);
+                  setSelectedBusiness(null);
+                  setExtendDays('');
+                  
+                  // Force refresh all data immediately
+                  await fetchData();
+                } catch (error: any) {
+                  console.error('Error extending subscription:', error);
+                  toast.error('Failed to extend subscription: ' + error.message);
+                } finally {
+                  setExtendingSubscription(false);
+                }
+              }}
+              disabled={extendingSubscription || !extendDays || parseInt(extendDays, 10) < 1}
+              className="bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {extendingSubscription ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Extending...
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Extend Subscription
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

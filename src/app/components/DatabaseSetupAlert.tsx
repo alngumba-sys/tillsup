@@ -203,7 +203,7 @@ GRANT USAGE ON SCHEMA anon TO authenticated;`;
             </p>
           </div>
 
-          <h3 style={{ fontSize: '18px', marginBottom: '1rem', color: '#0891b2' }}>
+          <h3 style={{ fontSize: '18px', marginBottom: '1rem', color: '#00719C' }}>
             ⚡ Quick Fix (3 Steps):
           </h3>
 
@@ -219,7 +219,7 @@ GRANT USAGE ON SCHEMA anon TO authenticated;`;
                 href="https://supabase.com/dashboard" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                style={{ color: '#0891b2', textDecoration: 'underline' }}
+                style={{ color: '#00719C', textDecoration: 'underline' }}
               >
                 https://supabase.com/dashboard
               </a>
@@ -246,7 +246,7 @@ GRANT USAGE ON SCHEMA anon TO authenticated;`;
                 position: 'absolute',
                 top: '0.5rem',
                 right: '0.5rem',
-                background: copied ? '#10b981' : '#0891b2',
+                background: copied ? '#10b981' : '#00719C',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -327,7 +327,7 @@ GRANT USAGE ON SCHEMA anon TO authenticated;`;
               rel="noopener noreferrer"
               style={{
                 padding: '0.75rem 1.5rem',
-                background: '#0891b2',
+                background: '#00719C',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',

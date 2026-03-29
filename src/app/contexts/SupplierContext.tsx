@@ -38,6 +38,7 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
     console.warn("SupplierProvider: AuthContext not available", e);
   }
   const business = auth?.business || null;
+  const user = auth?.user || null;
 
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState<any>(null);
@@ -50,10 +51,17 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
     console.log("🔵 Fetching suppliers from Supabase database...", { businessId: business.id });
 
     try {
-      const { data, error: fetchError } = await supabase
+      // RBAC: Non-owner staff are scoped to their assigned branch for data isolation
+      let query = supabase
         .from('suppliers')
         .select('*')
         .eq('business_id', business.id);
+
+      if (user && user.role !== 'Business Owner' && user.branchId) {
+        query = query.eq('branch_id', user.branchId);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         console.error("❌ Error fetching suppliers from database:", fetchError);

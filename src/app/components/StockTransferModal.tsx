@@ -143,7 +143,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
     const location = locations.find(l => l.id === locationId);
     if (!location) return <Package className="w-4 h-4" />;
     return location.type === "shop" ? (
-      <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+      <StoreIcon className="w-4 h-4 text-[#00719C]" />
     ) : (
       <Warehouse className="w-4 h-4 text-purple-600" />
     );
@@ -154,7 +154,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ArrowRight className="w-5 h-5 text-[#0891b2]" />
+            <ArrowRight className="w-5 h-5 text-[#00719C]" />
             Stock Transfer
           </DialogTitle>
           <DialogDescription>
@@ -175,7 +175,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
                   </div>
                 </div>
                 
-                <ArrowRight className="w-6 h-6 text-[#0891b2]" />
+                <ArrowRight className="w-6 h-6 text-[#00719C]" />
                 
                 <div className="flex items-center gap-2 flex-1">
                   {getLocationIcon(formData.toLocationId)}
@@ -222,7 +222,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
                   {shops.map((shop) => (
                     <SelectItem key={shop.id} value={shop.id}>
                       <div className="flex items-center gap-2">
-                        <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+                        <StoreIcon className="w-4 h-4 text-[#00719C]" />
                         {shop.name}
                       </div>
                     </SelectItem>
@@ -254,7 +254,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
                         .map((shop) => (
                           <SelectItem key={shop.id} value={shop.id}>
                             <div className="flex items-center gap-2">
-                              <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+                              <StoreIcon className="w-4 h-4 text-[#00719C]" />
                               {shop.name}
                             </div>
                           </SelectItem>
@@ -380,7 +380,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
             </Button>
             <Button
               type="submit"
-              className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+              className="bg-[#00719C] hover:bg-[#00719C]/90"
               disabled={loading || !formData.fromLocationId || !formData.toLocationId || !formData.productId || !formData.quantity}
             >
               {loading ? "Initiating Transfer..." : "Initiate Transfer"}

@@ -1,0 +1,55 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                   PASSWORD RESET - QUICK FIX CARD                    ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+ERROR: function gen_salt(unknown, integer) does not exist
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ FASTEST FIX (30 SECONDS)                                             ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+1. Go to: https://supabase.com/dashboard
+2. Open: SQL Editor → + New query
+3. Copy: RUN_THIS_NOW.sql (entire file)
+4. Paste & Run
+5. ✅ Done!
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ WHAT IT FIXES                                                        ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Before: SET search_path = public           ❌ Can't find gen_salt()
+After:  SET search_path = public, extensions  ✅ Can find gen_salt()
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ SUCCESS LOOKS LIKE                                                   ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+✅ CREATE EXTENSION (appears 2x)
+✅ DROP FUNCTION
+✅ CREATE FUNCTION
+✅ GRANT (appears 6x)
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ TEST IT                                                              ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+1. Tillsup → Staff Management
+2. Click Reset Password
+3. ✅ Should show temporary password!
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ FILES TO USE                                                         ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+★ RUN_THIS_NOW.sql                  Quick fix (recommended)
+★ START_HERE.md                     Simple guide
+★ QUICK_START.md                    Reference with SQL
+★ FIX_GEN_SALT_README.md            Detailed explanation
+★ INDEX.md                          All files navigation
+
+╔══════════════════════════════════════════════════════════════════════╗
+║ ONE-TIME FIX - NEVER DO AGAIN                                        ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Time: 30 seconds | Complexity: Copy & Paste | Permanent: ✅

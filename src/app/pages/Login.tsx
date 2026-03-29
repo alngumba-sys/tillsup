@@ -222,8 +222,8 @@ export function Login() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Preview Mode Notice */}
             {isPreviewMode() && (
-              <Alert className="border-[#0891b2] bg-[#0891b2]/10">
-                <Info className="h-4 w-4 text-[#0891b2]" />
+              <Alert className="border-[#00719C] bg-[#00719C]/10">
+                <Info className="h-4 w-4 text-[#00719C]" />
                 <AlertDescription className="text-sm">
                   <span className="font-semibold">Preview Mode</span> - Use any email/password to login with demo data
                 </AlertDescription>
@@ -309,7 +309,7 @@ export function Login() {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-[#0479A1] hover:bg-[#036080] text-white"
+              className="w-full bg-[#00719C] hover:bg-[#005d81] text-white"
               size="lg"
               disabled={loading}
             >

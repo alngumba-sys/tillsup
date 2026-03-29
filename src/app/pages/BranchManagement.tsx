@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -21,13 +21,16 @@ import {
   DialogFooter,
   DialogTrigger
 } from "../components/ui/dialog";
-import { Building2, Plus, MapPin, Edit, CheckCircle, XCircle, Upload, Download, FileSpreadsheet, AlertTriangle, Trash2, Bug } from "lucide-react";
+import { Building2, Plus, MapPin, Edit, CheckCircle, XCircle, Upload, Download, FileSpreadsheet, AlertTriangle, Trash2, Bug, Crown, TrendingUp, TrendingDown } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranch } from "../contexts/BranchContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useSubscription } from "../hooks/useSubscription";
+import { useSales } from "../contexts/SalesContext";
+import { useInventory } from "../contexts/InventoryContext";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { validateSubscriptionForImport } from "../utils/subscriptionGuard";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { SchemaError } from "../components/inventory/SchemaError";
 import { useNavigate } from "react-router";
@@ -37,6 +40,8 @@ export function BranchManagement() {
   const branchContext = useBranch();
   const subscription = useSubscription();
   const navigate = useNavigate();
+  const salesContext = useSales();
+  const inventoryContext = useInventory();
   
   // Destructure with safety checks
   const branches = branchContext?.branches || [];
@@ -52,6 +57,7 @@ export function BranchManagement() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; id: string; name: string } | null>(null);
+  const [deactivateConfirmation, setDeactivateConfirmation] = useState<{ isOpen: boolean; id: string; name: string; currentStatus: "active" | "inactive" } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   
@@ -72,6 +78,91 @@ export function BranchManagement() {
     success: string[];
     totalRows: number;
   } | null>(null);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CARD DATA CALCULATIONS
+  // ═══════════════════════════════════════════════════════════════════
+  const { getTopPerformers, getSalesToday, getTotalRevenueToday, getDailySales } = salesContext;
+  const { inventory } = inventoryContext;
+  
+  // Card 1: Top Branch Today
+  const topBranchData = useMemo(() => {
+    if (!business?.id) return { branchName: "N/A", revenue: 0 };
+    
+    // Get today's sales and calculate top branch manually
+    const todaySales = getSalesToday(business.id);
+    if (todaySales.length === 0) return { branchName: "No Sales Yet", revenue: 0 };
+    
+    // Calculate revenue by branch for today
+    const branchRevenueMap = new Map<string, number>();
+    todaySales.forEach(sale => {
+      if (sale.branchId) {
+        const currentRevenue = branchRevenueMap.get(sale.branchId) || 0;
+        branchRevenueMap.set(sale.branchId, currentRevenue + sale.total);
+      }
+    });
+    
+    if (branchRevenueMap.size === 0) return { branchName: "No Sales Yet", revenue: 0 };
+    
+    // Find branch with highest revenue today
+    let topBranchId = "";
+    let maxRevenue = 0;
+    branchRevenueMap.forEach((revenue, branchId) => {
+      if (revenue > maxRevenue) {
+        maxRevenue = revenue;
+        topBranchId = branchId;
+      }
+    });
+    
+    const topBranch = branches.find(b => b.id === topBranchId);
+    
+    return {
+      branchName: topBranch?.name || "Unknown Branch",
+      revenue: maxRevenue
+    };
+  }, [business?.id, getSalesToday, branches]);
+  
+  // Card 2: Network Revenue Today vs Yesterday
+  const networkRevenueData = useMemo(() => {
+    if (!business?.id) return { todayRevenue: 0, trend: 0, trendPercent: "0%" };
+    
+    const todayRevenue = getTotalRevenueToday(business.id);
+    
+    // Get yesterday's date range
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStart = new Date(yesterday);
+    yesterdayStart.setHours(0, 0, 0, 0);
+    const yesterdayEnd = new Date(yesterday);
+    yesterdayEnd.setHours(23, 59, 59, 999);
+    
+    // Filter sales for yesterday
+    const yesterdaySales = salesContext.sales.filter(sale => {
+      const saleDate = new Date(sale.timestamp);
+      return saleDate >= yesterdayStart && saleDate <= yesterdayEnd && sale.businessId === business.id;
+    });
+    
+    const yesterdayRevenue = yesterdaySales.reduce((sum, sale) => sum + sale.total, 0);
+    
+    const trend = todayRevenue - yesterdayRevenue;
+    const trendPercent = yesterdayRevenue > 0 
+      ? `${((trend / yesterdayRevenue) * 100).toFixed(1)}%`
+      : trend > 0 ? "+100%" : "0%";
+    
+    return {
+      todayRevenue,
+      trend,
+      trendPercent
+    };
+  }, [business?.id, getTotalRevenueToday, salesContext.sales]);
+  
+  // Card 3: Out of Stock Items Across All Branches
+  const outOfStockCount = useMemo(() => {
+    if (!inventory || !Array.isArray(inventory)) return 0;
+    
+    // Count items with stock === 0
+    return inventory.filter(item => item.stock === 0).length;
+  }, [inventory]);
 
   const handleAddBranch = async () => {
     const result = await createBranch(formData.name, formData.location);
@@ -103,12 +194,29 @@ export function BranchManagement() {
     }
   };
 
-  const handleToggleStatus = async (branchId: string, currentStatus: "active" | "inactive") => {
+  const handleToggleStatus = (branchId: string, currentStatus: "active" | "inactive") => {
+    // Show confirmation dialog before toggling
+    const branch = branches.find(b => b.id === branchId);
+    if (branch) {
+      setDeactivateConfirmation({
+        isOpen: true,
+        id: branchId,
+        name: branch.name,
+        currentStatus
+      });
+    }
+  };
+
+  const confirmToggleStatus = async () => {
+    if (!deactivateConfirmation) return;
+    
+    const { id, currentStatus, name } = deactivateConfirmation;
     const newStatus = currentStatus === "active" ? "inactive" : "active";
-    const result = await updateBranch(branchId, { status: newStatus });
+    const result = await updateBranch(id, { status: newStatus });
     
     if (result.success) {
       toast.success(`Branch ${newStatus === "active" ? "activated" : "deactivated"} successfully!`);
+      setDeactivateConfirmation(null);
     } else {
       toast.error(result.error || "Failed to update branch status");
     }
@@ -299,6 +407,18 @@ export function BranchManagement() {
       return;
     }
 
+    // Check subscription status before allowing import
+    if (business?.id) {
+      try {
+        await validateSubscriptionForImport(business.id);
+      } catch (error: any) {
+        toast.error("Import Blocked", {
+          description: error.message || "Subscription Inactive: Please renew your subscription to perform bulk imports."
+        });
+        return;
+      }
+    }
+
     setIsProcessingImport(true);
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -369,14 +489,14 @@ export function BranchManagement() {
             continue;
           }
 
-          // Check for existing branch with same name
+          // Check for existing branch with same name (case-insensitive, trimmed)
           const existingBranch = branches.find(
-            b => b.name.toLowerCase() === branchName.toLowerCase()
+            b => b.name.trim().toLowerCase() === branchName.toLowerCase()
           );
 
           if (existingBranch) {
-            // Update existing branch
-            const result = updateBranch(existingBranch.id, {
+            // Update existing branch (upsert behavior)
+            const result = await updateBranch(existingBranch.id, {
               location: location || existingBranch.location,
               status: statusValue.toLowerCase() === "inactive" ? "inactive" : "active"
             });
@@ -384,25 +504,29 @@ export function BranchManagement() {
             if (result.success) {
               warnings.push(`Row ${rowNum}: Branch "${branchName}" already exists, updated instead`);
             } else {
-              errors.push(`Row ${rowNum}: Failed to update branch "${branchName}"`);
+              errors.push(`Row ${rowNum}: Failed to update branch "${branchName}" — ${result.error || "Unknown error"}${result.errorCode ? ` (${result.errorCode})` : ""}`);
             }
           } else {
             // Create new branch
-            const result = createBranch(branchName, location);
+            const result = await createBranch(branchName, location);
 
             if (result.success) {
               // Set status if different from default
               if (statusValue.toLowerCase() === "inactive" && result.branchId) {
-                updateBranch(result.branchId, { status: "inactive" });
+                await updateBranch(result.branchId, { status: "inactive" });
               }
               success.push(`Row ${rowNum}: Created branch "${branchName}"`);
             } else {
-              errors.push(`Row ${rowNum}: ${result.error || "Failed to create branch"}`);
+              // Provide detailed error including Supabase error code
+              const errorDetail = result.error || "Failed to create branch";
+              const errorCode = result.errorCode ? ` [${result.errorCode}]` : "";
+              errors.push(`Row ${rowNum}: ${errorDetail}${errorCode} — "${branchName}"`);
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error processing row ${rowNum}:`, error);
-          errors.push(`Row ${rowNum}: Failed to process row`);
+          const errMsg = error?.message || error?.toString() || "Unknown error";
+          errors.push(`Row ${rowNum}: Failed to process row — ${errMsg}`);
         }
       }
 
@@ -457,47 +581,13 @@ export function BranchManagement() {
   return (
     <div className="p-4 lg:p-6 space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl mb-1">Branch Management</h1>
-        <p className="text-muted-foreground">Manage your business locations</p>
-      </div>
-
-      <SchemaError error={contextError} />
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirmation} onOpenChange={(open) => !open && setDeleteConfirmation(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Branch</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the branch "{deleteConfirmation?.name}"? 
-              This action cannot be undone.
-              <br/><br/>
-              <span className="text-destructive font-medium">Warning:</span> You cannot delete a branch if it has associated data (products, sales, or staff). Deactivate it instead.
-            </DialogDescription>
-          </DialogHeader>
-
-          {deleteError && (
-            <Alert variant="destructive" className="my-2">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{deleteError}</AlertDescription>
-            </Alert>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmation(null)} disabled={isDeleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteBranch} disabled={isDeleting}>
-              {isDeleting ? "Deleting..." : "Delete Branch"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Action Buttons - Import, Export, Add */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex gap-3">
-          {/* Import Dialog */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl mb-1">Branch Management</h1>
+          <p className="text-muted-foreground">Manage your business locations</p>
+        </div>
+        <div className="flex gap-2">
+          {/* Import Branches Dialog */}
           <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
             if (!open) resetImportDialog();
             setIsImportDialogOpen(open);
@@ -505,7 +595,7 @@ export function BranchManagement() {
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <Upload className="w-4 h-4" />
-                Import Excel
+                Import Branches
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -516,19 +606,19 @@ export function BranchManagement() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-4">
+              <div className="space-y-4 py-6">
                 {/* Template Download */}
-                <Alert>
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <AlertTitle>Need a template?</AlertTitle>
-                  <AlertDescription className="space-y-2">
-                    <p>Download our Excel template to get started</p>
-                    <Button variant="outline" size="sm" className="gap-2" onClick={downloadImportTemplate}>
-                      <Download className="w-3.5 h-3.5" />
-                      Download Template
-                    </Button>
-                  </AlertDescription>
-                </Alert>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-[#00719C]/5 border border-[#00719C]/20">
+                  <FileSpreadsheet className="w-5 h-5 text-[#00719C] flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#00719C]">Need a template?</p>
+                    <p className="text-xs text-slate-500">Download our Excel template to get started</p>
+                  </div>
+                  <Button size="sm" className="flex items-center gap-2 bg-[#00719C] hover:bg-[#005d81] text-white flex-shrink-0" onClick={downloadImportTemplate}>
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="font-semibold">Download Template</span>
+                  </Button>
+                </div>
 
                 {/* File Upload */}
                 <div className="grid gap-2">
@@ -604,9 +694,9 @@ export function BranchManagement() {
 
                 {/* Instructions */}
                 {!importValidation && (
-                  <div className="space-y-2 text-sm text-muted-foreground border rounded-lg p-4 bg-muted/30">
+                  <div className="space-y-2 text-sm border rounded-lg p-4 bg-muted/30">
                     <p className="font-medium text-foreground">📋 Import Guidelines:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
+                    <ul className="list-disc list-inside space-y-1 ml-2 text-slate-800">
                       <li>Required column: Branch Name</li>
                       <li>Optional columns: Location, Status</li>
                       <li>Status can be 'Active' or 'Inactive'</li>
@@ -630,15 +720,7 @@ export function BranchManagement() {
             </DialogContent>
           </Dialog>
 
-          {/* Export Button */}
-          <Button variant="outline" onClick={exportBranchesToExcel} className="gap-2" disabled={branches.length === 0}>
-            <Download className="w-4 h-4" />
-            Export Excel
-          </Button>
-        </div>
-
-        <div className="flex gap-3">
-          {/* Add Branch Button */}
+          {/* Add Branch */}
           <Button onClick={openAddDialog} className="gap-2">
             <Plus className="w-4 h-4" />
             Add Branch
@@ -646,39 +728,148 @@ export function BranchManagement() {
         </div>
       </div>
 
+      <SchemaError error={contextError} />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmation} onOpenChange={(open) => !open && setDeleteConfirmation(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Branch</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the branch "{deleteConfirmation?.name}"? 
+              This action cannot be undone.
+              <br/><br/>
+              <span className="text-destructive font-medium">Warning:</span> You cannot delete a branch if it has associated data (products, sales, or staff). Deactivate it instead.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <Alert variant="destructive" className="my-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmation(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteBranch} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete Branch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivation Confirmation Dialog */}
+      <Dialog open={!!deactivateConfirmation} onOpenChange={(open) => !open && setDeactivateConfirmation(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deactivateConfirmation?.currentStatus === "active" ? "Deactivate Branch" : "Activate Branch"}
+            </DialogTitle>
+            <DialogDescription>
+              {deactivateConfirmation?.currentStatus === "active" ? (
+                <>
+                  Are you sure you want to deactivate <strong>"{deactivateConfirmation?.name}"</strong>?
+                  <br/><br/>
+                  This branch will no longer be available for selection in the POS Terminal until reactivated.
+                  All products, sales, and staff records will be preserved.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to activate <strong>"{deactivateConfirmation?.name}"</strong>?
+                  <br/><br/>
+                  This branch will become available for selection in the POS Terminal.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeactivateConfirmation(null)}>Cancel</Button>
+            <Button
+              variant={deactivateConfirmation?.currentStatus === "active" ? "destructive" : "default"}
+              onClick={confirmToggleStatus}
+            >
+              {deactivateConfirmation?.currentStatus === "active" ? "Deactivate Branch" : "Activate Branch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Branch Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Branches</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{branches.length}</div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {/* Card 1: Top Branch Today */}
+        <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+          <CardContent className="p-3 h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-slate-500 truncate">Top Branch Today</span>
+              <div className="w-5 h-5 rounded-md bg-yellow-50 flex items-center justify-center flex-shrink-0">
+                <Crown className="w-2.5 h-2.5 text-yellow-500" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-base font-bold text-slate-900 leading-none truncate">{topBranchData.branchName}</span>
+            </div>
+            <p className="text-[9px] text-slate-400">
+              {new Intl.NumberFormat('en-KE', {
+                style: 'currency',
+                currency: 'KES',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+              }).format(topBranchData.revenue)}
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Branches</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {branches.filter(b => b.status === "active").length}
+        {/* Card 2: Network Revenue */}
+        <Card className="h-[100px] border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200">
+          <CardContent className="p-3 h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-slate-500 truncate">Network Revenue</span>
+              <div className="w-5 h-5 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                {networkRevenueData.trend >= 0 ? (
+                  <TrendingUp className="w-2.5 h-2.5 text-emerald-600" />
+                ) : (
+                  <TrendingDown className="w-2.5 h-2.5 text-rose-600" />
+                )}
+              </div>
             </div>
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className="text-sm font-bold text-slate-900 leading-none truncate">
+                {new Intl.NumberFormat('en-KE', {
+                  style: 'currency',
+                  currency: 'KES',
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0
+                }).format(networkRevenueData.todayRevenue)}
+              </span>
+              <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[8px] font-semibold flex-shrink-0 ${
+                networkRevenueData.trend >= 0 
+                  ? 'bg-emerald-50 text-emerald-700' 
+                  : 'bg-rose-50 text-rose-700'
+              }`}>
+                {networkRevenueData.trend >= 0 ? '↑' : '↓'} {networkRevenueData.trendPercent}
+              </span>
+            </div>
+            <p className="text-[9px] text-slate-400">vs yesterday</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inactive Branches</CardTitle>
-            <XCircle className="h-4 w-4 text-gray-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {branches.filter(b => b.status === "inactive").length}
+        {/* Card 3: Network Alerts */}
+        <Card className={`h-[100px] rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 ${outOfStockCount > 0 ? 'border-orange-200 bg-orange-50' : 'border-slate-100'}`}>
+          <CardContent className="p-3 h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-medium text-slate-500 truncate">Network Alerts</span>
+              <div className="w-5 h-5 rounded-md bg-orange-50 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-2.5 h-2.5 text-orange-500" />
+              </div>
             </div>
+            <div className="flex items-center gap-1 mb-0.5">
+              <span className={`text-sm font-bold leading-none truncate ${outOfStockCount > 0 ? 'text-orange-700' : 'text-slate-900'}`}>
+                {outOfStockCount} Out of Stock
+              </span>
+            </div>
+            <p className="text-[9px] text-slate-400">items across all branches</p>
           </CardContent>
         </Card>
       </div>
@@ -726,7 +917,7 @@ export function BranchManagement() {
                         className={
                           branch.status === "active"
                             ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                            : "bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200"
                         }
                       >
                         {branch.status === "active" ? (

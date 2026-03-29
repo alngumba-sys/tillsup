@@ -134,7 +134,7 @@ export const ExpenseContext = createContext<ExpenseContextType | undefined>(unde
 // ═══════════════════════════════════════════════════════════════════
 
 export function ExpenseProvider({ children }: { children: ReactNode }) {
-  const { business } = useAuth();
+  const { business, user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);
@@ -182,10 +182,17 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
-      const { data, error: fetchError } = await supabase
+      // RBAC: Non-owner staff are scoped to their assigned branch for data isolation
+      let query = supabase
         .from('expenses')
         .select('*')
         .eq('business_id', business.id);
+
+      if (user && user.role !== 'Business Owner' && user.branchId) {
+        query = query.eq('branch_id', user.branchId);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         throw fetchError;

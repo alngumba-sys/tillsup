@@ -12,7 +12,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Alert, AlertDescription } from "./ui/alert";
-import { CheckCircle2, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { CircleCheck, AlertTriangle, Eye, EyeOff } from "lucide-react";
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -121,7 +121,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
             {/* Success Message */}
             {success && (
               <Alert className="border-green-200 bg-green-50">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <CircleCheck className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800">
                   Password changed successfully!
                 </AlertDescription>

@@ -22,10 +22,13 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import { Textarea } from "../ui/textarea";
-import { Plus, Edit, Ban, CheckCircle2, Tag, Upload, Download, FileSpreadsheet, AlertTriangle, XCircle, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Plus, Edit, Ban, CircleCheck, Tag, Upload, Download, FileSpreadsheet, AlertTriangle, XCircle, Trash2 } from "lucide-react";
 import { useCategory } from "../../contexts/CategoryContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { validateSubscriptionForImport } from "../../utils/subscriptionGuard";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { SchemaError } from "./SchemaError";
 
@@ -41,6 +44,7 @@ export function CategoriesTab() {
     getCategoryByName,
     error,
   } = useCategory();
+  const { business } = useAuth();
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<{ id: string; name: string; description: string } | null>(null);
@@ -69,6 +73,23 @@ export function CategoriesTab() {
   } | null>(null);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "disabled">("all");
+  const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "newest">("name-asc");
+
+  const displayedCategories = categories
+    .filter((category) => {
+      const matchesSearch =
+        category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (category.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === "all" || category.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+      if (sortBy === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return a.name.localeCompare(b.name);
+    });
 
   const resetForm = () => {
     setFormData({
@@ -310,6 +331,18 @@ export function CategoriesTab() {
       return;
     }
 
+    // Check subscription status before allowing import
+    if (business?.id) {
+      try {
+        await validateSubscriptionForImport(business.id);
+      } catch (error: any) {
+        toast.error("Import Blocked", {
+          description: error.message || "Subscription Inactive: Please renew your subscription to perform bulk imports."
+        });
+        return;
+      }
+    }
+
     setIsProcessingImport(true);
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -446,22 +479,19 @@ export function CategoriesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Categories</h2>
-          <p className="text-sm text-muted-foreground">
-            Manage product categories for your inventory
-          </p>
-        </div>
-      </div>
-      
       {/* Schema Error Display */}
       {error && <SchemaError error={error} />}
 
-      {/* Action Buttons - Import, Export, Add */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex gap-3">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 border-b pb-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Categories</h1>
+          <p className="text-muted-foreground text-sm">
+            Track and manage product categories
+          </p>
+        </div>
+        
+        <div className="flex gap-3 flex-wrap">
           {/* Import Dialog */}
           <Dialog open={isImportDialogOpen} onOpenChange={(open) => {
             if (!open) resetImportDialog();
@@ -470,141 +500,133 @@ export function CategoriesTab() {
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <Upload className="w-4 h-4" />
-                Import Excel
+                Import Categories
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Import Categories from Excel</DialogTitle>
-                <DialogDescription>
-                  Upload an Excel file to bulk import or update categories
-                </DialogDescription>
-              </DialogHeader>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Import Categories from Excel</DialogTitle>
+              <DialogDescription>
+                Upload an Excel file to bulk import or update categories
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="space-y-4 py-4">
-                {/* Template Download */}
-                <Alert>
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <AlertTitle>Need a template?</AlertTitle>
-                  <AlertDescription>
-                    Download our Excel template with instructions
-                  </AlertDescription>
-                  <Button variant="outline" size="sm" className="mt-2 gap-2" onClick={downloadImportTemplate}>
-                    <Download className="w-3.5 h-3.5" />
-                    Download Template
-                  </Button>
-                </Alert>
+            <div className="space-y-4 py-6">
+              {/* Template Download */}
+              <Alert>
+                <FileSpreadsheet className="h-4 w-4" />
+                <AlertTitle>Need a template?</AlertTitle>
+                <AlertDescription>
+                  Download our Excel template with instructions
+                </AlertDescription>
+                <Button variant="outline" size="sm" className="mt-2 flex items-center gap-2" onClick={downloadImportTemplate}>
+                  <Download className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Download Template</span>
+                </Button>
+              </Alert>
 
-                {/* File Upload */}
-                <div className="grid gap-2">
-                  <Label htmlFor="file-upload">Upload Excel File (.xlsx)</Label>
-                  <Input id="file-upload" type="file" accept=".xlsx,.xls" onChange={handleImportFileUpload} className="cursor-pointer" />
-                  {importFile && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      <FileSpreadsheet className="w-4 h-4" />
-                      {importFile.name}
-                    </p>
-                  )}
-                </div>
-
-                {/* Validation Results */}
-                {importValidation && (
-                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4">
-                    {importValidation.success.length > 0 && (
-                      <Alert className="border-green-200 bg-green-50">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <AlertTitle className="text-green-900">Success ({importValidation.success.length})</AlertTitle>
-                        <AlertDescription className="text-green-800">
-                          <ul className="list-disc list-inside space-y-1 text-xs mt-2">
-                            {importValidation.success.slice(0, 5).map((msg, idx) => (
-                              <li key={idx}>{msg}</li>
-                            ))}
-                            {importValidation.success.length > 5 && (
-                              <li className="italic">... and {importValidation.success.length - 5} more</li>
-                            )}
-                          </ul>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    {importValidation.warnings.length > 0 && (
-                      <Alert className="border-amber-200 bg-amber-50">
-                        <AlertTriangle className="h-4 w-4 text-amber-600" />
-                        <AlertTitle className="text-amber-900">Warnings ({importValidation.warnings.length})</AlertTitle>
-                        <AlertDescription className="text-amber-800">
-                          <ul className="list-disc list-inside space-y-1 text-xs mt-2">
-                            {importValidation.warnings.slice(0, 5).map((msg, idx) => (
-                              <li key={idx}>{msg}</li>
-                            ))}
-                            {importValidation.warnings.length > 5 && (
-                              <li className="italic">... and {importValidation.warnings.length - 5} more</li>
-                            )}
-                          </ul>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    {importValidation.errors.length > 0 && (
-                      <Alert variant="destructive">
-                        <XCircle className="h-4 w-4" />
-                        <AlertTitle>Errors ({importValidation.errors.length})</AlertTitle>
-                        <AlertDescription>
-                          <ul className="list-disc list-inside space-y-1 text-xs mt-2">
-                            {importValidation.errors.slice(0, 5).map((msg, idx) => (
-                              <li key={idx}>{msg}</li>
-                            ))}
-                            {importValidation.errors.length > 5 && (
-                              <li className="italic">... and {importValidation.errors.length - 5} more</li>
-                            )}
-                          </ul>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    <div className="text-sm text-muted-foreground border-t pt-2">
-                      Processed {importValidation.totalRows} rows from Excel file
-                    </div>
-                  </div>
-                )}
-
-                {/* Instructions */}
-                {!importValidation && (
-                  <div className="space-y-2 text-sm text-muted-foreground border rounded-lg p-4 bg-muted/30">
-                    <p className="font-medium text-foreground">📋 Import Guidelines:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Required column: Category Name</li>
-                      <li>Optional columns: Description, Status</li>
-                      <li>Status can be 'Active' or 'Disabled'</li>
-                      <li>Existing categories will be updated (no deletion)</li>
-                    </ul>
-                  </div>
+              {/* File Upload */}
+              <div className="grid gap-2">
+                <Label htmlFor="file-upload">Upload Excel File (.xlsx)</Label>
+                <Input id="file-upload" type="file" accept=".xlsx,.xls" onChange={handleImportFileUpload} className="cursor-pointer" />
+                {importFile && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    {importFile.name}
+                  </p>
                 )}
               </div>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={resetImportDialog}>Cancel</Button>
-                <Button onClick={validateAndImportExcel} disabled={!importFile || isProcessingImport} className="gap-2">
-                  {isProcessingImport ? "Processing..." : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      Import Categories
-                    </>
+              {/* Validation Results */}
+              {importValidation && (
+                <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4">
+                  {importValidation.success.length > 0 && (
+                    <Alert className="border-green-200 bg-green-50">
+                      <CircleCheck className="h-4 w-4 text-green-600" />
+                      <AlertTitle className="text-green-900">Success ({importValidation.success.length})</AlertTitle>
+                      <AlertDescription className="text-green-800">
+                        <ul className="list-disc list-inside space-y-1 text-xs mt-2">
+                          {importValidation.success.slice(0, 5).map((msg, idx) => (
+                            <li key={idx}>{msg}</li>
+                          ))}
+                          {importValidation.success.length > 5 && (
+                            <li className="italic">... and {importValidation.success.length - 5} more</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
                   )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
-          {/* Export Button */}
-          <Button variant="outline" onClick={exportCategoriesToExcel} className="gap-2" disabled={categories.length === 0}>
-            <Download className="w-4 h-4" />
-            Export Excel
-          </Button>
-        </div>
+                  {importValidation.warnings.length > 0 && (
+                    <Alert className="border-amber-200 bg-amber-50">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <AlertTitle className="text-amber-900">Warnings ({importValidation.warnings.length})</AlertTitle>
+                      <AlertDescription className="text-amber-800">
+                        <ul className="list-disc list-inside space-y-1 text-xs mt-2">
+                          {importValidation.warnings.slice(0, 5).map((msg, idx) => (
+                            <li key={idx}>{msg}</li>
+                          ))}
+                          {importValidation.warnings.length > 5 && (
+                            <li className="italic">... and {importValidation.warnings.length - 5} more</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
-        <div className="flex gap-3">
-          {/* Add Category Button */}
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                  {importValidation.errors.length > 0 && (
+                    <Alert variant="destructive">
+                      <XCircle className="h-4 w-4" />
+                      <AlertTitle>Errors ({importValidation.errors.length})</AlertTitle>
+                      <AlertDescription>
+                        <ul className="list-disc list-inside space-y-1 text-xs mt-2">
+                          {importValidation.errors.slice(0, 5).map((msg, idx) => (
+                            <li key={idx}>{msg}</li>
+                          ))}
+                          {importValidation.errors.length > 5 && (
+                            <li className="italic">... and {importValidation.errors.length - 5} more</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="text-sm text-muted-foreground border-t pt-2">
+                    Processed {importValidation.totalRows} rows from Excel file
+                  </div>
+                </div>
+              )}
+
+              {/* Instructions */}
+              {!importValidation && (
+                <div className="space-y-2 text-sm border rounded-lg p-4 bg-muted/30">
+                  <p className="font-medium text-foreground">📋 Import Guidelines:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2 text-slate-800">
+                    <li>Required column: Category Name</li>
+                    <li>Optional columns: Description, Status</li>
+                    <li>Status can be 'Active' or 'Disabled'</li>
+                    <li>Existing categories will be updated (no deletion)</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={resetImportDialog}>Cancel</Button>
+              <Button onClick={validateAndImportExcel} disabled={!importFile || isProcessingImport} className="gap-2">
+                {isProcessingImport ? "Processing..." : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    Import Categories
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Category Button */}
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => {
                 resetForm();
@@ -669,30 +691,6 @@ export function CategoriesTab() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-semibold">{categories.length}</div>
-            <p className="text-sm text-muted-foreground">Total Categories</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-semibold text-green-600">{activeCategories.length}</div>
-            <p className="text-sm text-muted-foreground">Active Categories</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-semibold text-gray-600">
-              {categories.filter((c) => c.status === "disabled").length}
-            </div>
-            <p className="text-sm text-muted-foreground">Disabled Categories</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Categories Table */}
       <Card>
         <CardHeader>
@@ -704,6 +702,37 @@ export function CategoriesTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {categories.length > 0 && (
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+              <Input
+                placeholder="Search categories..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="sm:max-w-sm"
+              />
+              <Select value={statusFilter} onValueChange={(value: "all" | "active" | "disabled") => setStatusFilter(value)}>
+                <SelectTrigger className="w-full sm:w-[170px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(value: "name-asc" | "name-desc" | "newest") => setSortBy(value)}>
+                <SelectTrigger className="w-full sm:w-[190px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                  <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                  <SelectItem value="newest">Newest First</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {categories.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="mb-4 rounded-full bg-primary/10 p-3">
@@ -719,6 +748,10 @@ export function CategoriesTab() {
                 Add Your First Category
               </Button>
             </div>
+          ) : displayedCategories.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No categories match the current search/filter.
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -730,7 +763,7 @@ export function CategoriesTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {categories.map((category) => (
+                {displayedCategories.map((category) => (
                   <TableRow key={category.id}>
                     <TableCell className="font-medium">{category.name}</TableCell>
                     <TableCell className="text-muted-foreground">
@@ -741,7 +774,7 @@ export function CategoriesTab() {
                     <TableCell>
                       {category.status === "active" ? (
                         <Badge variant="default" className="gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
+                          <CircleCheck className="w-3 h-3" />
                           Active
                         </Badge>
                       ) : (
@@ -776,7 +809,7 @@ export function CategoriesTab() {
                             size="sm"
                             onClick={() => handleEnableCategory(category.id, category.name)}
                           >
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            <CircleCheck className="w-3 h-3 mr-1" />
                             Enable
                           </Button>
                         )}

@@ -135,7 +135,7 @@ export function WhoWeAre() {
             className="text-center max-w-3xl mx-auto"
           >
             <h1 className={`text-4xl md:text-6xl font-bold mb-6 tracking-tight font-[Biryani] ${isDark ? "text-white" : "text-slate-900"}`}>
-              Building the Future of <span className="text-[#0479A1]">African Commerce</span>
+              Building the Future of <span className="text-[#00719C]">African Commerce</span>
             </h1>
             <p className={`text-lg md:text-xl mb-8 ${subTextClass}`}>
               Tillsup is more than just a POS. We are a technology company dedicated to empowering businesses across the continent with the tools they need to thrive in a digital economy.
@@ -145,7 +145,7 @@ export function WhoWeAre() {
         
         {/* Background Gradient */}
         <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
-            <div className="absolute top-[20%] left-[10%] w-96 h-96 bg-[#0479A1] rounded-full blur-[128px]" />
+            <div className="absolute top-[20%] left-[10%] w-96 h-96 bg-[#00719C] rounded-full blur-[128px]" />
             <div className="absolute bottom-[20%] right-[10%] w-96 h-96 bg-[#ED363F] rounded-full blur-[128px]" />
         </div>
       </section>
@@ -185,7 +185,7 @@ export function WhoWeAre() {
                             "Connecting merchants to global markets"
                         ].map((item, i) => (
                             <li key={i} className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-[#0479A1]" />
+                                <CheckCircle className="w-5 h-5 text-[#00719C]" />
                                 <span className={isDark ? "text-slate-300" : "text-slate-700"}>{item}</span>
                             </li>
                         ))}
@@ -212,7 +212,7 @@ export function WhoWeAre() {
                     icon: Shield,
                     title: "Trust & Reliability",
                     desc: "We build systems you can count on. Your business data is secure, and our uptime is industry-leading.",
-                    color: "text-[#0479A1]"
+                    color: "text-[#00719C]"
                 },
                 {
                     icon: Zap,

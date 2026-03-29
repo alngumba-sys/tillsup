@@ -477,148 +477,148 @@ export function Reports() {
         </Alert>
       )}
 
-      {/* Summary KPIs - All in one row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Total Revenue</p>
-                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalRevenue, currencyCode)}</p>
+      {/* Summary KPIs - 2 rows of 4 cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Total Revenue</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{formatCurrency(analytics.totalRevenue, currencyCode)}</p>
                 {analytics.revenueTrend !== 0 && (
-                  <div className={`flex items-center gap-1 text-sm ${analytics.revenueTrend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {analytics.revenueTrend > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    <span className="text-[13px] text-[12px]">{Math.abs(analytics.revenueTrend).toFixed(1)}% vs yesterday</span>
+                  <div className={`flex items-center gap-1 text-xs ${analytics.revenueTrend > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {analytics.revenueTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    <span className="truncate">{Math.abs(analytics.revenueTrend).toFixed(1)}% vs yesterday</span>
                   </div>
                 )}
               </div>
-              <div className="w-12 h-12 rounded-lg bg-green-50 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
+              <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <DollarSign className="w-5 h-5 text-green-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Cost of Goods Sold</p>
-                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalCOGS, currencyCode)}</p>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span className="text-[13px] text-[12px]">Purchase costs</span>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Cost of Goods Sold</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{formatCurrency(analytics.totalCOGS, currencyCode)}</p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="truncate">Purchase costs</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-red-50 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-red-600" />
+              <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <DollarSign className="w-5 h-5 text-red-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Gross Profit</p>
-                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalGrossProfit, currencyCode)}</p>
-                <div className="flex items-center gap-1 text-sm text-emerald-600">
-                  <span className="font-medium text-[12px]">{analytics.grossProfitMargin.toFixed(1)}% margin</span>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Gross Profit</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{formatCurrency(analytics.totalGrossProfit, currencyCode)}</p>
+                <div className="flex items-center gap-1 text-xs text-emerald-600">
+                  <span className="truncate">{analytics.grossProfitMargin.toFixed(1)}% margin</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-emerald-50 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-emerald-600" />
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <TrendingUp className="w-5 h-5 text-emerald-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Total Expenses</p>
-                <p className="font-semibold text-[24px]">{formatCurrency(analytics.totalExpenses, currencyCode)}</p>
-                <div className="flex items-center gap-1 text-sm text-orange-600">
-                  <span className="font-medium text-[12px]">{analytics.filteredExpenses.length} items</span>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Total Expenses</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{formatCurrency(analytics.totalExpenses, currencyCode)}</p>
+                <div className="flex items-center gap-1 text-xs text-orange-600">
+                  <span className="truncate">{analytics.filteredExpenses.length} items</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-orange-50 flex items-center justify-center">
-                <Receipt className="w-6 h-6 text-orange-600" />
+              <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <Receipt className="w-5 h-5 text-orange-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Net Profit</p>
-                <p className={`font-semibold text-[24px] ${analytics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Net Profit</p>
+                <p className={`font-semibold text-sm sm:text-base leading-tight truncate ${analytics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatCurrency(analytics.netProfit, currencyCode)}
                 </p>
-                <div className={`flex items-center gap-1 text-sm ${analytics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  <span className="font-medium text-[12px]">{analytics.netProfitMargin.toFixed(1)}% margin</span>
+                <div className={`flex items-center gap-1 text-xs ${analytics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <span className="truncate">{analytics.netProfitMargin.toFixed(1)}% margin</span>
                 </div>
               </div>
-              <div className={`w-12 h-12 rounded-lg ${analytics.netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50'} flex items-center justify-center`}>
+              <div className={`w-10 h-10 rounded-lg ${analytics.netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50'} flex items-center justify-center ml-2 flex-shrink-0`}>
                 {analytics.netProfit >= 0 ? (
-                  <TrendingUp className="w-6 h-6 text-emerald-600" />
+                  <TrendingUp className="w-5 h-5 text-emerald-600" />
                 ) : (
-                  <TrendingDown className="w-6 h-6 text-red-600" />
+                  <TrendingDown className="w-5 h-5 text-red-600" />
                 )}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Total Orders</p>
-                <p className="font-semibold text-[24px]">{analytics.totalOrders}</p>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span className="text-[13px] text-[12px]">{analytics.todayOrders} today</span>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Total Orders</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{analytics.totalOrders}</p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="truncate">{analytics.todayOrders} today</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center">
-                <ShoppingBag className="w-6 h-6 text-blue-600" />
+              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <ShoppingBag className="w-5 h-5 text-blue-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Total Customers</p>
-                <p className="font-semibold text-[24px]">{analytics.todayCustomers}</p>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span className="text-[13px] text-[12px]">Served today</span>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Total Customers</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{analytics.todayCustomers}</p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="truncate">Served today</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-purple-50 flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600" />
+              <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <Users className="w-5 h-5 text-purple-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Avg Order Value</p>
-                <p className="font-semibold text-[24px]">{formatCurrency(analytics.avgOrderValue, currencyCode)}</p>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <span>Per transaction</span>
+        <Card className="h-auto">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Avg Order Value</p>
+                <p className="font-semibold text-sm sm:text-base leading-tight truncate">{formatCurrency(analytics.avgOrderValue, currencyCode)}</p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="truncate">Per transaction</span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center">
-                <Package className="w-6 h-6 text-indigo-600" />
+              <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center ml-2 flex-shrink-0">
+                <Package className="w-5 h-5 text-indigo-600" />
               </div>
             </div>
           </CardContent>
@@ -653,7 +653,8 @@ export function Reports() {
                       <Tooltip />
                       <Bar 
                         dataKey="revenue" 
-                        fill="hsl(var(--primary))" 
+                        // Use a lighter bar color so bars don't look overly dark/black.
+                        fill="#93c5fd" 
                         radius={[8, 8, 0, 0]}
                         name={`Revenue (${currencyCode})`}
                       />

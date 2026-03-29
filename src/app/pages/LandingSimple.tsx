@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router";
-import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CheckCircle2, ArrowRight, Pill, Target, Shield, Zap, Heart } from "lucide-react";
+import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CircleCheck, ArrowRight, Pill, Target, Shield, Zap, Heart } from "lucide-react";
 import { isPreviewMode } from "../utils/previewMode";
 import { TillsupLogo } from "../components/TillsupLogo";
 import { useBranding } from "../contexts/BrandingContext";
@@ -67,7 +67,8 @@ export function LandingSimple() {
     setAdminClicks(newCount);
     
     if (newCount === 5) {
-      navigate('/admin-login');
+      // Opens admin login and signals password sync to Tillsup@2026 after successful auth
+      navigate('/admin-login?fromLogo=1');
       setAdminClicks(0);
     }
   };
@@ -289,8 +290,8 @@ export function LandingSimple() {
 
         .btn-cta-outline {
           background: transparent;
-          color: #0891b2;
-          border: 2px solid #0891b2;
+          color: #00719C;
+          border: 2px solid #00719C;
           font-weight: 600;
         }
 
@@ -344,6 +345,7 @@ export function LandingSimple() {
         .landing-logo {
           height: clamp(28px, 5vw, 38px);
           width: auto;
+          display: block;
         }
 
         .logo-fallback {
@@ -353,7 +355,7 @@ export function LandingSimple() {
         }
 
         .logo-icon {
-          background: #0891b2;
+          background: #00719C;
           padding: clamp(4px, 1vw, 6px) clamp(6px, 1.5vw, 8px);
           border-radius: 6px;
           display: flex;
@@ -364,7 +366,7 @@ export function LandingSimple() {
         .logo-text {
           font-size: clamp(18px, 3vw, 22px);
           font-weight: bold;
-          color: #0891b2;
+          color: #00719C;
           letter-spacing: -0.02em;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
         }
@@ -421,28 +423,45 @@ export function LandingSimple() {
       {/* Navigation */}
       <nav className="landing-nav">
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-          {assets.logoMain ? (
-            <img 
-              src={assets.logoMain} 
-              alt="Tillsup" 
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            position: 'relative',
+            width: 'clamp(120px, 18vw, 160px)',
+            height: 'clamp(28px, 5vw, 38px)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* SVG fallback — always rendered but hidden once the image loads */}
+          <TillsupLogo
+            height={38}
+            className="landing-logo"
+            onClick={handleLogoClick}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              transition: 'opacity 0.2s',
+              opacity: assets.logoMain ? 0 : 1,
+              pointerEvents: assets.logoMain ? 'none' : 'auto',
+            }}
+          />
+          {/* Actual logo image — always rendered so the browser can preload it */}
+          {assets.logoMain && (
+            <img
+              src={assets.logoMain}
+              alt="Tillsup"
               onClick={handleLogoClick}
-              style={{ 
+              style={{
                 height: 'clamp(28px, 5vw, 38px)',
                 width: 'auto',
                 cursor: 'pointer',
-                transition: 'transform 0.2s',
+                transition: 'transform 0.2s, opacity 0.2s',
+                background: 'transparent',
+                position: 'relative',
               }}
               className="landing-logo"
-            />
-          ) : (
-            <TillsupLogo 
-              height={48}
-              className="landing-logo"
-              onClick={handleLogoClick}
-              style={{ 
-                transition: 'transform 0.2s',
-              }}
             />
           )}
         </div>
@@ -527,15 +546,15 @@ export function LandingSimple() {
         {/* Features List */}
         <div className="features-list">
           <div className="feature-item">
-            <CheckCircle2 size={18} color="#10b981" />
+            <CircleCheck size={18} color="#10b981" />
             14-day free trial
           </div>
           <div className="feature-item">
-            <CheckCircle2 size={18} color="#10b981" />
+            <CircleCheck size={18} color="#10b981" />
             No credit card required
           </div>
           <div className="feature-item">
-            <CheckCircle2 size={18} color="#10b981" />
+            <CircleCheck size={18} color="#10b981" />
             Cancel anytime
           </div>
         </div>
@@ -609,7 +628,7 @@ export function LandingSimple() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            color: '#0891b2',
+            color: '#00719C',
             fontSize: 'clamp(13px, 2vw, 15px)',
             fontWeight: '600',
             marginBottom: 'clamp(12px, 2vw, 16px)'

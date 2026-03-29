@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { CircleCheck, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export function AppStatusCheck() {
@@ -115,7 +115,7 @@ export function AppStatusCheck() {
                   <RefreshCw className="h-5 w-5 text-blue-500 animate-spin" />
                 )}
                 {check.status === 'success' && (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CircleCheck className="h-5 w-5 text-green-600" />
                 )}
                 {check.status === 'error' && (
                   <XCircle className="h-5 w-5 text-red-600" />
@@ -213,7 +213,7 @@ export function AppStatusCheck() {
               setChecks(checks.map(c => ({ ...c, status: 'pending', message: 'Checking...' })));
               runHealthChecks();
             }}
-            className="px-6 py-3 bg-[#0891b2] text-white rounded-lg hover:bg-[#0891b2]/90 font-semibold flex items-center gap-2"
+            className="px-6 py-3 bg-[#00719C] text-white rounded-lg hover:bg-[#00719C]/90 font-semibold flex items-center gap-2"
           >
             <RefreshCw className="h-5 w-5" />
             Re-run Checks

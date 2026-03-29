@@ -20,7 +20,7 @@ import {
   Users,
   ShoppingBag,
   AlertTriangle,
-  CheckCircle2,
+  CircleCheck,
   Brain,
   Zap,
   ArrowRight,
@@ -235,7 +235,7 @@ export function AIInsights() {
             description: "Your inventory levels are optimal. No immediate restocking required.",
             type: "info",
             impact: "Low",
-            icon: CheckCircle2,
+            icon: CircleCheck,
             action: "/app/inventory"
         });
       }
@@ -284,7 +284,7 @@ export function AIInsights() {
           description: `You're operating at ${efficiencyScore}% efficiency. Keep up the great work maintaining inventory levels!`,
           type: "info",
           impact: "Low",
-          icon: CheckCircle2,
+          icon: CircleCheck,
           action: "/app/dashboard"
         });
       }
@@ -386,7 +386,7 @@ export function AIInsights() {
                 <>
                     <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-400">{metrics.efficiencyScore}/100</div>
                     <p className="text-xs font-medium text-emerald-600 dark:text-emerald-300 flex items-center mt-2 bg-emerald-100 dark:bg-emerald-900/50 w-fit px-2 py-1 rounded-full">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    <CircleCheck className="w-3 h-3 mr-1" />
                     Top {metrics.efficiencyScore > 90 ? '5' : '20'}% of similar businesses
                     </p>
                 </>
@@ -556,7 +556,7 @@ export function AIInsights() {
             
             {!loading && insights.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    <CheckCircle2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <CircleCheck className="w-10 h-10 mx-auto mb-3 opacity-20" />
                     <p>No immediate actions required.</p>
                 </div>
             )}

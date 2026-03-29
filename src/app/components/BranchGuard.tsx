@@ -45,7 +45,8 @@ export function BranchGuard({ children, requireBranchAccess = false }: BranchGua
     selectedBranchId: null,
     setSelectedBranchId: (id: string | null) => {},
     branches: [] as any[],
-    getBranchById: (id: string) => undefined as any | undefined
+    getBranchById: (id: string) => undefined as any | undefined,
+    isLoading: false
   };
   
   try {
@@ -55,11 +56,14 @@ export function BranchGuard({ children, requireBranchAccess = false }: BranchGua
     console.warn("BranchGuard: BranchContext not available", e);
   }
   
-  const { selectedBranchId, setSelectedBranchId, branches, getBranchById } = branchContext;
+  const { selectedBranchId, setSelectedBranchId, branches, getBranchById, isLoading } = branchContext;
 
   useEffect(() => {
     const validateBranch = async () => {
       if (!user) return;
+      
+      // Wait for branches to load before validating
+      if (isLoading) return;
 
       // 0️⃣ IMMEDIATE BYPASS FOR BUSINESS OWNER
       if (user.role === "Business Owner") return;
@@ -159,7 +163,7 @@ export function BranchGuard({ children, requireBranchAccess = false }: BranchGua
     };
 
     validateBranch();
-  }, [user, selectedBranchId, setSelectedBranchId, location, navigate, branches, getBranchById, logout]);
+  }, [user, selectedBranchId, setSelectedBranchId, location, navigate, branches, getBranchById, logout, isLoading]);
 
   // ═══════════════════════════════════════════════════════════════════
   // 6️⃣ BRANCH REQUIREMENT CHECK

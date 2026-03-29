@@ -196,7 +196,7 @@ export function LocationManagement() {
 
   const getLocationIcon = (type: LocationType) => {
     return type === "shop" ? (
-      <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+      <StoreIcon className="w-4 h-4 text-[#00719C]" />
     ) : (
       <Warehouse className="w-4 h-4 text-purple-600" />
     );
@@ -217,12 +217,12 @@ export function LocationManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Locations</p>
-                <p className="text-2xl font-bold text-[#0891b2]">{locations.length}</p>
+                <p className="text-2xl font-bold text-[#00719C]">{locations.length}</p>
               </div>
-              <Building2 className="w-8 h-8 text-[#0891b2] opacity-20" />
+              <Building2 className="w-8 h-8 text-[#00719C] opacity-20" />
             </div>
             <div className="flex gap-2 mt-2">
-              <Badge variant="outline" className="border-[#0891b2] text-[#0891b2]">
+              <Badge variant="outline" className="border-[#00719C] text-[#00719C]">
                 {shops.length} Shops
               </Badge>
               <Badge variant="outline" className="border-purple-600 text-purple-600">
@@ -296,7 +296,7 @@ export function LocationManagement() {
             </div>
             <Button
               onClick={() => handleOpenDialog()}
-              className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+              className="bg-[#00719C] hover:bg-[#00719C]/90"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Location
@@ -358,7 +358,7 @@ export function LocationManagement() {
                         variant="outline"
                         className={cn(
                           location.type === "shop"
-                            ? "border-[#0891b2] text-[#0891b2]"
+                            ? "border-[#00719C] text-[#00719C]"
                             : "border-purple-600 text-purple-600"
                         )}
                       >
@@ -474,7 +474,7 @@ export function LocationManagement() {
                   <SelectContent>
                     <SelectItem value="shop">
                       <div className="flex items-center gap-2">
-                        <StoreIcon className="w-4 h-4 text-[#0891b2]" />
+                        <StoreIcon className="w-4 h-4 text-[#00719C]" />
                         Shop / Store
                       </div>
                     </SelectItem>
@@ -543,7 +543,7 @@ export function LocationManagement() {
               </Button>
               <Button
                 type="submit"
-                className="bg-[#0891b2] hover:bg-[#0891b2]/90"
+                className="bg-[#00719C] hover:bg-[#00719C]/90"
               >
                 {editingLocation ? "Update Location" : "Add Location"}
               </Button>

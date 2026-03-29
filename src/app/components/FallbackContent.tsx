@@ -23,7 +23,7 @@ export function FallbackContent() {
         <div style={{
           width: '80px',
           height: '80px',
-          background: '#0891b2',
+          background: '#00719C',
           borderRadius: '16px',
           display: 'flex',
           alignItems: 'center',
@@ -62,7 +62,7 @@ export function FallbackContent() {
             href="/login"
             style={{
               padding: '12px 24px',
-              background: '#0891b2',
+              background: '#00719C',
               color: 'white',
               borderRadius: '8px',
               textDecoration: 'none',
