@@ -23,13 +23,13 @@ function FaviconUpdater() {
     if (assets.favicon) {
       // Update the favicon dynamically
       let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
-      
+
       if (!link) {
         link = document.createElement('link');
         link.rel = 'icon';
         document.head.appendChild(link);
       }
-      
+
       link.href = assets.favicon;
       console.log("✅ Favicon updated:", assets.favicon);
     }
@@ -49,7 +49,7 @@ export default function App() {
     } else {
       console.log("🚀 PRODUCTION MODE - Using real Supabase connection");
     }
-    
+
     // IMMEDIATE loader removal - don't wait
     const loader = document.getElementById('initial-loader');
     if (loader) {
@@ -64,11 +64,10 @@ export default function App() {
   return (
     <ErrorBoundary>
       <FigmaErrorFilter />
-      
+
       <AuthProvider>
         <BrandingProvider>
           <RouterProvider router={router} />
-          <FaviconUpdater />
           <Toaster position="top-right" />
         </BrandingProvider>
       </AuthProvider>

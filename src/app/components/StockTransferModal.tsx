@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { ArrowRight, Package, Warehouse, Store as StoreIcon, Clock, FileText } from "lucide-react";
+import { ArrowRight, Package, Store as StoreIcon, Clock, FileText } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -131,7 +131,6 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
     }
   };
 
-  const warehouses = getWarehouses().filter(w => w.isActive);
   const shops = getShops().filter(s => s.isActive);
   const activeLocations = locations.filter(l => l.isActive);
 
@@ -142,11 +141,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
   const getLocationIcon = (locationId: string) => {
     const location = locations.find(l => l.id === locationId);
     if (!location) return <Package className="w-4 h-4" />;
-    return location.type === "shop" ? (
-      <StoreIcon className="w-4 h-4 text-[#00719C]" />
-    ) : (
-      <Warehouse className="w-4 h-4 text-purple-600" />
-    );
+    return <StoreIcon className="w-4 h-4 text-[#00719C]" />;
   };
 
   return (
@@ -174,9 +169,9 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
                     <div className="text-xs text-muted-foreground">{fromLocation?.type}</div>
                   </div>
                 </div>
-                
+
                 <ArrowRight className="w-6 h-6 text-[#00719C]" />
-                
+
                 <div className="flex items-center gap-2 flex-1">
                   {getLocationIcon(formData.toLocationId)}
                   <div>
@@ -202,23 +197,7 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
                   <SelectValue placeholder="Select source location" />
                 </SelectTrigger>
                 <SelectContent>
-                  {warehouses.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        WAREHOUSES (Recommended)
-                      </div>
-                      {warehouses.map((warehouse) => (
-                        <SelectItem key={warehouse.id} value={warehouse.id}>
-                          <div className="flex items-center gap-2">
-                            <Warehouse className="w-4 h-4 text-purple-600" />
-                            {warehouse.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                      <div className="h-px bg-border my-1" />
-                    </>
-                  )}
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">SHOPS</div>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">BRANCHES</div>
                   {shops.map((shop) => (
                     <SelectItem key={shop.id} value={shop.id}>
                       <div className="flex items-center gap-2">
@@ -244,32 +223,14 @@ export function StockTransferModal({ open, onOpenChange, preselectedProductId }:
                   <SelectValue placeholder="Select destination" />
                 </SelectTrigger>
                 <SelectContent>
-                  {shops.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        SHOPS (Recommended)
-                      </div>
-                      {shops
-                        .filter(s => s.id !== formData.fromLocationId)
-                        .map((shop) => (
-                          <SelectItem key={shop.id} value={shop.id}>
-                            <div className="flex items-center gap-2">
-                              <StoreIcon className="w-4 h-4 text-[#00719C]" />
-                              {shop.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      <div className="h-px bg-border my-1" />
-                    </>
-                  )}
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">WAREHOUSES</div>
-                  {warehouses
-                    .filter(w => w.id !== formData.fromLocationId)
-                    .map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">BRANCHES</div>
+                  {shops
+                    .filter(s => s.id !== formData.fromLocationId)
+                    .map((shop) => (
+                      <SelectItem key={shop.id} value={shop.id}>
                         <div className="flex items-center gap-2">
-                          <Warehouse className="w-4 h-4 text-purple-600" />
-                          {warehouse.name}
+                          <StoreIcon className="w-4 h-4 text-[#00719C]" />
+                          {shop.name}
                         </div>
                       </SelectItem>
                     ))}

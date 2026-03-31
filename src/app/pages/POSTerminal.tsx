@@ -4,7 +4,8 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "../components/ui/sheet";
-import { Search, ShoppingCart, AlertTriangle, Package, Building2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Search, ShoppingCart, AlertTriangle, Package, Building2, AlertCircle } from "lucide-react";
 import { SuccessCard } from "../components/SuccessCard";
 import { FiscalReceipt } from "../components/FiscalReceipt";
 import { useKPI } from "../contexts/KPIContext";
@@ -64,7 +65,19 @@ export function POSTerminal() {
   const [generateFiscalReceipt, setGenerateFiscalReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [customerName, setCustomerName] = useState("");
-  
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DUPLICATE CHECKOUT DETECTION
+  // ═══════════════════════════════════════════════════════════════════
+  const [lastCheckoutAttempt, setLastCheckoutAttempt] = useState<{
+    cartFingerprint: string;
+    total: number;
+    itemCount: number;
+    timestamp: number;
+  } | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [pendingCheckoutMethod, setPendingCheckoutMethod] = useState<"Cash" | "MPesa" | "Credit" | null>(null);
+
   const { updateKPIs } = useKPI();
   const { inventory, deductMultipleStock } = useInventory();
   const { recordSale } = useSales();
@@ -74,7 +87,7 @@ export function POSTerminal() {
   const { activeCategories, error: categoryError } = useCategory();
   const { hasFeature, plan } = useSubscription();
   const navigate = useNavigate();
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // WAIT FOR BRANCH FETCH TO COMPLETE BEFORE RENDERING
   // ═══════════════════════════════════════════════════════════════════
@@ -88,7 +101,7 @@ export function POSTerminal() {
       </div>
     );
   }
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // NO BRANCHES FALLBACK — Friendly empty state
   // ═══════════════════════════════════════════════════════════════════
@@ -113,7 +126,7 @@ export function POSTerminal() {
       </div>
     );
   }
-  
+
   // ════════════════════════════════════════════════════════════════
   // STEP 2.1: BRANCH CONTEXT LOADING
   // ══════════════════════════════════════════════════════════════════
@@ -132,10 +145,10 @@ export function POSTerminal() {
 
   const activeBranchId = getActiveBranchId();
   const activeBranch = branches.find(b => b.id === activeBranchId);
-  
+
   // Check if POS is ready (branch context exists)
   const isPOSReady = !!activeBranchId;
-  
+
   // Check if user can change branch (only Business Owner can change)
   const canChangeBranch = user?.role === "Business Owner";
 
@@ -159,7 +172,7 @@ export function POSTerminal() {
       // CRITICAL: Only show products from the active branch
       // If no active branch, show nothing
       if (!activeBranchId) return false;
-      
+
       // STRICT FILTER: Product must belong to active branch
       // This ensures zero cross-branch inventory leakage
       return item.branchId === activeBranchId;
@@ -172,7 +185,7 @@ export function POSTerminal() {
         console.warn('⚠️ Skipping invalid inventory item:', item);
         return null;
       }
-      
+
       return {
         id: item.id,
         name: item.name ?? 'Unknown Product',
@@ -188,7 +201,7 @@ export function POSTerminal() {
       };
     })
     .filter((item): item is Product => item !== null);
-  
+
   console.log('📦 Filtered products count:', products.length);
 
   const filteredProducts = useMemo(() => {
@@ -210,7 +223,7 @@ export function POSTerminal() {
         if (key === 'image') return value ? '[IMAGE_DATA]' : null;
         return value;
       }, 2));
-      
+
       // ═══════════════════════════════════════════════════════════════════
       // NULL CHECKS: Prevent crashes if product is undefined/null
       // ═══════════════════════════════════════════════════════════════════
@@ -240,14 +253,14 @@ export function POSTerminal() {
         toast.error('Cannot add product', { description: 'Product name is missing' });
         return;
       }
-      
+
       // Check for out of stock
       const stock = product?.stock ?? 0;
       if (stock <= 0) {
         toast.error('Out of stock', { description: `${product?.name ?? 'Product'} is currently unavailable` });
         return;
       }
-      
+
       const existingItem = cart.find((item) => item.id === product.id);
       if (existingItem) {
         setCart(
@@ -266,7 +279,7 @@ export function POSTerminal() {
         const safePrice = Number(retailPrice) || 0;
         const selectedPrice = isFinite(safePrice) ? safePrice : 0;
         const priceType = "retail" as const;
-        
+
         // Create a safe product object with fallbacks for all required fields
         const safeProduct: Product = {
           id: product?.id ?? '',
@@ -280,9 +293,9 @@ export function POSTerminal() {
           retailPrice: Number(product?.retailPrice || retailPrice) || 0,
           wholesalePrice: product?.wholesalePrice != null ? Number(product.wholesalePrice) : undefined
         };
-        
-        setCart([...cart, { 
-          ...safeProduct, 
+
+        setCart([...cart, {
+          ...safeProduct,
           quantity: 1,
           selectedPrice,
           priceType
@@ -331,10 +344,10 @@ export function POSTerminal() {
     setCart((prevCart) =>
       prevCart.map((item) => {
         if (item.id === productId) {
-          const selectedPrice = newPriceType === "retail" 
+          const selectedPrice = newPriceType === "retail"
             ? (item.retailPrice || item.price)
             : (item.wholesalePrice || item.retailPrice || item.price);
-          
+
           return {
             ...item,
             selectedPrice,
@@ -350,19 +363,34 @@ export function POSTerminal() {
     // Only available on Basic plan and up (Full POS) - debatable, maybe receipt is basic?
     // Let's assume fiscal receipt generation is advanced.
     if (checked && !isFullPOS) {
-       // Allow it for now, as receipt is basic functionality usually
+      // Allow it for now, as receipt is basic functionality usually
     }
     setGenerateFiscalReceipt(checked);
   }, [isFullPOS]);
 
-  const subtotal = useMemo(() => 
+  const subtotal = useMemo(() =>
     cart.reduce((sum, item) => sum + item.selectedPrice * item.quantity, 0),
     [cart]
   );
   const tax = useMemo(() => subtotal * 0.16, [subtotal]);
   const total = useMemo(() => subtotal + tax, [subtotal, tax]);
 
-  const handleCheckout = useCallback(async (paymentMethod: "Cash" | "MPesa" | "Credit") => {
+  // ═══════════════════════════════════════════════════════════════════
+  // DUPLICATE CHECKOUT DETECTION - Cart Fingerprint Generator
+  // ═══════════════════════════════════════════════════════════════════
+  const generateCartFingerprint = useCallback(() => {
+    // Create a unique fingerprint based on cart items, quantities, and prices
+    const cartSignature = cart
+      .map(item => `${item.id}:${item.quantity}:${item.selectedPrice}`)
+      .sort() // Sort to ensure same cart regardless of order
+      .join('|');
+    return `${cartSignature}|${total.toFixed(2)}`;
+  }, [cart, total]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DUPLICATE CHECKOUT DETECTION - Process Checkout (core checkout logic)
+  // ═══════════════════════════════════════════════════════════════════
+  const processCheckout = useCallback(async (paymentMethod: "Cash" | "MPesa" | "Credit") => {
     // Clear any previous validation errors
     setValidationError(null);
 
@@ -376,7 +404,7 @@ export function POSTerminal() {
     }
 
     const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-    
+
     // STEP 1: Prepare inventory deduction data
     const stockDeductions = cart.map(item => ({
       productId: item.id,
@@ -426,17 +454,17 @@ export function POSTerminal() {
       // ═══════════════════════════════════════════════════════════════════
       customerName: customerName.trim() || undefined
     });
-    
+
     // Update KPIs (will be auto-synced by KPISynchronizer)
     updateKPIs(1, total);
-    
+
     // STEP 5: Generate fiscal receipt data if enabled
     if (generateFiscalReceipt) {
       // Use sequential readableId if available, otherwise generate a fallback
-      const receiptNumber = saleResult.readableId 
+      const receiptNumber = saleResult.readableId
         ? `#${saleResult.readableId.toString().padStart(5, '0')}`
         : `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-        
+
       setReceiptData({
         receiptNumber,
         date: new Date(),
@@ -455,18 +483,87 @@ export function POSTerminal() {
       // Reset the toggle for next transaction
       setGenerateFiscalReceipt(false);
     }
-    
+
     // Save sale details and show success
     setLastSale({ total, itemCount });
     setShowSuccess(true);
-    
+
     // Clear cart AND customer name ONLY AFTER inventory update completes
     setCart([]);
     setCustomerName("");
     setIsCartOpen(false);
   }, [activeBranchId, cart, customerName, deductMultipleStock, recordSale, subtotal, tax, total, business, user, updateKPIs, generateFiscalReceipt]);
 
-  // CartPanel logic moved to components/pos/CartPanel.tsx
+  // ═══════════════════════════════════════════════════════════════════
+  // DUPLICATE CHECKOUT DETECTION - Handle Checkout Request
+  // ═══════════════════════════════════════════════════════════════════
+  const handleCheckout = useCallback((paymentMethod: "Cash" | "MPesa" | "Credit") => {
+    // Validate cart is not empty
+    if (cart.length === 0) {
+      toast.error("Cart is empty", { description: "Add products to checkout" });
+      return;
+    }
+
+    // Generate current cart fingerprint
+    const currentFingerprint = generateCartFingerprint();
+    const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Check if this is a duplicate checkout attempt
+    if (lastCheckoutAttempt) {
+      const timeSinceLastAttempt = Date.now() - lastCheckoutAttempt.timestamp;
+      const isSameCart = lastCheckoutAttempt.cartFingerprint === currentFingerprint;
+      const isWithinTimeWindow = timeSinceLastAttempt < 30000; // 30 second window
+
+      if (isSameCart && isWithinTimeWindow) {
+        // Duplicate detected! Show confirmation dialog
+        console.log('⚠️ Duplicate checkout detected:', {
+          lastAttempt: new Date(lastCheckoutAttempt.timestamp).toISOString(),
+          timeSinceLastAttempt: `${(timeSinceLastAttempt / 1000).toFixed(1)}s`,
+          cartFingerprint: currentFingerprint
+        });
+
+        setPendingCheckoutMethod(paymentMethod);
+        setShowDuplicateDialog(true);
+        return;
+      }
+    }
+
+    // No duplicate - proceed with checkout
+    executeCheckout(paymentMethod);
+  }, [cart, lastCheckoutAttempt, generateCartFingerprint]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DUPLICATE CHECKOUT DETECTION - Execute Checkout
+  // ═══════════════════════════════════════════════════════════════════
+  const executeCheckout = useCallback(async (paymentMethod: "Cash" | "MPesa" | "Credit") => {
+    // Save this checkout attempt for duplicate detection
+    const currentFingerprint = generateCartFingerprint();
+    const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    setLastCheckoutAttempt({
+      cartFingerprint: currentFingerprint,
+      total,
+      itemCount,
+      timestamp: Date.now()
+    });
+
+    // Close duplicate dialog if open
+    setShowDuplicateDialog(false);
+    setPendingCheckoutMethod(null);
+
+    // Proceed with the actual checkout
+    await processCheckout(paymentMethod);
+  }, [cart, generateCartFingerprint, total, processCheckout]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DUPLICATE CHECKOUT DETECTION - Decline Duplicate Checkout
+  // ═══════════════════════════════════════════════════════════════════
+  const handleDeclineDuplicate = useCallback(() => {
+    console.log('❌ User declined duplicate checkout');
+    setShowDuplicateDialog(false);
+    setPendingCheckoutMethod(null);
+    toast.info("Checkout cancelled", { description: "The duplicate checkout was cancelled" });
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════
   // BRANCH STATUS VALIDATION - POS SALES HARD BLOCK
@@ -536,7 +633,7 @@ export function POSTerminal() {
         <div className="p-4 lg:p-6 border-b border-border bg-white sticky top-0 z-10">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-3xl">POS Terminal</h1>
-            
+
             {/* ═══════════════════════════════════════════════════════════════════
                 STEP 2.2: OWNER BRANCH SELECTION
                 ═══════════════════════════════════════════════════════════════════ */}
@@ -577,7 +674,7 @@ export function POSTerminal() {
                 </Select>
               </div>
             )}
-            
+
             {/* ═══════════════════════════════════════════════════════════════════
                 STEP 2.5: BRANCH LOCKED FOR NON-OWNERS
                 ══════════════════════════════════════════════════════════════════ */}
@@ -632,7 +729,7 @@ export function POSTerminal() {
               >
                 All
               </Badge>
-              
+
               {/* Render active categories from Category Management */}
               {activeCategories.map((category) => (
                 <Badge
@@ -670,7 +767,7 @@ export function POSTerminal() {
               </Badge>
             </div>
           )}
-          
+
           {/* Branch Selection Required Alert for Business Owner */}
           {user?.role === "Business Owner" && !selectedBranchId && (
             <Alert className="mb-4">
@@ -681,7 +778,7 @@ export function POSTerminal() {
               </AlertDescription>
             </Alert>
           )}
-          
+
           {/* ═══════════════════════════════════════════════════════════════════
               STEP 2: EMPTY BRANCH HANDLING
               ═══════════════════════════════════════════════════════════════════ */}
@@ -699,22 +796,21 @@ export function POSTerminal() {
                       console.warn('Skipping null/invalid product in grid:', product);
                       return null;
                     }
-                    
+
                     // Safe access with fallbacks
                     const isOutOfStock = (product?.stock ?? 0) === 0;
                     const stock = product?.stock ?? 0;
                     const productName = product?.name ?? 'Unknown Product';
                     const productPrice = product?.price ?? 0;
                     const productImage = product?.image;
-                    
+
                     return (
                       <Card
                         key={product.id}
-                        className={`h-full flex flex-col transition-all ${
-                          isOutOfStock 
-                            ? 'cursor-not-allowed opacity-50 grayscale' 
-                            : 'cursor-pointer hover:shadow-md'
-                        }`}
+                        className={`h-full flex flex-col transition-all ${isOutOfStock
+                          ? 'cursor-not-allowed opacity-50 grayscale'
+                          : 'cursor-pointer hover:shadow-md'
+                          }`}
                         onClick={() => {
                           // ═══════════════════════════════════════════════════════════════════
                           // NULL CHECK: Prevent crash if product is missing
@@ -740,15 +836,14 @@ export function POSTerminal() {
                             ) : (
                               <Package className="w-8 h-8 text-slate-400" />
                             )}
-                            <Badge 
-                              variant={stock === 0 ? "destructive" : stock > 10 ? "secondary" : "destructive"} 
-                              className={`absolute top-1 right-1 text-[9px] shadow-sm backdrop-blur-sm ${
-                                stock === 0 
-                                  ? "bg-red-600 text-white border-red-700" 
-                                  : stock > 10 
-                                    ? "bg-white/90 hover:bg-white text-slate-700" 
-                                    : ""
-                              }`}
+                            <Badge
+                              variant={stock === 0 ? "destructive" : stock > 10 ? "secondary" : "destructive"}
+                              className={`absolute top-1 right-1 text-[9px] shadow-sm backdrop-blur-sm ${stock === 0
+                                ? "bg-red-600 text-white border-red-700"
+                                : stock > 10
+                                  ? "bg-white/90 hover:bg-white text-slate-700"
+                                  : ""
+                                }`}
                             >
                               {stock === 0 ? "0 left" : `${stock} left`}
                             </Badge>
@@ -778,7 +873,7 @@ export function POSTerminal() {
               </div>
             </ProductGridErrorBoundary>
           )}
-          
+
           {/* Empty State: No Products in Selected Branch */}
           {filteredProducts.length === 0 && isPOSReady && activeBranch && (
             <Card className="border-2 border-dashed border-slate-300">
@@ -888,6 +983,79 @@ export function POSTerminal() {
           receiptData={receiptData}
         />
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          DUPLICATE CHECKOUT CONFIRMATION DIALOG
+          ═══════════════════════════════════════════════════════════════════ */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg">Duplicate Checkout Detected</DialogTitle>
+                <DialogDescription className="mt-1">
+                  You attempted to checkout the same sale again
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="py-4 space-y-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-900">Warning</span>
+              </div>
+              <p className="text-sm text-amber-800">
+                This appears to be the same cart that was recently checked out.
+                Processing this again may result in a duplicate sale.
+              </p>
+            </div>
+
+            {lastCheckoutAttempt && (
+              <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Items:</span>
+                  <span className="font-medium">{lastCheckoutAttempt.itemCount} items</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total:</span>
+                  <span className="font-medium">{formatCurrency(lastCheckoutAttempt.total)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Last attempt:</span>
+                  <span className="font-medium">
+                    {Math.round((Date.now() - lastCheckoutAttempt.timestamp) / 1000)}s ago
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              Do you want to proceed with this checkout?
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={handleDeclineDuplicate}
+              className="flex-1 sm:flex-none"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => pendingCheckoutMethod && executeCheckout(pendingCheckoutMethod)}
+              className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700"
+            >
+              Proceed Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

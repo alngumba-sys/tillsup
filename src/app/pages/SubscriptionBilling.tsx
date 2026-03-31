@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useBranch } from "../contexts/BranchContext";
 import { useSubscription } from "../hooks/useSubscription";
 import { SUBSCRIPTION_PLANS } from "../utils/subscription";
+import { fetchPricing, getCountryPricing, PLAN_KEY_MAP, type PricingData, type CountryPricing } from "../utils/pricingApi";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -79,6 +80,22 @@ export function SubscriptionBilling() {
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [pricingData, setPricingData] = useState<PricingData | null>(null);
+  const [loadingPricing, setLoadingPricing] = useState(true);
+
+  // Fetch pricing from database on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchPricing();
+        if (!cancelled) setPricingData(data);
+      } finally {
+        if (!cancelled) setLoadingPricing(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Check for successful payment return from Stripe
   useEffect(() => {
@@ -148,9 +165,12 @@ export function SubscriptionBilling() {
   const [paymentProvider, setPaymentProvider] = useState<"stripe" | "mpesa">("stripe");
   const [mpesaPhone, setMpesaPhone] = useState("");
 
+  const country = business?.country || "KE";
+  const countryPricing = pricingData ? getCountryPricing(pricingData, country) : null;
+
   const getDiscountRate = () => {
-    if (billingCycle === "quarterly") return 0.1;
-    if (billingCycle === "annual") return 0.2;
+    if (billingCycle === "quarterly") return (countryPricing?.quarterly_discount || 10) / 100;
+    if (billingCycle === "annual") return (countryPricing?.annual_discount || 20) / 100;
     return 0;
   };
 
@@ -160,14 +180,18 @@ export function SubscriptionBilling() {
     return "month";
   };
 
-  const getDisplayPrice = (baseMonthlyPrice: number) => {
-    if (billingCycle === "quarterly") {
-      return (baseMonthlyPrice * 3) * (1 - getDiscountRate());
-    }
-    if (billingCycle === "annual") {
-      return (baseMonthlyPrice * 12) * (1 - getDiscountRate());
-    }
-    return baseMonthlyPrice;
+  // Get display price from live pricing data
+  const getDisplayPrice = (planKey: SubscriptionPlan) => {
+    if (!countryPricing) return 0;
+    const internalKey = PLAN_KEY_MAP[planKey];
+    return countryPricing[`${internalKey}_${billingCycle}`] || 0;
+  };
+
+  // Get monthly price from live pricing data (for comparison/upgrade logic)
+  const getMonthlyPrice = (planKey: SubscriptionPlan) => {
+    if (!countryPricing) return 0;
+    const internalKey = PLAN_KEY_MAP[planKey];
+    return countryPricing[`${internalKey}_monthly`] || 0;
   };
 
   const confirmUpgrade = async () => {
@@ -201,7 +225,7 @@ export function SubscriptionBilling() {
           return;
         }
 
-        const planPrice = getDisplayPrice(SUBSCRIPTION_PLANS[selectedPlan].price);
+        const planPrice = getDisplayPrice(selectedPlan);
 
         // Call M-PESA subscription edge function
         const { data, error } = await supabase.functions.invoke('mpesa-subscription', {
@@ -454,7 +478,7 @@ export function SubscriptionBilling() {
                 <CreditCard className="w-3.5 h-3.5 text-purple-600" />
                 <div className="text-center sm:text-left">
                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Cost</p>
-                   <p className="text-sm font-bold leading-none">{formatCurrency(getDisplayPrice(currentPlan.price))}</p>
+                    <p className="text-sm font-bold leading-none">{formatCurrency(getDisplayPrice(business.subscriptionPlan))}</p>
                 </div>
              </div>
           </div>
@@ -515,11 +539,19 @@ export function SubscriptionBilling() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 justify-center">
-            {(Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][])
+            {loadingPricing ? (
+              <div className="col-span-full flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading pricing...</span>
+              </div>
+            ) : (
+            (Object.entries(SUBSCRIPTION_PLANS) as [SubscriptionPlan, typeof SUBSCRIPTION_PLANS[SubscriptionPlan]][])
               .filter(([key]) => allowedPlanKeys.includes(key))
               .map(([key, plan]) => {
                 const isCurrent = key === business.subscriptionPlan;
-                const isUpgrade = plan.price > currentPlan.price;
+                const planMonthly = getMonthlyPrice(key);
+                const currentMonthly = getMonthlyPrice(business.subscriptionPlan);
+                const isUpgrade = planMonthly > currentMonthly;
                 
                 // Extract key limits
                 const branches = plan.limits.maxBranches === 999 ? "Unlimited" : plan.limits.maxBranches;
@@ -552,7 +584,7 @@ export function SubscriptionBilling() {
                     <CardTitle className="text-base font-bold">{plan.name}</CardTitle>
                     <div className="flex items-baseline justify-center gap-1 mt-2">
                       <span className="text-3xl font-bold text-foreground">
-                        {formatCurrency(getDisplayPrice(plan.price))}
+                        {formatCurrency(getDisplayPrice(key))}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         /{plan.period === "14 days" ? "14 days" : getCycleLabel()}
@@ -642,7 +674,8 @@ export function SubscriptionBilling() {
                   </CardContent>
                 </Card>
               );
-            })}
+            })
+            )}
           </div>
 
           <div id="plan-comparison" className="mt-8 border-t pt-6">
@@ -663,9 +696,9 @@ export function SubscriptionBilling() {
                 <TableBody>
                   <TableRow className="bg-muted/50">
                     <TableCell className="font-semibold">Price</TableCell>
-                    <TableCell className="text-center font-bold">{formatCurrency(getDisplayPrice(SUBSCRIPTION_PLANS["Basic"].price))}/{getCycleLabel()}</TableCell>
-                    <TableCell className="text-center font-bold">{formatCurrency(getDisplayPrice(SUBSCRIPTION_PLANS["Pro"].price))}/{getCycleLabel()}</TableCell>
-                    <TableCell className="text-center font-bold">{formatCurrency(getDisplayPrice(SUBSCRIPTION_PLANS["Enterprise"].price))}/{getCycleLabel()}</TableCell>
+                    <TableCell className="text-center font-bold">{formatCurrency(getDisplayPrice("Basic"))}/{getCycleLabel()}</TableCell>
+                    <TableCell className="text-center font-bold">{formatCurrency(getDisplayPrice("Pro"))}/{getCycleLabel()}</TableCell>
+                    <TableCell className="text-center font-bold">{formatCurrency(getDisplayPrice("Enterprise"))}/{getCycleLabel()}</TableCell>
                   </TableRow>
                   <TableRow className="bg-muted/30">
                     <TableCell colSpan={4} className="font-bold text-xs uppercase tracking-wider">Usage Limits</TableCell>
