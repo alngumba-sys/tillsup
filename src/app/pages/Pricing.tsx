@@ -5,8 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import {
-  ArrowRight,
-  Sparkles,
   Store,
   ArrowLeft,
   Building2,
@@ -212,49 +210,8 @@ export function Pricing() {
         </div>
       </nav>
 
-      {/* Trial Banner */}
-      <div
-        className="pt-16 py-6"
-        style={{
-          background: "rgba(0, 113, 156, 0.1)",
-          borderBottom: "1px solid rgba(0, 113, 156, 0.2)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5" style={{ color: "#00719C" }} />
-              <span className="font-semibold text-lg font-[Mulish]" style={{ color: "#e2e8f0" }}>
-                Start a 14-Day Free Trial – Access Everything, No Credit Card Required
-              </span>
-            </div>
-            <button
-              onClick={() => navigate("/register")}
-              className="px-6 py-2.5 rounded-lg font-semibold transition-all font-[Mulish]"
-              style={{
-                background: "#ef4444",
-                color: "white",
-                boxShadow: "0 8px 24px rgba(239, 68, 68, 0.4)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 10px 30px rgba(239, 68, 68, 0.5)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 8px 24px rgba(239, 68, 68, 0.4)";
-              }}
-            >
-              Sign Up Now
-              <ArrowRight className="w-4 h-4 ml-2 inline" />
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-16">
         {/* Header */}
         <div className="text-center mb-12">
           <h1
