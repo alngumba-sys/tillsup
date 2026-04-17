@@ -12,11 +12,10 @@ import {
   BarChart3,
   CheckCircle,
   TrendingUp,
-  Loader2,
 } from "lucide-react";
 import { useBranding } from "../contexts/BrandingContext";
 import { SUBSCRIPTION_PLANS } from "../utils/subscription";
-import { fetchPricing, getCountryPricing, COUNTRY_CONFIG, type PricingData, type CountryPricing } from "../utils/pricingApi";
+import { fetchPricing, getCountryPricing, COUNTRY_CONFIG, DEFAULT_PRICING, type PricingData, type CountryPricing } from "../utils/pricingApi";
 import type { SubscriptionPlan } from "../contexts/AuthContext";
 
 type BillingCycle = "monthly" | "quarterly" | "annual";
@@ -54,18 +53,17 @@ export function Pricing() {
   const { assets } = useBranding();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
-  const [pricingData, setPricingData] = useState<PricingData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pricingData, setPricingData] = useState<PricingData>(DEFAULT_PRICING);
 
-  // Fetch pricing from database on mount
+  // Fetch pricing from database on mount; defaults render immediately.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const data = await fetchPricing();
         if (!cancelled) setPricingData(data);
-      } finally {
-        if (!cancelled) setLoading(false);
+      } catch {
+        // Keep defaults on failure
       }
     })();
     return () => { cancelled = true; };
@@ -89,7 +87,7 @@ export function Pricing() {
   }, []);
 
   const currencySymbol = selectedCountry.symbol;
-  const countryPricing = pricingData ? getCountryPricing(pricingData, selectedCountry.code) : null;
+  const countryPricing = getCountryPricing(pricingData, selectedCountry.code);
 
   const formatCurrency = (amount: number) =>
     `${currencySymbol} ${amount.toLocaleString(undefined, {
@@ -99,10 +97,8 @@ export function Pricing() {
 
   // Get the price for a plan adjusted for country and billing cycle
   const getPrice = (planKey: SubscriptionPlan): number => {
-    if (!countryPricing) return 0;
     const internalKey = PLAN_KEY_MAP[planKey];
-    const price = countryPricing[`${internalKey}_${billingCycle}`] || 0;
-    return price;
+    return countryPricing[`${internalKey}_${billingCycle}`] || 0;
   };
 
   // Transaction limits matching the authenticated view
@@ -228,16 +224,7 @@ export function Pricing() {
           </p>
         </div>
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#00719C" }} />
-            <span className="ml-3 text-lg" style={{ color: "#94a3b8" }}>Loading pricing...</span>
-          </div>
-        )}
-
         {/* Billing Cycle Toggle */}
-        {!loading && (
         <div
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg p-3 mb-8"
           style={{
@@ -284,10 +271,7 @@ export function Pricing() {
             ))}
           </div>
         </div>
-        )}
 
-        {!loading && (
-        <>
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 justify-center mb-16">
           {ALLOWED_PLANS.map((planKey) => {
@@ -744,8 +728,6 @@ export function Pricing() {
             </button>
           </div>
         </div>
-        </>
-        )}
       </div>
 
       {/* Footer */}
