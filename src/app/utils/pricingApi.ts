@@ -25,7 +25,7 @@ export interface CountryPricing {
 
 export type PricingData = Record<string, CountryPricing>;
 
-const DEFAULT_PRICING: PricingData = {
+export const DEFAULT_PRICING: PricingData = {
   KE: {
     basic_monthly: 999,
     basic_quarterly: 2697,
