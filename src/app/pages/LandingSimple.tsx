@@ -2,7 +2,6 @@ import React from "react";
 import { useNavigate } from "react-router";
 import { Store, ShoppingCart, Mail, Phone, Gift, Headphones, Coffee, Scissors, Dumbbell, ShoppingBag, CircleCheck, ArrowRight, Pill, Target, Shield, Zap, Heart } from "lucide-react";
 import { isPreviewMode } from "../utils/previewMode";
-import { TillsupLogo } from "../components/TillsupLogo";
 import { useBranding } from "../contexts/BrandingContext";
 
 // Import hero images - using Unsplash for production-ready images
@@ -38,6 +37,7 @@ export function LandingSimple() {
   const navigate = useNavigate();
   const { assets } = useBranding();
   const [adminClicks, setAdminClicks] = React.useState(0);
+  const [logoLoaded, setLogoLoaded] = React.useState(false);
   
   // AGGRESSIVE Debug logging
   React.useEffect(() => {
@@ -434,6 +434,11 @@ export function LandingSimple() {
           50% { transform: scale(1.1); }
           100% { transform: scale(1); }
         }
+
+        @keyframes tillsup-logo-spin {
+          from { transform: translateY(-50%) rotate(0deg); }
+          to { transform: translateY(-50%) rotate(360deg); }
+        }
       `}</style>
 
       {/* Navigation */}
@@ -443,43 +448,45 @@ export function LandingSimple() {
           style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'flex-start',
             position: 'relative',
             width: 'clamp(120px, 18vw, 160px)',
-            height: 'clamp(28px, 5vw, 38px)',
-            overflow: 'hidden',
+            height: 'clamp(32px, 5vw, 44px)',
           }}
         >
-          {/* SVG fallback — always rendered but hidden once the image loads */}
-          <TillsupLogo
-            height={38}
-            className="landing-logo"
-            onClick={handleLogoClick}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              transition: 'opacity 0.2s',
-              opacity: assets.logoMain ? 0 : 1,
-              pointerEvents: assets.logoMain ? 'none' : 'auto',
-            }}
-          />
-          {/* Actual logo image — always rendered so the browser can preload it */}
-          {assets.logoMain && (
-            <img
-              src={assets.logoMain}
-              alt="Tillsup"
-              onClick={handleLogoClick}
+          {!logoLoaded && (
+            <div
+              aria-label="Loading logo"
               style={{
-                height: 'clamp(28px, 5vw, 38px)',
-                width: 'auto',
-                cursor: 'pointer',
-                transition: 'transform 0.2s, opacity 0.2s',
-                background: 'transparent',
-                position: 'relative',
+                position: 'absolute',
+                left: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 24,
+                height: 24,
+                border: '3px solid rgba(0, 173, 200, 0.25)',
+                borderTopColor: '#00ADC8',
+                borderRadius: '50%',
+                animation: 'tillsup-logo-spin 0.8s linear infinite',
               }}
-              className="landing-logo"
             />
           )}
+          <img
+            src="/tillsup-logo.svg"
+            alt="Tillsup"
+            onClick={handleLogoClick}
+            onLoad={() => setLogoLoaded(true)}
+            onError={() => setLogoLoaded(true)}
+            style={{
+              height: 'clamp(32px, 5vw, 44px)',
+              width: 'auto',
+              cursor: 'pointer',
+              transition: 'opacity 0.2s',
+              opacity: logoLoaded ? 1 : 0,
+              background: 'transparent',
+            }}
+            className="landing-logo"
+          />
         </div>
 
         {/* Top Right: Trust Badge + Buttons */}
