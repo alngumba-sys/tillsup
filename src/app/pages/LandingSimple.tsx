@@ -38,6 +38,24 @@ export function LandingSimple() {
   const { assets } = useBranding();
   const [adminClicks, setAdminClicks] = React.useState(0);
   const [logoLoaded, setLogoLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const markReady = () => { if (!cancelled) setLogoLoaded(true); };
+    const timeout = window.setTimeout(markReady, 3000);
+    if (typeof document !== 'undefined' && (document as any).fonts?.load) {
+      (document as any).fonts
+        .load('900 1em "Nunito"')
+        .then(markReady)
+        .catch(markReady);
+    } else {
+      markReady();
+    }
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, []);
   
   // AGGRESSIVE Debug logging
   React.useEffect(() => {
@@ -445,13 +463,15 @@ export function LandingSimple() {
       <nav className="landing-nav">
         {/* Logo */}
         <div
+          onClick={handleLogoClick}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-start',
             position: 'relative',
-            width: 'clamp(120px, 18vw, 160px)',
-            height: 'clamp(32px, 5vw, 44px)',
+            width: 'clamp(140px, 20vw, 180px)',
+            height: 'clamp(36px, 5.5vw, 48px)',
+            cursor: 'pointer',
           }}
         >
           {!logoLoaded && (
@@ -471,22 +491,55 @@ export function LandingSimple() {
               }}
             />
           )}
-          <img
-            src="/tillsup-logo.svg"
-            alt="Tillsup"
-            onClick={handleLogoClick}
-            onLoad={() => setLogoLoaded(true)}
-            onError={() => setLogoLoaded(true)}
+          <svg
+            viewBox="0 0 410 130"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Tillsup"
+            className="landing-logo"
             style={{
-              height: 'clamp(32px, 5vw, 44px)',
+              height: '100%',
               width: 'auto',
-              cursor: 'pointer',
               transition: 'opacity 0.2s',
               opacity: logoLoaded ? 1 : 0,
-              background: 'transparent',
             }}
-            className="landing-logo"
-          />
+          >
+            {/* Floating red dot */}
+            <circle cx="38" cy="14" r="10" fill="#EF4444" />
+            {/* Red rounded-square icon body */}
+            <rect x="6" y="30" width="104" height="98" rx="22" fill="#EF4444" />
+            {/* White burst lines */}
+            <g stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round">
+              <line x1="58" y1="66" x2="58" y2="48" />
+              <line x1="38" y1="70" x2="28" y2="56" />
+              <line x1="78" y1="70" x2="88" y2="56" />
+            </g>
+            {/* Smile */}
+            <path
+              d="M 30 90 Q 58 116 86 90"
+              stroke="#FFFFFF"
+              strokeWidth="8"
+              strokeLinecap="round"
+              fill="none"
+            />
+            {/* Wheels */}
+            <circle cx="40" cy="118" r="6" fill="#FFFFFF" />
+            <circle cx="76" cy="118" r="6" fill="#FFFFFF" />
+            {/* Wordmark — uses dotless "ı" so we can overlay a red i-dot */}
+            <text
+              x="128"
+              y="110"
+              fill="#00ADC8"
+              fontFamily='"Nunito", "Mulish", system-ui, -apple-system, "Segoe UI", sans-serif'
+              fontWeight={900}
+              fontSize={98}
+              letterSpacing="-3"
+            >
+              tıllsup
+            </text>
+            {/* Red dot on the "i" */}
+            <circle cx="167" cy="38" r="9" fill="#EF4444" />
+          </svg>
         </div>
 
         {/* Top Right: Trust Badge + Buttons */}
