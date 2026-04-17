@@ -201,7 +201,7 @@ export function LandingSimple() {
 
         /* Responsive Buttons */
         .btn-nav {
-          padding: clamp(8px, 1.5vw, 10px) clamp(16px, 3vw, 24px);
+          padding: clamp(6.4px, 1.2vw, 8px) clamp(16px, 3vw, 24px);
           border-radius: 6px;
           cursor: pointer;
           font-size: clamp(13px, 2vw, 15px);
@@ -278,7 +278,7 @@ export function LandingSimple() {
         }
 
         .btn-cta {
-          padding: clamp(12px, 2vw, 16px) clamp(20px, 4vw, 32px);
+          padding: clamp(9.6px, 1.6vw, 12.8px) clamp(20px, 4vw, 32px);
           border-radius: 8px;
           cursor: pointer;
           font-size: clamp(15px, 2vw, 17px);

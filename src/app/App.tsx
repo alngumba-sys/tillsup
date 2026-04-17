@@ -11,7 +11,6 @@ import { Toaster } from "./components/ui/sonner";
 import { isPreviewMode } from "./utils/previewMode";
 import { useEffect } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { FigmaErrorFilter } from "./components/FigmaErrorFilter";
 
 console.log("📦 App.tsx loaded - Initializing Tillsup POS");
 
@@ -63,8 +62,6 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <FigmaErrorFilter />
-
       <AuthProvider>
         <BrandingProvider>
           <RouterProvider router={router} />
